@@ -1,4 +1,4 @@
-name: Manual Commit as Me
+name: Manual Commit as Pratham
 
 on:
   workflow_dispatch: # Allows manual trigger
