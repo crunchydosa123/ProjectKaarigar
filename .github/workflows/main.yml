@@ -1,0 +1,26 @@
+name: Manual Commit as Me
+
+on:
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  commit-changes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Make changes
+        run: |
+          date > last_run.txt
+
+      - name: Commit & Push changes
+        run: |
+          git config user.name "Pratham Gadkari"
+          git config user.email "prathamgadkari@gmail.com"
+          git add .
+          git commit -m "Manual automated commit: $(date)" || echo "No changes to commit"
+          git push
