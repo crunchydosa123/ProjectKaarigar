@@ -86,7 +86,7 @@ Rules:
 Examples:
 User instruction: "Add upbeat pop track throughout"
 Output:
-[{{"action":"music","start":0.0,"end":120.0,"query":"upbeat pop instrumental","volume":0.35,"loop":true}}]
+[{{"action":"music","start":0.0,"end":240.0,"query":"upbeat pop instrumental","volume":0.35,"loop":true}}]
 
 User instruction: "Add instrumental beat with no lyrics from 0:10 to 0:50"
 Output:
@@ -108,13 +108,19 @@ User instruction: "Make 00:03:10-00:03:20 play at 2x"
 Output:
 [{{"action":"speed","start":{secs('00:03:10'):.1f},"end":{secs('00:03:20'):.1f},"rate":2.0}}]
 
+User instruction: "Make the speed of the video into 1.5x"
+Output:
+[{{"action":"speed","start":0.0,"end":240.0,"rate":1.5}}]
+
 
 Now convert this user instruction to JSON and return JSON only (no extra text, no explanation).
 
 User instruction:
 \"\"\"{user_instruction}\"\"\""""
     raw = call_gemini_raw(prompt, api_key=api_key, model_name=model_name)
+    print("Raw Gemini output:",raw)
     json_text = extract_json_from_text(raw)
+    print(json_text)
     try:
         parsed = json.loads(json_text)
         print(parsed)
