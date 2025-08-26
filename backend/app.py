@@ -1,12 +1,12 @@
 from flask import Flask
 from routes.edit_routes import edit_bp
 import os
-
-
-
+from flask_cors import CORS
 
 def create_app():
     app = Flask(__name__)
+    
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
     # config: optional
     app.config.from_mapping({
     "MAX_CONTENT_LENGTH": 1024 * 1024 * 1024, # 1GB max upload by default
@@ -20,12 +20,7 @@ def create_app():
     @app.route("/", methods=["GET"])
     def idx():
         return "Flask Video Editor API. Use POST /api/edit to upload video and user_prompt."
-
-
     return app
-
-
-
 
 if __name__ == '__main__':
     app = create_app()

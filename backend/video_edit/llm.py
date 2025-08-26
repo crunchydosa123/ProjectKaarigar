@@ -108,6 +108,7 @@ User instruction:
     json_text = extract_json_from_text(raw)
     try:
         parsed = json.loads(json_text)
+        print(parsed)
         if not isinstance(parsed, list):
             raise ValueError("Gemini did not return a JSON array.")
         return json_text
