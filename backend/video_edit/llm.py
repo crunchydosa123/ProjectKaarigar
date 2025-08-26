@@ -100,6 +100,15 @@ User instruction: "Add cat sticker at 1:20 for 2 seconds"
 Output:
 [{{"action":"sticker","start":{secs('1:20'):.1f},"end":{secs('1:20')+2.0:.1f},"content":{{"image": "./stickers/cat.png"}},"position":"bottom-right","fontsize":72}}]
 
+User instruction: "Cut from 00:01:20 to 00:01:45"
+Output:
+[{{"action":"cut","start":{secs('00:01:20'):.1f},"end":{secs('00:01:45'):.1f}}}]
+
+User instruction: "Make 00:03:10-00:03:20 play at 2x"
+Output:
+[{{"action":"speed","start":{secs('00:03:10'):.1f},"end":{secs('00:03:20'):.1f},"rate":2.0}}]
+
+
 Now convert this user instruction to JSON and return JSON only (no extra text, no explanation).
 
 User instruction:
