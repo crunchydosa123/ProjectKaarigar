@@ -157,7 +157,7 @@ export default function VideoEditor() {
   const current = history[history.length - 1] || null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-purple-200 to-purple-300">
+    <div className="min-h-screen bg-[#f6f0e9]">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -173,8 +173,8 @@ export default function VideoEditor() {
 
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Chat Interface */}
-            <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-purple-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-500 to-purple-700 p-6">
+            <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-xl border border-purple-200 overflow-hidden">
+              <div className="bg-[#3f3ad3] p-6">
                 <h2 className="text-xl font-semibold text-white flex items-center">
                   <div className="w-2 h-2 bg-purple-200 rounded-full mr-3 animate-pulse"></div>
                   Assistant
@@ -186,7 +186,7 @@ export default function VideoEditor() {
                   <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl ${
                       msg.role === 'ai' 
-                        ? 'bg-gradient-to-r from-purple-50 to-purple-100 text-purple-800 border border-purple-200' 
+                        ? 'bg-gradient-to-r from-purple-50 to-purple-[#3f3ad3] text-[#3f3ad3] border border-purple-200' 
                         : 'bg-gradient-to-r from-purple-400 to-purple-500 text-white shadow-md'
                     }`}>
                       <p className="text-sm">{msg.content}</p>
@@ -208,10 +208,10 @@ export default function VideoEditor() {
                     />
                     <label 
                       htmlFor="video-upload"
-                      className="flex items-center justify-center w-full py-4 px-6 border-2 border-dashed border-purple-300 rounded-2xl bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 transition-all duration-300 cursor-pointer group"
+                      className="flex items-center justify-center w-full py-4 px-6 border-2 border-dashed border-[#3f3ad3] rounded-2xl bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 transition-all duration-300 cursor-pointer group"
                     >
-                      <Upload className="w-6 h-6 text-purple-600 mr-3 group-hover:scale-110 transition-transform" />
-                      <span className="text-purple-700 font-medium">Choose Video File</span>
+                      <Upload className="w-6 h-6 text-[#3f3ad3] mr-3 group-hover:scale-110 transition-transform" />
+                      <span className="text-[#3f3ad3] font-medium">Choose Video File</span>
                     </label>
                   </div>
                 )}
@@ -275,9 +275,9 @@ export default function VideoEditor() {
             </div>
 
             {/* Video Preview */}
-            <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-purple-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-500 to-purple-700 p-6">
-                <h2 className="text-xl font-semibold text-white flex items-center">
+            <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-xl border border-purple-200 overflow-hidden">
+              <div className="bg-[#a5e1e9] p-6">
+                <h2 className="text-xl font-semibold flex items-center  text-blue-600">
                   <Video className="w-6 h-6 mr-3" />
                   Video Preview
                 </h2>
@@ -286,7 +286,7 @@ export default function VideoEditor() {
               <div className="p-6">
                 {current ? (
                   <div className="space-y-4">
-                    <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-purple-900 to-purple-700">
+                    <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-[#a5e1e9]">
                       <video 
                         controls 
                         src={current.url} 
@@ -297,7 +297,7 @@ export default function VideoEditor() {
                     </div>
                     
                     {promptHistory.length > 0 && (
-                      <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-4 border border-purple-200">
+                      <div className="bg-[#a5e1e9] rounded-2xl p-4 border border-purple-200">
                         <div className="flex items-center mb-3">
                           <History className="w-5 h-5 text-purple-600 mr-2" />
                           <span className="font-medium text-purple-700">Edit History</span>
@@ -317,11 +317,11 @@ export default function VideoEditor() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-80 text-purple-500">
-                    <div className="w-24 h-24 bg-gradient-to-r from-purple-200 to-purple-300 rounded-full flex items-center justify-center mb-4">
-                      <Video className="w-12 h-12 text-purple-600" />
+                    <div className="w-24 h-24 bg-[#a5e1e9] rounded-full flex items-center justify-center mb-4">
+                      <Video className="w-12 h-12 text-blue-600" />
                     </div>
-                    <p className="text-lg font-medium">No video uploaded</p>
-                    <p className="text-sm text-center mt-2">Upload a video file to start editing</p>
+                    <p className="text-lg font-medium text-blue-600">No video uploaded</p>
+                    <p className="text-sm text-center mt-2 text-blue-600">Upload a video file to start editing</p>
                   </div>
                 )}
               </div>
