@@ -1,5 +1,6 @@
 from flask import Flask
 from routes.edit_routes import edit_bp
+from routes.converse_routes import conv_bp
 import os
 from flask_cors import CORS
 
@@ -10,11 +11,14 @@ def create_app():
     # config: optional
     app.config.from_mapping({
     "MAX_CONTENT_LENGTH": 1024 * 1024 * 1024, # 1GB max upload by default
+    "UPLOAD_FOLDER": os.path.join(app.instance_path, "uploads")
     })
 
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     # Register blueprints
     app.register_blueprint(edit_bp, url_prefix="/api")
+    app.register_blueprint(conv_bp, url_prefix="/api/conv")
 
 
     @app.route("/", methods=["GET"])
