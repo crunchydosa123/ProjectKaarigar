@@ -1,379 +1,300 @@
-# backend/routes/converse_routes.py
+# routes/conversation_routes.py
 import os
 import base64
-import tempfile
 import json
 import requests
-from flask import Blueprint, request, jsonify
-from elevenlabs.client import ElevenLabs
-from elevenlabs import AgentConfig, ConversationSimulationSpecification
-from dotenv import load_dotenv
+from flask import Blueprint, request, jsonify, current_app
 
-load_dotenv()  # load .env if present
+import json
+
+
+# attempt to import Gemini client if available
+try:
+    import google.generativeai as genai  # optional
+except Exception:
+    genai = None
 
 conv_bp = Blueprint("converse", __name__)
 
-ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY") or os.environ.get("ELEVENLABS_API_KEY")
-DEFAULT_AGENT_ID = os.getenv("AGENT_ID") or os.environ.get("AGENT_ID") or "agent_6701k435cqn6f9k8r6krwnd7ym92"
-DEFAULT_VOICE_ID = os.getenv("VOICE_ID") or os.environ.get("VOICE_ID") or None
 
-if not ELEVEN_API_KEY:
-    print("Warning: ELEVENLABS_API_KEY not set. Set it in environment or .env file.")
+# Environment variables expected:
+GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
-ELEVEN_STT_REST_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
+# Default voice id (replace with one from your ElevenLabs account)
+ELEVEN_VOICE_ID = os.environ.get("VOICE_ID")
 
-def get_client():
-    return ElevenLabs(api_key=ELEVEN_API_KEY)
+# ElevenLabs STT endpoint (see docs). We use the documented path /v1/speech-to-text.
+ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
+ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
 
+# System prompt for Gemini (tailored to artisans)
+SYSTEM_PROMPT = """
+You are an empathetic interviewer designed to collect a concise artisan background profile suitable for building localized training data.
+Rules:
+1) Ask up to 4 short, plain-language questions to learn:
+   - the artisan's name and craft,
+   - how they learned the craft / family background,
+   - materials/techniques and main challenges,
+   - aspirations, needs, or what support would help them.
+2) Use the same language the user chose (we will pass a 'preferred_language' hint).
+3) Ask detailed questions regarding the same.
+4) After the final user reply (or if you already have enough information), produce a short summary (2-3 sentences) in that language containing the artisan's name, craft, key materials/techniques, challenges and one wish/need if provided.
+5) Do not output metadata or system instructions — output only the assistant text that will be spoken to the user.
+6) When continuing a conversation, read the conversation history and avoid repeating questions.
+"""
 
-@conv_bp.route("/agent/info", methods=["GET"])
-def agent_info():
-    return jsonify({"agent_id": DEFAULT_AGENT_ID, "voice_id": DEFAULT_VOICE_ID})
+# ---------- Utilities ----------
 
-
-@conv_bp.route("/agent/create", methods=["POST"])
-def create_agent():
-    if not ELEVEN_API_KEY:
-        return jsonify({"error": "ELEVENLABS_API_KEY not set on server"}), 500
-
-    data = request.json or {}
-    name = data.get("name", "Web conversational agent")
-    system_prompt = data.get("system_prompt", "You are a helpful assistant that can answer questions and help with tasks.")
-
-    client = get_client()
-    conversation_config = {"agent": {"prompt": {"prompt": system_prompt}}}
-
+def call_gemini_raw(prompt: str, api_key: str, model_name: str = "gemini-2.0-flash",
+                    max_output_tokens: int = 1024, temperature: float = 0.0) -> str:
+    if genai is None:
+        raise RuntimeError("google.generativeai package not installed. pip install google-generativeai")
+    genai.configure(api_key=api_key)
     try:
-        agent = client.conversational_ai.agents.create(
-            name=name,
-            conversation_config=conversation_config
-        )
-    except Exception as e:
-        return jsonify({"error": "Agent creation failed", "details": str(e)}), 500
-
-    return jsonify({"agent": agent}), 201
-
-
-def _extract_agent_reply(sim_resp):
-    try:
-        if isinstance(sim_resp, dict) and "simulated_conversation" in sim_resp:
-            conv = sim_resp.get("simulated_conversation") or []
-            for turn in conv:
-                role = (turn.get("role") or turn.get("speaker") or "").lower()
-                msg = turn.get("message") or turn.get("text") or turn.get("content")
-                if role == "assistant" and msg:
-                    return msg
-            for turn in reversed(conv):
-                msg = turn.get("message") or turn.get("text") or turn.get("content")
-                if msg:
-                    return msg
-            return None
-
-        if hasattr(sim_resp, "simulated_conversation"):
-            conv = getattr(sim_resp, "simulated_conversation")
-            for turn in conv:
-                try:
-                    role = (turn.get("role") or turn.get("speaker") or "").lower()
-                    msg = turn.get("message") or turn.get("text") or turn.get("content")
-                except Exception:
-                    role = getattr(turn, "role", "").lower() if hasattr(turn, "role") else ""
-                    msg = getattr(turn, "message", None) or getattr(turn, "text", None) or getattr(turn, "content", None)
-                if role == "assistant" and msg:
-                    return msg
-            for turn in reversed(conv):
-                try:
-                    msg = turn.get("message") or turn.get("text") or turn.get("content")
-                except Exception:
-                    msg = getattr(turn, "message", None) or getattr(turn, "text", None) or getattr(turn, "content", None)
-                if msg:
-                    return msg
-            return None
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt)
+        if hasattr(response, "text") and response.text:
+            return response.text
+        if hasattr(response, "candidates") and response.candidates:
+            c0 = response.candidates[0]
+            if hasattr(c0, "content") and c0.content:
+                return c0.content
+            return str(c0)
+        return str(response)
     except Exception:
-        pass
+        try:
+            res = genai.generate(model=model_name, prompt=prompt, max_output_tokens=max_output_tokens, temperature=temperature)
+            if isinstance(res, str):
+                return res
+            if hasattr(res, "candidates") and res.candidates:
+                cand = res.candidates[0]
+                if hasattr(cand, "content"):
+                    return cand.content
+                return str(cand)
+            if isinstance(res, dict):
+                if "candidates" in res and len(res["candidates"]) > 0:
+                    c0 = res["candidates"][0]
+                    if isinstance(c0, dict) and "content" in c0:
+                        return c0["content"]
+                    return json.dumps(c0)
+                if "output" in res:
+                    return res["output"]
+            return str(res)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to call Gemini: {exc}") from exc
 
-    try:
-        return str(sim_resp)
-    except Exception:
-        return None
+def eleven_tts_bytes(text: str, voice_id: str = ELEVEN_VOICE_ID) -> bytes:
+    """
+    Call ElevenLabs Text-to-Speech and return raw audio bytes.
+    (Uses POST /v1/text-to-speech/{voice_id} as a common endpoint shape.)
+    """
+    if not ELEVENLABS_API_KEY:
+        raise RuntimeError("ELEVENLABS_API_KEY not set on server")
+
+    url = f"{ELEVEN_TTS_URL}/{voice_id}"
+    headers = {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json"
+    }
+    body = {
+        "text": text,
+        # optional: model_id, voice_settings, language_code etc.
+    }
+    resp = requests.post(url, json=body, headers=headers, timeout=30)
+    resp.raise_for_status()
+    return resp.content
 
 
-def _stt_rest_call(temp_path, model_id="scribe_v1"):
-    headers = {"xi-api-key": ELEVEN_API_KEY}
-    # send multipart/form-data with file and model_id
-    with open(temp_path, "rb") as fh:
-        files = {"file": fh}
-        data = {"model_id": model_id}
-        resp = requests.post(ELEVEN_STT_REST_URL, headers=headers, files=files, data=data, timeout=120)
-    if resp.status_code >= 400:
-        raise Exception(f"ElevenLabs STT REST error {resp.status_code}: {resp.text}")
+def eleven_stt_transcribe(file_bytes: bytes, filename: str = "audio.webm", model_id: str = "scribe_v1", language_code: str = None):
+    """
+    Sends the audio bytes as a multipart/form-data upload to ElevenLabs STT endpoint.
+    Returns dict response parsed from ElevenLabs (we look for .get('text')).
+    See ElevenLabs docs: POST /v1/speech-to-text. :contentReference[oaicite:2]{index=2}
+    """
+    if not ELEVENLABS_API_KEY:
+        raise RuntimeError("ELEVENLABS_API_KEY not set on server")
+
+    headers = {
+        "xi-api-key": ELEVENLABS_API_KEY,
+    }
+    files = {
+        "file": (filename, file_bytes, "application/octet-stream"),
+    }
+    data = {
+        "model_id": model_id,
+    }
+    if language_code:
+        data["language_code"] = language_code
+
+    resp = requests.post(ELEVEN_STT_URL, headers=headers, files=files, data=data, timeout=60)
+    resp.raise_for_status()
     return resp.json()
 
 
-def _try_speech_to_text(client, temp_path):
-    last_exc = None
-    # Try common SDK signatures (best-effort); if all fail fall back to REST
-    try:
-        with open(temp_path, "rb") as f:
-            return client.speech_to_text.convert(file=f)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        with open(temp_path, "rb") as f:
-            return client.speech_to_text.convert(audio=f)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        with open(temp_path, "rb") as f:
-            return client.speech_to_text.convert(input_audio=f)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        return client.speech_to_text.convert(file_path=temp_path)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        with open(temp_path, "rb") as f:
-            return client.speech_to_text.convert(f)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        if hasattr(client.speech_to_text, "transcribe"):
-            with open(temp_path, "rb") as f:
-                return client.speech_to_text.transcribe(f)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    try:
-        if hasattr(client.speech_to_text, "from_file"):
-            return client.speech_to_text.from_file(temp_path)
-    except TypeError as te:
-        last_exc = te
-    except Exception as e:
-        raise
-
-    # SDK didn't work -> try REST
-    try:
-        rest_resp = _stt_rest_call(temp_path, model_id="scribe_v1")
-        return rest_resp
-    except Exception as e:
-        raise TypeError(f"STT invocation failed for SDK and REST fallback. Last SDK error: {last_exc}. REST error: {e}")
+def detect_preferred_language_from_text(transcript: str, stt_language_code: str = None) -> str:
+    """
+    Try to map the short user reply (they are expected to speak a language name) to an ISO code.
+    Accepts English names and native script tokens.
+    Returns an ISO 639-1 code (e.g. 'en','hi','bn','ta') or falls back to stt_language_code or 'en'.
+    """
+    if not transcript:
+        return stt_language_code or "en"
+    t = transcript.strip().lower()
+    mapping = {
+        "english": "en", "ingl": "en", "eng": "en",
+        "hindi": "hi", "हिन्दी": "hi", "हिंदी": "hi", "हिन्दी.": "hi",
+        "bengali": "bn", "bangla": "bn", "বাংলা": "bn", "bangla.": "bn",
+        "bengali.": "bn",
+        "tamil": "ta", "தமிழ்": "ta",
+        # some common alternatives
+        "en": "en", "hi": "hi", "bn": "bn", "ta": "ta"
+    }
+    # try exact tokens in transcript (split words and whole text)
+    for key, iso in mapping.items():
+        if key in t:
+            return iso
+    # fallback use STT detected language code (first two chars)
+    if stt_language_code:
+        return stt_language_code.split("-")[0][:2]
+    return "en"
 
 
-@conv_bp.route("/text", methods=["POST"])
-def converse_text():
-    if not ELEVEN_API_KEY:
-        return jsonify({"error": "ELEVENLABS_API_KEY not set on server"}), 500
-
-    data = request.json or {}
-    text = data.get("text")
-    agent_id = data.get("agent_id") or DEFAULT_AGENT_ID
-    voice_id = data.get("voice_id") or DEFAULT_VOICE_ID
-
-    if not text:
-        return jsonify({"error": "text is required"}), 400
-    if not agent_id:
-        return jsonify({"error": "agent_id is required (set AGENT_ID env or pass agent_id)"}), 400
-
-    client = get_client()
-    sim_spec = ConversationSimulationSpecification(
-        simulated_user_config=AgentConfig(
-            first_message=text,
-        )
+def build_prompt_from_history(system_prompt: str, history: list, user_text: str, preferred_language_iso: str):
+    """
+    Build a plain text prompt fed to call_gemini_raw: system prompt + short conversational history + new user utterance.
+    We include preferred language hint so Gemini knows which language to use.
+    """
+    MAX_TURNS = 6
+    trimmed = (history or [])[-MAX_TURNS:]
+    history_lines = []
+    for turn in trimmed:
+        role = turn.get("role", "user")
+        txt = turn.get("text", "")
+        if role.lower().startswith("user"):
+            history_lines.append(f"User: {txt}")
+        else:
+            history_lines.append(f"Assistant: {txt}")
+    history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
+    prompt = (
+        f"{system_prompt.strip()}\n\n"
+        f"Preferred_language: {preferred_language_iso}\n\n"
+        f"Conversation history (most recent last):\n{history_block}\n\n"
+        f"New user message:\n{user_text.strip()}\n\n"
+        "As the assistant, provide the next reply in the preferred language. Keep responses short and simple."
     )
+    return prompt
 
+# ---------- Endpoints ----------
+
+@conv_bp.route("/converse/start_language", methods=["GET"])
+def start_language():
+    """
+    GET /api/converse/start_language
+    Returns a short multilingual audio prompt (base64) asking the user to say their preferred language.
+    The audio contains short sentences in English, Hindi, Bengali and Tamil.
+    Response:
+    {
+      "prompt_text": "...",
+      "audio_base64": "...",
+      "mime": "audio/mpeg"
+    }
+    """
     try:
-        sim_resp = client.conversational_ai.agents.simulate_conversation(
-            agent_id=agent_id,
-            simulation_specification=sim_spec
-        )
-    except Exception as e:
-        return jsonify({"error": "Agent simulation call failed", "details": str(e)}), 500
+        # Compose the multilingual prompt (short lines)
+        prompt_lines = [
+            "Which language do you prefer? Say: English or Hindi.",
+            # Hindi
+            "आप किस भाषा को पसंद करते हैं? अंग्रेज़ी, या हिन्दी कहें।",
+            # Bengali
 
-    agent_reply_text = _extract_agent_reply(sim_resp) or "Sorry — I couldn't generate a response."
+        ]
+        prompt_text = " ".join(prompt_lines)
 
-    if not voice_id:
+        audio_bytes = eleven_tts_bytes(prompt_text, voice_id=ELEVEN_VOICE_ID)
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         return jsonify({
-            "transcript": text,
-            "reply_text": agent_reply_text,
-            "audio_base64": None,
-            "note": "No voice_id provided. Set VOICE_ID on server or pass voice_id in request to receive audio."
+            "prompt_text": prompt_text,
+            "audio_base64": audio_b64,
+            "mime": "audio/mpeg"
         })
-
-    try:
-        tts_audio_bytes = client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=agent_reply_text
-        )
     except Exception as e:
-        return jsonify({"error": "TTS conversion failed", "details": str(e)}), 500
-
-    if isinstance(tts_audio_bytes, (bytes, bytearray)):
-        b64 = base64.b64encode(tts_audio_bytes).decode("utf-8")
-    else:
-        audio_bytes = bytes(tts_audio_bytes)
-        b64 = base64.b64encode(audio_bytes).decode("utf-8")
-
-    return jsonify({
-        "transcript": text,
-        "reply_text": agent_reply_text,
-        "audio_base64": b64
-    })
+        current_app.logger.exception("Error in start_language")
+        return jsonify({"error": str(e)}), 500
 
 
-@conv_bp.route("/audio", methods=["POST"])
-def converse_audio():
-    if not ELEVEN_API_KEY:
-        return jsonify({"error": "ELEVENLABS_API_KEY not set on server"}), 500
+@conv_bp.route("/converse/submit_audio", methods=["POST"])
+def submit_audio():
+    """
+    POST /api/converse/submit_audio
+    Content-Type: multipart/form-data
+    Fields:
+      - audio: file (recorded user audio blob)
+      - history: optional JSON string of conversation history (array of {role,text})
+      - stt_language_hint: optional language_code hint (e.g. 'en' or 'hi') to improve STT
+    Response:
+    {
+      "transcript": "...",            # STT text
+      "stt_language_code": "en",
+      "assistant_text": "...",        # Gemini reply text
+      "audio_base64": "...",          # Gemini reply as TTS via ElevenLabs
+      "mime": "audio/mpeg"
+    }
+    """
+    if call_gemini_raw is None:
+        current_app.logger.error("Gemini helper not imported")
+        return jsonify({"error": "server misconfiguration: Gemini helper not available"}), 500
 
     if "audio" not in request.files:
-        return jsonify({"error": "No audio file sent. Use form field 'audio'."}), 400
+        return jsonify({"error": "audio file is required (multipart form field 'audio')"}), 400
 
-    audio_file = request.files["audio"]
-    agent_id = request.form.get("agent_id") or DEFAULT_AGENT_ID
-    voice_id = request.form.get("voice_id") or DEFAULT_VOICE_ID
-
-    if not agent_id:
-        return jsonify({"error": "agent_id is required (set AGENT_ID env or pass agent_id)"}), 400
-
-    # Read all bytes from the uploaded file to validate
     try:
-        file_bytes = audio_file.read()
-    except Exception as e:
-        return jsonify({"error": "Failed reading uploaded file", "details": str(e)}), 400
+        file = request.files["audio"]
+        file_bytes = file.read()
+        history_raw = request.form.get("history", "[]")
+        try:
+            history = json.loads(history_raw)
+        except Exception:
+            history = []
 
-    # Diagnostics for debugging client uploads
-    filename = getattr(audio_file, "filename", None)
-    mimetype = getattr(audio_file, "mimetype", None)
-    content_length = len(file_bytes) if file_bytes is not None else 0
+        stt_language_hint = request.form.get("stt_language_hint")  # optional
 
-    if not file_bytes or content_length == 0:
+        # 1) Send audio to ElevenLabs STT
+        stt_resp = eleven_stt_transcribe(file_bytes, filename=file.filename or "audio.webm", language_code=stt_language_hint)
+        # According to ElevenLabs docs, response contains 'text' and 'language_code' fields. :contentReference[oaicite:3]{index=3}
+        transcript = stt_resp.get("text") or ""
+        stt_lang_code = stt_resp.get("language_code") or stt_language_hint or None
+
+        # 2) Try to detect preferred language if the user simply said a language name.
+        preferred_lang = detect_preferred_language_from_text(transcript, stt_lang_code)
+
+        # 3) Build Gemini prompt and call Gemini
+        prompt = build_prompt_from_history(SYSTEM_PROMPT, history, transcript, preferred_lang)
+
+        if not GEMINI_API_KEY:
+            return jsonify({"error": "GEMINI_API_KEY not configured on server"}), 500
+
+        assistant_text = call_gemini_raw(prompt=prompt, api_key=GEMINI_API_KEY, model_name=GEMINI_MODEL_NAME, max_output_tokens=512, temperature=0.6)
+        if not isinstance(assistant_text, str):
+            assistant_text = str(assistant_text)
+        assistant_text = assistant_text.strip()
+
+        # 4) Convert assistant_text to speech (ElevenLabs TTS)
+        assistant_audio = eleven_tts_bytes(assistant_text, voice_id=ELEVEN_VOICE_ID)
+        assistant_b64 = base64.b64encode(assistant_audio).decode("utf-8")
+
         return jsonify({
-            "error": "Uploaded file is empty or zero-bytes",
-            "details": {
-                "filename": filename,
-                "mimetype": mimetype,
-                "size_bytes": content_length,
-                "hint": "Client recorded file appears empty. Ensure MediaRecorder produced data, call mediaRecorder.requestData() before stop, and verify blob size on client."
-            }
-        }), 400
-
-    # Save to temp path
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        temp_path = tmp.name
-        try:
-            tmp.write(file_bytes)
-            tmp.flush()
-        except Exception as e:
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
-            return jsonify({"error": "Failed writing temp audio file", "details": str(e)}), 500
-
-    client = get_client()
-
-    # 1) Speech-to-text (try SDK signatures and REST fallback)
-    try:
-        stt_result = _try_speech_to_text(client, temp_path)
-        if isinstance(stt_result, dict) and "text" in stt_result:
-            transcript = stt_result["text"]
-        elif isinstance(stt_result, dict) and "transcript" in stt_result:
-            transcript = stt_result["transcript"]
-        elif isinstance(stt_result, str):
-            transcript = stt_result
-        elif hasattr(stt_result, "get") and stt_result.get("text"):
-            transcript = stt_result.get("text")
-        else:
-            transcript = str(stt_result)
+            "transcript": transcript,
+            "stt_language_code": stt_lang_code,
+            "preferred_language": preferred_lang,
+            "assistant_text": assistant_text,
+            "audio_base64": assistant_b64,
+            "mime": "audio/mpeg"
+        })
+    except requests.HTTPError as http_err:
+        current_app.logger.exception("HTTP error in submit_audio")
+        return jsonify({"error": f"HTTP error contacting external API: {http_err}"}), 502
     except Exception as e:
-        try:
-            os.unlink(temp_path)
-        except Exception:
-            pass
-        return jsonify({"error": "STT failed", "details": str(e)}), 500
-
-    # 2) Simulate conversation
-    try:
-        sim_spec = ConversationSimulationSpecification(
-            simulated_user_config=AgentConfig(
-                first_message=transcript,
-            )
-        )
-        sim_resp = client.conversational_ai.agents.simulate_conversation(
-            agent_id=agent_id,
-            simulation_specification=sim_spec
-        )
-
-        agent_reply_text = _extract_agent_reply(sim_resp)
-        if not agent_reply_text:
-            agent_reply_text = "Sorry — I couldn't figure out a response."
-    except Exception as e:
-        try:
-            os.unlink(temp_path)
-        except Exception:
-            pass
-        return jsonify({"error": "Agent simulation failed", "details": str(e)}), 500
-
-    # 3) TTS
-    try:
-        if not voice_id:
-            audio_b64 = None
-        else:
-            tts_audio = client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=agent_reply_text
-        )
-
-        # Normalize output
-        if isinstance(tts_audio, (bytes, bytearray)):
-            final_audio = tts_audio
-        elif isinstance(tts_audio, (list, tuple)):
-            # list of bytes chunks
-            final_audio = b"".join(tts_audio)
-        elif hasattr(tts_audio, "__iter__"):  
-            # generator of bytes chunks
-            final_audio = b"".join(tts_audio)
-        elif hasattr(tts_audio, "read"):  
-            # file-like object
-            final_audio = tts_audio.read()
-        else:
-            raise TypeError(f"Unexpected TTS output type: {type(tts_audio)}")
-
-        audio_b64 = base64.b64encode(final_audio).decode("utf-8")
-
-    except Exception as e:
-        try:
-            os.unlink(temp_path)
-        except Exception:
-            pass
-        return jsonify({"error": "TTS failed", "details": str(e)}), 500
-
-    # cleanup
-    try:
-        os.unlink(temp_path)
-    except Exception:
-        pass
-
-    return jsonify({
-        "transcript": transcript,
-        "reply_text": agent_reply_text,
-        "audio_base64": audio_b64,
-        "uploaded_file": {"filename": filename, "mimetype": mimetype, "size_bytes": content_length}
-    })
+        current_app.logger.exception("Error in submit_audio")
+        return jsonify({"error": str(e)}), 500

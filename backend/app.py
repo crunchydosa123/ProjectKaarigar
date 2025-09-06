@@ -18,7 +18,7 @@ def create_app():
 
     # Register blueprints
     app.register_blueprint(edit_bp, url_prefix="/api")
-    app.register_blueprint(conv_bp, url_prefix="/api/conv")
+    app.register_blueprint(conv_bp, url_prefix="/api")
 
 
     @app.route("/", methods=["GET"])
