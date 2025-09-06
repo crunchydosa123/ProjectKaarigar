@@ -3,6 +3,14 @@ import tempfile
 from flask import Blueprint, request, send_file, current_app, jsonify
 from werkzeug.utils import secure_filename
 from video_edit.core import process_with_gemini
+import requests
+import base64
+ELEVEN_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
+DEFAULT_VOICE_ID = os.environ.get("VOICE_ID")  # replace with your preferred default
+
+# ElevenLabs TTS base URL (adjust if ElevenLabs changes their API path)
+ELEVEN_TTS_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
+
 
 edit_bp = Blueprint('edit', __name__)
 
@@ -69,3 +77,58 @@ def edit_video():
         except Exception:
             pass
         # Note: out_tmp is returned via send_file; if you want to remove it after send, use file streaming with generator.
+
+
+@edit_bp.route('/tts', methods=['POST'])
+def tts_text():
+    """
+    POST /api/tts
+    JSON body:
+      { "text": "Hello", "voice_id": "optional-voice-id" }
+    Response:
+      { "audio_base64": "...", "mime": "audio/mpeg" }
+    """
+    if not ELEVEN_API_KEY:
+        current_app.logger.error("ELEVENLABS_API_KEY is not configured")
+        return jsonify({"error": "Server misconfiguration: ELEVENLABS_API_KEY not configured"}), 500
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Request must be application/json with 'text' field."}), 400
+
+    text = (payload.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "Field 'text' is required."}), 400
+
+    voice_id = payload.get("voice_id") or DEFAULT_VOICE_ID
+
+    # Build ElevenLabs TTS request
+    # Many ElevenLabs TTS endpoints accept POST /v1/text-to-speech/{voice_id} and return audio binary.
+    url = f"{ELEVEN_TTS_BASE}/{voice_id}"
+    headers = {
+        "xi-api-key": ELEVEN_API_KEY,
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "text": text
+        # Optionally add voice_settings, model, etc. depending on your ElevenLabs plan.
+    }
+
+    try:
+        resp = requests.post(url, json=body, headers=headers, timeout=30)
+        resp.raise_for_status()
+        audio_bytes = resp.content
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        return jsonify({"audio_base64": audio_b64, "mime": "audio/mpeg"})
+    except requests.HTTPError as http_err:
+        current_app.logger.exception("ElevenLabs TTS HTTP error")
+        try:
+            # attempt to include server-side error details if any
+            return jsonify({"error": f"ElevenLabs HTTP error: {http_err}; body: {resp.text}"}), 502
+        except Exception:
+            return jsonify({"error": str(http_err)}), 502
+    except Exception as e:
+        current_app.logger.exception("ElevenLabs TTS failed")
+        return jsonify({"error": str(e)}), 500

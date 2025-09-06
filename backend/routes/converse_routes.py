@@ -207,7 +207,7 @@ def start_language():
             "Which language do you prefer? Say: English or Hindi.",
             # Hindi
             "आप किस भाषा को पसंद करते हैं? अंग्रेज़ी, या हिन्दी कहें।",
-            # Bengali
+
 
         ]
         prompt_text = " ".join(prompt_lines)

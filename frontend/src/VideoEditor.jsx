@@ -1,19 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, MicOff, Send, Video, History, Check, X } from 'lucide-react';
+// src/VideoEditor.jsx
+import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
+import { Upload, Mic, MicOff, Send, Video, History, Check, X } from "lucide-react";
 
 export default function VideoEditor() {
     const [messages, setMessages] = useState([]);
-    const [conversationState, setConversationState] = useState('upload_video');
+    const [conversationState, setConversationState] = useState("upload_video");
     const [history, setHistory] = useState([]);
     const [promptHistory, setPromptHistory] = useState([]);
     const [listening, setListening] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
-    const [inputText, setInputText] = useState('');
+    const [inputText, setInputText] = useState("");
     const recognitionRef = useRef(null);
+    const audioRef = useRef(null); // for playing ElevenLabs audio
 
     useEffect(() => {
-        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+        // Initialize browser SpeechRecognition for voice input (frontend)
+        if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognitionRef.current = new SpeechRecognition();
             recognitionRef.current.continuous = false;
@@ -30,27 +34,59 @@ export default function VideoEditor() {
             };
         }
 
-        if (conversationState === 'upload_video') {
-            addAIMessage('Upload your video to begin editing');
+        // When arriving at upload page, greet using ElevenLabs TTS
+        if (conversationState === "upload_video") {
+            addAIMessage("Upload your video to begin editing");
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversationState]);
 
-    const addAIMessage = (text) => {
-        setMessages((prev) => [...prev, { role: 'ai', content: text }]);
-        speak(text);
-    };
+    // Play base64 audio returned from server ElevenLabs TTS
+    async function playBase64Audio(base64, mime = "audio/mpeg") {
+        if (!base64) return;
+        const byteString = atob(base64);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i += 1) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const audio = audioRef.current;
+        if (!audio) return;
+        audio.src = url;
+        try {
+            await audio.play();
+        } catch (err) {
+            // autoplay might be blocked; still set the source so user can press play
+            console.warn("Playback blocked or failed:", err);
+        }
+    }
+
+    // Request ElevenLabs TTS for given text via backend
+    async function requestServerTTS(text) {
+        try {
+            const res = await axios.post("http://localhost:5000/api/tts", { text });
+            return res.data; // expects { audio_base64, mime }
+        } catch (err) {
+            console.error("TTS request failed", err);
+            setError("TTS request failed: " + (err?.response?.data?.error || err.message));
+            return null;
+        }
+    }
+
+    // Add an AI message and speak it using server-side ElevenLabs TTS
+    async function addAIMessage(text) {
+        if (!text) return;
+        setMessages((prev) => [...prev, { role: "ai", content: text }]);
+        // get backend ElevenLabs audio
+        const tts = await requestServerTTS(text);
+        if (tts && tts.audio_base64) {
+            await playBase64Audio(tts.audio_base64, tts.mime || "audio/mpeg");
+        }
+    }
 
     const addUserMessage = (text) => {
-        setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    };
-
-    const speak = (text) => {
-        if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            window.speechSynthesis.speak(utterance);
-        }
+        if (!text) return;
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
     };
 
     const startListening = () => {
@@ -66,43 +102,50 @@ export default function VideoEditor() {
             const url = URL.createObjectURL(file);
             setHistory([{ blob: file, url }]);
             setPromptHistory([]);
-            addUserMessage('Video uploaded');
-            addAIMessage('Describe the edits you would like to make');
-            setConversationState('get_prompt');
+            addUserMessage("Video uploaded");
+            addAIMessage("Describe the edits you would like to make");
+            setConversationState("get_prompt");
         }
     };
 
     const handleUserInput = (transcript) => {
         addUserMessage(transcript);
-        if (conversationState === 'get_prompt') {
+        if (conversationState === "get_prompt") {
             submitEdit(transcript);
-        } else if (conversationState === 'review') {
+        } else if (conversationState === "review") {
             const lowerTranscript = transcript.toLowerCase();
-            if (lowerTranscript.includes('restore')) {
+            if (lowerTranscript.includes("restore")) {
                 if (history.length > 1) {
                     setHistory((prev) => {
                         const removed = prev[prev.length - 1];
-                        URL.revokeObjectURL(removed.url);
+                        try {
+                            URL.revokeObjectURL(removed.url);
+                        } catch (e) { }
                         return prev.slice(0, -1);
                     });
                     setPromptHistory((prev) => prev.slice(0, -1));
-                    addAIMessage('Previous version restored. What would you like to edit next?');
-                    setConversationState('get_prompt');
+                    addAIMessage("Previous version restored. What would you like to edit next?");
+                    setConversationState("get_prompt");
                 } else {
-                    addAIMessage('No previous version available. What edits would you like?');
-                    setConversationState('get_prompt');
+                    addAIMessage("No previous version available. What edits would you like?");
+                    setConversationState("get_prompt");
                 }
-            } else if (lowerTranscript.includes('edit') || lowerTranscript.includes('change') || lowerTranscript.includes('more') || lowerTranscript.includes('yes')) {
-                addAIMessage('What additional edits would you like?');
-                setConversationState('get_prompt');
-            } else if (lowerTranscript.includes('done') || lowerTranscript.includes('no')) {
-                addAIMessage('Session complete. Upload a new video to continue.');
-                setConversationState('upload_video');
+            } else if (
+                lowerTranscript.includes("edit") ||
+                lowerTranscript.includes("change") ||
+                lowerTranscript.includes("more") ||
+                lowerTranscript.includes("yes")
+            ) {
+                addAIMessage("What additional edits would you like?");
+                setConversationState("get_prompt");
+            } else if (lowerTranscript.includes("done") || lowerTranscript.includes("no")) {
+                addAIMessage("Session complete. Upload a new video to continue.");
+                setConversationState("upload_video");
                 setHistory([]);
                 setPromptHistory([]);
                 setMessages([]);
             } else {
-                addAIMessage('Please specify: more edits, restore previous version, or done?');
+                addAIMessage("Please specify: more edits, restore previous version, or done?");
             }
         }
     };
@@ -116,31 +159,32 @@ export default function VideoEditor() {
 
         let fullPrompt = prompt;
         if (promptHistory.length > 0) {
-            fullPrompt = `Previous edits: ${promptHistory.join('. ')}. Additional edit: ${prompt}`;
+            fullPrompt = `Previous edits: ${promptHistory.join(". ")}. Additional edit: ${prompt}`;
         }
 
         const formData = new FormData();
-        formData.append('video', current.blob);
-        formData.append('user_prompt', fullPrompt);
+        formData.append("video", current.blob);
+        formData.append("user_prompt", fullPrompt);
 
         try {
-            const response = await fetch('http://localhost:5000/api/edit', {
-                method: 'POST',
+            const response = await fetch("http://localhost:5000/api/edit", {
+                method: "POST",
                 body: formData,
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Processing failed');
+                throw new Error(errorData.error || "Processing failed");
             }
 
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
             setHistory((prev) => [...prev, { blob, url }]);
             setPromptHistory((prev) => [...prev, prompt]);
-            addAIMessage('Edit complete. Continue editing, restore previous version, or finish?');
-            setConversationState('review');
+            addAIMessage("Edit complete. Continue editing, restore previous version, or finish?");
+            setConversationState("review");
         } catch (err) {
+            console.error(err);
             setError(err.message);
         } finally {
             setUploading(false);
@@ -150,7 +194,7 @@ export default function VideoEditor() {
     const handleTextSubmit = () => {
         if (inputText.trim()) {
             handleUserInput(inputText.trim());
-            setInputText('');
+            setInputText("");
         }
     };
 
@@ -183,11 +227,13 @@ export default function VideoEditor() {
 
                             <div className="h-80 overflow-y-auto p-6 space-y-4">
                                 {messages.map((msg, idx) => (
-                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl ${msg.role === 'ai'
-                                                ? 'bg-gradient-to-r from-purple-50 to-purple-[#3f3ad3] text-[#3f3ad3] border border-purple-200'
-                                                : 'bg-gradient-to-r from-purple-400 to-purple-500 text-white shadow-md'
-                                            }`}>
+                                    <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                                        <div
+                                            className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl ${msg.role === "ai"
+                                                ? "bg-gradient-to-r from-purple-50 to-purple-[#3f3ad3] text-[#3f3ad3] border border-purple-200"
+                                                : "bg-gradient-to-r from-purple-400 to-purple-500 text-white shadow-md"
+                                                }`}
+                                        >
                                             <p className="text-sm">{msg.content}</p>
                                         </div>
                                     </div>
@@ -196,7 +242,7 @@ export default function VideoEditor() {
 
                             {/* Input Controls */}
                             <div className="p-6 bg-purple-50 border-t border-purple-200">
-                                {conversationState === 'upload_video' && (
+                                {conversationState === "upload_video" && (
                                     <div className="relative">
                                         <input
                                             type="file"
@@ -215,16 +261,21 @@ export default function VideoEditor() {
                                     </div>
                                 )}
 
-                                {(conversationState === 'get_prompt' || conversationState === 'review') && (
+                                {(conversationState === "get_prompt" || conversationState === "review") && (
                                     <div className="space-y-3">
                                         <button
-                                            onClick={startListening}
+                                            onClick={() => {
+                                                if (recognitionRef.current && !listening) {
+                                                    setListening(true);
+                                                    recognitionRef.current.start();
+                                                }
+                                            }}
                                             disabled={listening || uploading}
                                             className={`w-full py-4 px-6 rounded-2xl font-medium transition-all duration-300 flex items-center justify-center shadow-lg ${listening
-                                                    ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white animate-pulse'
-                                                    : uploading
-                                                        ? 'bg-purple-300 text-purple-500 cursor-not-allowed'
-                                                        : 'bg-gradient-to-r from-purple-500 to-purple-700 text-white hover:from-purple-600 hover:to-purple-800 transform hover:scale-[1.02] active:scale-[0.98]'
+                                                ? "bg-gradient-to-r from-purple-400 to-purple-500 text-white animate-pulse"
+                                                : uploading
+                                                    ? "bg-purple-300 text-purple-500 cursor-not-allowed"
+                                                    : "bg-gradient-to-r from-purple-500 to-purple-700 text-white hover:from-purple-600 hover:to-purple-800 transform hover:scale-[1.02] active:scale-[0.98]"
                                                 }`}
                                         >
                                             {listening ? (
@@ -250,7 +301,7 @@ export default function VideoEditor() {
                                                 type="text"
                                                 value={inputText}
                                                 onChange={(e) => setInputText(e.target.value)}
-                                                onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
+                                                onKeyPress={(e) => e.key === "Enter" && handleTextSubmit()}
                                                 className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all duration-200 bg-white/90"
                                                 placeholder="Type your instructions..."
                                                 disabled={uploading}
@@ -259,8 +310,8 @@ export default function VideoEditor() {
                                                 onClick={handleTextSubmit}
                                                 disabled={uploading || !inputText.trim()}
                                                 className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${uploading || !inputText.trim()
-                                                        ? 'bg-purple-300 text-purple-500 cursor-not-allowed'
-                                                        : 'bg-gradient-to-r from-purple-400 to-purple-600 text-white hover:from-purple-500 hover:to-purple-700 shadow-lg transform hover:scale-105 active:scale-95'
+                                                    ? "bg-purple-300 text-purple-500 cursor-not-allowed"
+                                                    : "bg-gradient-to-r from-purple-400 to-purple-600 text-white hover:from-purple-500 hover:to-purple-700 shadow-lg transform hover:scale-105 active:scale-95"
                                                     }`}
                                             >
                                                 <Send className="w-5 h-5" />
@@ -284,13 +335,7 @@ export default function VideoEditor() {
                                 {current ? (
                                     <div className="space-y-4">
                                         <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-[#a5e1e9]">
-                                            <video
-                                                controls
-                                                src={current.url}
-                                                key={current.url}
-                                                className="w-full h-auto"
-                                                style={{ maxHeight: '400px' }}
-                                            />
+                                            <video controls src={current.url} key={current.url} className="w-full h-auto" style={{ maxHeight: "400px" }} />
                                         </div>
 
                                         {promptHistory.length > 0 && (
@@ -334,6 +379,8 @@ export default function VideoEditor() {
                             </div>
                         </div>
                     )}
+
+                    <audio ref={audioRef} className="hidden" />
 
                     {/* Floating Elements */}
                     <div className="absolute top-10 right-10 w-40 h-40 bg-gradient-to-r from-purple-200 to-purple-300 rounded-full opacity-30 blur-3xl animate-pulse"></div>
