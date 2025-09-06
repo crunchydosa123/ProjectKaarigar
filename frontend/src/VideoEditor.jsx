@@ -1,7 +1,7 @@
 // src/VideoEditor.jsx
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
-import { Upload, Mic, MicOff, Send, Video, History, Check, X } from "lucide-react";
+import { Upload, Mic, MicOff, Send, Video, History, X } from "lucide-react";
 
 export default function VideoEditor() {
     const [messages, setMessages] = useState([]);
@@ -14,31 +14,61 @@ export default function VideoEditor() {
     const [inputText, setInputText] = useState("");
     const recognitionRef = useRef(null);
     const audioRef = useRef(null); // for playing ElevenLabs audio
+    const hasGreetedRef = useRef(false); // guard to avoid duplicate greeting on mount (StrictMode)
 
+    // Initialize SpeechRecognition once per mount
     useEffect(() => {
-        // Initialize browser SpeechRecognition for voice input (frontend)
         if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = false;
-            recognitionRef.current.interimResults = false;
-            recognitionRef.current.onresult = (event) => {
-                const transcript = event.results[0][0].transcript.trim();
-                setListening(false);
-                handleUserInput(transcript);
+            const recog = new SpeechRecognition();
+            recog.continuous = false;
+            recog.interimResults = false;
+
+            recog.onresult = (event) => {
+                try {
+                    const transcript = event.results[0][0].transcript.trim();
+                    setListening(false);
+                    handleUserInput(transcript);
+                } catch (e) {
+                    console.warn("Recognition result parsing error", e);
+                }
             };
-            recognitionRef.current.onend = () => setListening(false);
-            recognitionRef.current.onerror = (e) => {
-                setError(`Speech recognition error: ${e.message}`);
+
+            recog.onend = () => {
                 setListening(false);
             };
+
+            recog.onerror = (e) => {
+                setError(`Speech recognition error: ${e?.message || e}`);
+                setListening(false);
+            };
+
+            recognitionRef.current = recog;
         }
 
-        // When arriving at upload page, greet using ElevenLabs TTS
-        if (conversationState === "upload_video") {
+        // cleanup on unmount
+        return () => {
+            try {
+                if (recognitionRef.current) {
+                    // Some browsers expose .abort(); others stop automatically on GC
+                    if (typeof recognitionRef.current.abort === "function") recognitionRef.current.abort();
+                    recognitionRef.current = null;
+                }
+            } catch (e) {
+                console.warn("Failed to cleanup SpeechRecognition", e);
+            }
+        };
+        // run only once per mount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Greet when conversationState is upload_video, but only once per mount to avoid duplicate greeting
+    useEffect(() => {
+        if (conversationState === "upload_video" && !hasGreetedRef.current) {
+            hasGreetedRef.current = true;
             addAIMessage("Upload your video to begin editing");
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // run whenever conversationState changes, but the guard prevents duplicate calls
     }, [conversationState]);
 
     // Play base64 audio returned from server ElevenLabs TTS
@@ -64,6 +94,7 @@ export default function VideoEditor() {
     // Request ElevenLabs TTS for given text via backend
     async function requestServerTTS(text) {
         try {
+            // Use relative path so it works in prod where frontend and backend are same origin
             const res = await axios.post("http://localhost:5000/api/tts", { text });
             return res.data; // expects { audio_base64, mime }
         } catch (err) {
@@ -91,8 +122,13 @@ export default function VideoEditor() {
 
     const startListening = () => {
         if (recognitionRef.current && !listening) {
-            setListening(true);
-            recognitionRef.current.start();
+            try {
+                setListening(true);
+                recognitionRef.current.start();
+            } catch (e) {
+                setError("Failed to start speech recognition: " + (e?.message || e));
+                setListening(false);
+            }
         }
     };
 
@@ -144,6 +180,7 @@ export default function VideoEditor() {
                 setHistory([]);
                 setPromptHistory([]);
                 setMessages([]);
+                hasGreetedRef.current = false; // allow greeting to run again when upload_video state is set and component still mounted
             } else {
                 addAIMessage("Please specify: more edits, restore previous version, or done?");
             }
