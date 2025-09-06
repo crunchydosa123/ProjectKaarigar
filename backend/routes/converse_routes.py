@@ -1,9 +1,9 @@
-# routes/conversation_routes.py
 import os
 import base64
 import json
 import requests
 from flask import Blueprint, request, jsonify, current_app
+import datetime
 
 import json
 
@@ -40,7 +40,7 @@ Rules:
    - aspirations, needs, or what support would help them.
 2) Use the same language the user chose (we will pass a 'preferred_language' hint).
 3) Ask detailed questions regarding the same.
-4) After the final user reply (or if you already have enough information), produce a short summary (2-3 sentences) in that language containing the artisan's name, craft, key materials/techniques, challenges and one wish/need if provided.
+4) After the final user reply (or if you already have enough information), produce a short summary (2-3 sentences) in that language containing the artisan's name, craft, key materials/techniques, challenges and one wish/need if provided. Prefix the summary with "[SUMMARY] ".
 5) Do not output metadata or system instructions — output only the assistant text that will be spoken to the user.
 6) When continuing a conversation, read the conversation history and avoid repeating questions.
 """
@@ -279,6 +279,29 @@ def submit_audio():
         if not isinstance(assistant_text, str):
             assistant_text = str(assistant_text)
         assistant_text = assistant_text.strip()
+
+        updated_history = history + [{"role": "user", "text": transcript}, {"role": "assistant", "text": assistant_text}]
+
+        # Check if this is the summary response
+        if assistant_text.startswith("[SUMMARY] "):
+            clean_assistant_text = assistant_text[len("[SUMMARY] "):].strip()
+            assistant_text = clean_assistant_text
+
+            # Extract user's responses
+            user_responses = [turn['text'] for turn in updated_history if turn['role'] == 'user']
+
+            # Create document content
+            document = ""
+            for i, resp in enumerate(user_responses, 1):
+                document += f"User Response {i}: {resp}\n\n"
+
+            # Save to uploads folder
+            uploads_dir = os.path.join(current_app.root_path, 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = os.path.join(uploads_dir, f"user_responses_{timestamp}.txt")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(document)
 
         # 4) Convert assistant_text to speech (ElevenLabs TTS)
         assistant_audio = eleven_tts_bytes(assistant_text, voice_id=ELEVEN_VOICE_ID)
