@@ -323,15 +323,19 @@ export default function Conversational() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative">
-            {/* Floating background blobs */}
-            <div className="absolute top-10 left-10 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse"></div>
-            <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000"></div>
+            {/* Floating background blobs - responsive design */}
+            {/* Only one blob at the top for mobile, original layout for desktop */}
+            <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none"></div>
+
+            {/* This blob is hidden on mobile (hidden sm:block) */}
+            <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block"></div>
+
             <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000"></div>
 
             {/* Main container - perfectly centered */}
             <div className="flex flex-col items-center justify-center min-h-screen p-8">
                 <div className="text-center space-y-8 relative z-10 w-full max-w-lg">
-                    
+
                     {/* AI Assistant Header */}
                     <div className="mb-8">
                         <h1 className="headline gradient-text text-glow text-3xl md:text-4xl leading-tight tracking-tight text-gray-800 mb-3">
@@ -341,30 +345,29 @@ export default function Conversational() {
                             Talk to me naturally. I'll understand and respond intelligently.
                         </p>
                     </div>
-                    
+
                     {/* Central microphone button - perfectly centered */}
                     <div className="flex justify-center items-center">
                         <div className="relative">
-                            <div className={`w-48 h-48 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 cursor-pointer ${
-                                status === "recording" 
-                                    ? "bg-gradient-to-br from-red-400 to-pink-500 animate-pulse scale-110" 
-                                    : status === "uploading"
+                            <div className={`w-48 h-48 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 cursor-pointer ${status === "recording"
+                                ? "bg-gradient-to-br from-red-400 to-pink-500 animate-pulse scale-110"
+                                : status === "uploading"
                                     ? "bg-gradient-to-br from-blue-400 to-purple-500"
                                     : "bg-gradient-to-br from-purple-500 to-blue-500 hover:scale-105"
-                            }`}
-                            onClick={status !== "idle" ? handleMicToggle : handleStartCallTypes}>
-                                
+                                }`}
+                                onClick={status !== "idle" ? handleMicToggle : handleStartCallTypes}>
+
                                 {status === "uploading" ? (
                                     <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
                                 ) : (
                                     <div className="flex items-center justify-center">
                                         <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                                            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
                                         </svg>
                                     </div>
                                 )}
                             </div>
-                            
+
                             {/* Pulsing rings for recording */}
                             {status === "recording" && (
                                 <>
@@ -400,7 +403,7 @@ export default function Conversational() {
 
                     {/* Bottom actions */}
                     <div className="flex items-center justify-center space-x-4 pt-6">
-                        <button 
+                        <button
                             onClick={toggleTranscript}
                             className="bg-white/80 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg hover:shadow-xl transition-all duration-300 border border-white/30 flex items-center space-x-2 btn-text"
                         >
@@ -423,14 +426,14 @@ export default function Conversational() {
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold text-gray-900 headline">Conversation</h3>
-                                <button 
+                                <button
                                     onClick={toggleTranscript}
                                     className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 transition-colors"
                                 >
                                     <span className="text-gray-600 text-lg">×</span>
                                 </button>
                             </div>
-                            
+
                             <div className="space-y-3">
                                 {history.length === 0 ? (
                                     <div className="text-center text-gray-500 py-8">
@@ -440,11 +443,10 @@ export default function Conversational() {
                                     </div>
                                 ) : (
                                     history.map((m, i) => (
-                                        <div key={i} className={`p-3 rounded-2xl ${
-                                            m.role === "user" 
-                                                ? "bg-blue-100 text-blue-900 ml-8" 
-                                                : "bg-gray-100 text-gray-900 mr-8"
-                                        }`}>
+                                        <div key={i} className={`p-3 rounded-2xl ${m.role === "user"
+                                            ? "bg-blue-100 text-blue-900 ml-8"
+                                            : "bg-gray-100 text-gray-900 mr-8"
+                                            }`}>
                                             <div className="text-xs text-gray-600 mb-1">
                                                 {m.role === "user" ? "You" : "Assistant"}
                                             </div>
