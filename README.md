@@ -80,6 +80,8 @@ We transform your sales data into:
 <img width="2822" height="1186" alt="GenAI Exchange-Page-6 drawio" src="https://github.com/user-attachments/assets/a0bd4906-65e4-4b5a-b5b6-475e37d192b6" />
 
 ## Tech Stack Deep Dive:
+<img width="1056" height="596" alt="image" src="https://github.com/user-attachments/assets/cec7642a-181d-4505-a3ae-3a4ce95a3a24" />
+
 
 ### Frontend
 - **React JS** → Dynamic, intuitive UI  
@@ -105,7 +107,7 @@ We transform your sales data into:
 
 ---
 
-## ☁️ Ease of Deployment & Scalability
+## ☁️ Ease of Deployment & Scalability:
 
 ### Ease of Deployment
 - Serverless-first (Cloud Functions, Cloud Run, Cloud SQL, BigQuery)  
@@ -118,7 +120,7 @@ We transform your sales data into:
 - **Architecture**: Pub/Sub decouples services for **independent scaling**  
 
 ---
-
+## Implementation a&& WireFrames
 
 # ✅ Conclusion
 **Project Karigar** is not just a tool it’s an **ecosystem**.  
