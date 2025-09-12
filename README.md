@@ -121,7 +121,7 @@ We transform your sales data into:
 
 
 # ✅ Conclusion
-**Project Karigar** is not just a tool—it’s a **holistic ecosystem**.  
+**Project Karigar** is not just a tool it’s an **ecosystem**.  
 We empower artisans by:  
 - Preserving **authenticity**  
 - Providing **AI-driven content & insights**  
