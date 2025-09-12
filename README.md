@@ -25,6 +25,28 @@ Our platform automates:
 …allowing artisans to focus on what they do best: **creating**.
 
 ---
+# How we differ from existing solutions:
+
+<img width="1057" height="590" alt="image" src="https://github.com/user-attachments/assets/0870cd0d-293c-4071-a354-55f0206eff95" />
+
+As the diagram shows, **Project Karigar** is the **first all-in-one solution**, integrating **three essential domains** into a single, seamless platform.
+
+### **Unified Workflow**
+We combine **marketplaces, social media, and AI-powered content editing** into **one simple interface**.  
+No need to juggle multiple tools, everything works together effortlessly.
+
+### **AI-Powered Simplicity**
+Artisans can **create and edit professional content** using **simple voice or text commands**.  
+No technical skills required, **our AI handles the complexity**.
+
+### **Intelligent Automation**
+We don’t just present data.  
+We provide **smart pricing recommendations** and **automatically post optimized listings** across multiple platforms.
+
+---
+
+**In short:** We replace **complexity** with a **single, intelligent assistant** , designed exclusively for the artisan.
+
 
 # USPs:
 <img width="1057" height="595" alt="image" src="https://github.com/user-attachments/assets/1f4228c7-4064-4911-8983-026fc7942baa" />
