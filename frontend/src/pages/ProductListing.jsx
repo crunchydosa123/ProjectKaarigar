@@ -189,20 +189,27 @@ export default function ProductListings() {
       <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
       <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
       <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
+        {/* Hamburger */}
         <button
-          className="p-2 rounded-lg bg-white border border-purple-200 shadow-md"
-          onClick={() => setMenuOpen(true)}
+        onClick={() => setMenuOpen(true)}
+        className="absolute top-4 left-4 z-20 cursor-pointer"
+        aria-label="Open menu"
         >
-          <svg
-            className="w-5 h-5 text-gray-700"
+        <svg
+            className="w-8 h-8 text-gray-800"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+        >
+            <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 6h16M4 12h16M4 18h16"
+            />
+        </svg>
         </button>
-      {/* Header */}
+            {/* Header */}
       <header className="relative z-10 p-4">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl mb-4 shadow-lg">
@@ -368,7 +375,7 @@ export default function ProductListings() {
       </div>
 
       {/* Menu drawer */}
-      <MenuDrawer open={menuOpen} setOpen={setMenuOpen} />
+      <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   );
 }
