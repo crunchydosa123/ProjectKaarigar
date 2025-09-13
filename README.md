@@ -82,7 +82,7 @@ We transform your sales data into:
 ![GenAI Exchange-Page-9](https://github.com/user-attachments/assets/6f82dd99-0f92-4b51-bc04-3383dd0dc150)
 
 # Use Case Diagram:
-<img width="1082" height="510" alt="image" src="https://github.com/user-attachments/assets/45ffeeaf-c03b-42bb-9b0e-b2bd2862f62e" />
+![GenAI Exchange-Page-8 (1)](https://github.com/user-attachments/assets/c49b7ba3-d590-465b-a8d3-3515d68e139f)
 
 
 ## Tech Stack Deep Dive:
