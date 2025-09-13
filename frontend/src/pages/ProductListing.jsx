@@ -8,7 +8,6 @@ import SearchBar from "../components/SearchBar";
 import ProductCard from "../components/ProductCard";
 import AddProductSheet from "../components/AddProductSheet";
 import FloatingBackgroundBlobs from "../components/FloatingBackgroundBlobs";
-import FloatingFAB from "../components/FloatingFAB";
 import HamburgerMenu from "../components/Hamburger";
 
 const API_BASE = "http://localhost:5000/api"; // adjust if backend hosted elsewhere
@@ -95,9 +94,6 @@ export default function ProductListings() {
           ))
         )}
       </div>
-
-      {/* Floating FAB (optional action button, e.g., AI prompt) */}
-      <FloatingFAB onClick={() => console.log("FAB clicked")} />
 
       {/* Add Product sheet */}
       <AddProductSheet
