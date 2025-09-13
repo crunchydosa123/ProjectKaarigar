@@ -16,7 +16,7 @@ except Exception:
 product_bp = Blueprint("product_optimize", __name__)
 
 # Environment / config
-GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GEMINI_API_KEY = "AIzaSyAVSGUozgbc7AQs4xEhP_-xaTGtN78HBFU"
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 # Allowed image extensions

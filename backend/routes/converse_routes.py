@@ -15,11 +15,11 @@ except Exception:
 conv_bp = Blueprint("converse", __name__)
 
 # Environment variables expected:
-GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GEMINI_API_KEY = "AIzaSyAVSGUozgbc7AQs4xEhP_-xaTGtN78HBFU"
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
-ELEVEN_VOICE_ID = os.environ.get("VOICE_ID")
+ELEVENLABS_API_KEY = 'sk_119a741c6b322f526f7e712be124a4007a04b3294734b78d'
+ELEVEN_VOICE_ID = 'KaCAGkAghyX8sFEYByRC'
 
 ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
 ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")

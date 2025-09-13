@@ -1,4 +1,3 @@
-// src/pages/ProductDetail.jsx
 import React, { useContext, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ProductContext } from "../context/ProductContext";
@@ -8,6 +7,8 @@ import BackButton from "../components/BackButton";
 import ImageGallery from "../components/ImageGallery";
 import AISuggestion from "../components/AISuggestion";
 import VideoPlayer from "../components/VideoPlayer2";
+import MarketplaceLinks from "../components/MarketPlacesLink";
+import { ToastContainer } from "react-toastify";
 import { Sparkle } from "lucide-react";
 
 export default function ProductDetail() {
@@ -39,8 +40,8 @@ export default function ProductDetail() {
       {/* Header */}
       <header className="relative z-10 p-4 pt-16 text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl mb-4 shadow-lg">
-            <Sparkle className="w-8 h-8 text-white" />
-          </div>
+          <Sparkle className="w-8 h-8 text-white" />
+        </div>
         <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-700 to-pink-600 bg-clip-text text-transparent">
           Product Details
         </h1>
@@ -62,6 +63,10 @@ export default function ProductDetail() {
 
           {/* Product demo video */}
           {detail.video && <VideoPlayer videoUrl={detail.video} />}
+
+          {/* Marketplace links */}
+          <MarketplaceLinks />
+          <ToastContainer />
         </section>
       </main>
     </div>

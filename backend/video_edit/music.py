@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from .ffmpeg_utils import run_cmd, get_duration
 from .sticker_helpers import ensure_dirs_exist
 
-JAMENDO_CLIENT_ID = os.getenv("JAMENDO_CLIENT_ID", "")
+JAMENDO_CLIENT_ID = "f24ed52c"
 DEFAULT_MUSIC_DIRS = ["./music"]
 for md in DEFAULT_MUSIC_DIRS:
     try:

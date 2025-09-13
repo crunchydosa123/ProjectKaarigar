@@ -5,8 +5,8 @@ from werkzeug.utils import secure_filename
 from video_edit.core import process_with_gemini
 import requests
 import base64
-ELEVEN_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
-DEFAULT_VOICE_ID = os.environ.get("VOICE_ID")  # replace with your preferred default
+ELEVEN_API_KEY = 'sk_119a741c6b322f526f7e712be124a4007a04b3294734b78d'
+DEFAULT_VOICE_ID = 'KaCAGkAghyX8sFEYByRC'  # replace with your preferred default
 
 # ElevenLabs TTS base URL (adjust if ElevenLabs changes their API path)
 ELEVEN_TTS_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
@@ -51,7 +51,7 @@ def edit_video():
         os.remove(input_tmp)
         return jsonify({"error": "user_prompt must be provided."}), 400
 
-    google_api_key = os.environ.get('GOOGLE_API_KEY')
+    google_api_key = "AIzaSyAVSGUozgbc7AQs4xEhP_-xaTGtN78HBFU"
     if not google_api_key:
         raise RuntimeError("GOOGLE_API_KEY not configured in environment.")
 
