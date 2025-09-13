@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import MenuDrawer from "../components/MenuDrawer";
 import FloatingBackgroundBlobs from "../components/FloatingBackgroundBlobs";
-import HamburgerMenu from "../components/HamburgerMenu";
+import HamburgerMenu from "../components/Hamburger";
 import VideoPlayer from "../components/VideoPlayer";
 import FloatingFAB from "../components/FloatingFAB";
 import BottomSheet from "../components/BottomSheet";
