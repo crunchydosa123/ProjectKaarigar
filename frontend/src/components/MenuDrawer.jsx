@@ -72,6 +72,15 @@ export default function MenuDrawer({ open, onClose }) {
                 Image Editor
               </Link>
             </li>
+            <li>
+              <Link
+                to="/product-listing"
+                onClick={onClose}
+                className="block p-3 bg-white/80 backdrop-blur-sm rounded-2xl text-gray-900 text-sm border border-white/30 hover:bg-white"
+              >
+                Product Listing
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
