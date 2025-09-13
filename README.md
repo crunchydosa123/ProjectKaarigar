@@ -128,6 +128,9 @@ We transform your sales data into:
 ---
 ## Implementation a&& WireFrames
 
+<img width="1088" height="607" alt="image" src="https://github.com/user-attachments/assets/018cb8e7-22c0-4b5f-b6e3-de6d321c446c" />
+
+
 # ✅ Conclusion
 **Project Karigar** is not just a tool it’s an **ecosystem**.  
 We empower artisans by:  
