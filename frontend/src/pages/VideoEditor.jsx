@@ -138,7 +138,7 @@ export default function MobileVideoEditor() {
         if (history.length > 1) {
           setHistory((prev) => {
             const removed = prev[prev.length - 1];
-            try { URL.revokeObjectURL(removed.url); } catch (e) {}
+            try { URL.revokeObjectURL(removed.url); } catch (e) { }
             return prev.slice(0, -1);
           });
           setPromptHistory((prev) => prev.slice(0, -1));
@@ -228,7 +228,7 @@ export default function MobileVideoEditor() {
     if (history.length > 1) {
       setHistory((prev) => {
         const removed = prev[prev.length - 1];
-        try { URL.revokeObjectURL(removed.url); } catch (e) {}
+        try { URL.revokeObjectURL(removed.url); } catch (e) { }
         return prev.slice(0, -1);
       });
       setPromptHistory((prev) => prev.slice(0, -1));
@@ -238,13 +238,13 @@ export default function MobileVideoEditor() {
   };
 
   return (
-  <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative">
-    {/* Floating background blobs */}
-    <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
-    <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
-    <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
+    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative">
+      {/* Floating background blobs */}
+      <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
+      <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
+      <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
 
-    <button
+      <button
         onClick={() => setMenuOpen(true)}
         className="absolute top-4 left-4 z-20 cursor-pointer"
         aria-label="Open menu"
@@ -254,54 +254,53 @@ export default function MobileVideoEditor() {
         </svg>
       </button>
 
-    {/* Fullscreen video area */}
-    <div className="fixed inset-0 flex items-center justify-center">
-      {current ? (
-        <video
-          controls
-          playsInline
-          src={current.url}
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center p-6 relative z-10">
-          <div className="w-28 h-28 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center mb-6 shadow-lg">
-            <Upload className="w-12 h-12 text-white" />
+      {/* Fullscreen video area */}
+      <div className="fixed inset-0 flex items-center justify-center">
+        {current ? (
+          <video
+            controls
+            playsInline
+            src={current.url}
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 relative z-10">
+            <div className="w-28 h-28 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center mb-6 shadow-lg">
+              <Upload className="w-12 h-12 text-white" />
+            </div>
+            <p className="text-lg font-medium mb-2 text-gray-700">No video uploaded</p>
+            <p className="text-sm opacity-80 mb-6 text-center text-gray-600">
+              Tap the button below to upload a video and start editing
+            </p>
+            <label
+              htmlFor="mobile-upload"
+              className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium cursor-pointer shadow-md hover:scale-105 transition-transform"
+            >
+              Choose video
+            </label>
+            <input id="mobile-upload" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
           </div>
-          <p className="text-lg font-medium mb-2 text-gray-700">No video uploaded</p>
-          <p className="text-sm opacity-80 mb-6 text-center text-gray-600">
-            Tap the button below to upload a video and start editing
-          </p>
-          <label
-            htmlFor="mobile-upload"
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium cursor-pointer shadow-md hover:scale-105 transition-transform"
-          >
-            Choose video
-          </label>
-          <input id="mobile-upload" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
-        </div>
-      )}
-    </div>
+        )}
+      </div>
 
-    {/* Floating FAB */}
-    <div className="fixed left-0 right-0 bottom-6 flex items-center justify-center pointer-events-none z-20">
-      <button
-        onClick={openSheetForPrompt}
-        className="pointer-events-auto inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-xl text-white font-bold transform hover:scale-105 active:scale-95"
-        aria-label="Open prompt"
+      {/* Floating FAB */}
+      <div className="fixed left-0 right-0 bottom-6 flex items-center justify-center pointer-events-none z-20">
+        <button
+          onClick={openSheetForPrompt}
+          className="pointer-events-auto inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-xl text-white font-bold transform hover:scale-105 active:scale-95"
+          aria-label="Open prompt"
+        >
+          <Stars className="w-10 h-10" />
+        </button>
+      </div>
+
+      {/* Bottom Sheet */}
+      <div
+        className={`fixed left-0 right-0 bottom-0 z-50 transition-transform duration-300 ${sheetOpen ? "translate-y-0" : "translate-y-full"
+          }`}
+        aria-hidden={!sheetOpen}
       >
-        <Stars className="w-10 h-10" />
-      </button>
-    </div>
-
-    {/* Bottom Sheet */}
-    <div
-      className={`fixed left-0 right-0 bottom-0 z-50 transition-transform duration-300 ${
-        sheetOpen ? "translate-y-0" : "translate-y-full"
-      }`}
-      aria-hidden={!sheetOpen}
-    >   
-      <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-xl rounded-t-3xl shadow-2xl p-4 text-black">
+        <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-xl rounded-t-3xl shadow-2xl p-4 text-black">
           <div className="flex items-center justify-between mb-3">
             <div className="text-lg font-semibold">Assistant</div>
             <div className="flex items-center gap-2">
@@ -389,5 +388,5 @@ export default function MobileVideoEditor() {
       </div>
       <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
-);
+  );
 }

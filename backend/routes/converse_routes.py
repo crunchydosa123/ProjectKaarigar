@@ -387,7 +387,7 @@ def generate_profile_from_responses(file_path: str) -> str:
         "- Materials Used\n"
         "- Aspiration\n\n"
         "If a piece of information is not present, set the value to an empty string. Make sure your output is STRICT JSON.\n\n"
-        "Interview:\n" + convo_text + "\n\nOutput strictly a single JSON object and nothing else. Even if the input is in Hindi, respond in English."
+        "Interview:\n" + convo_text + "\n\nOutput strictly a single JSON object and nothing else. Even if the input is in Hindi, respond in English.Your entire output should be purely in English and no use of Hindi in your output json strictly"
     )
 
     try:

@@ -1,23 +1,31 @@
+// NOTE: Add these to index.html (or import via CSS) once in your app:
+// <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Poppins:wght@600;700&display=swap" rel="stylesheet"> 
+// tailwind.config.js (optional):
+// theme.extend.fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'], heading: ['Poppins', 'Inter', 'sans-serif'] }
+
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { Menu } from "lucide-react";
+import MenuDrawer from "../components/MenuDrawer";
 
 export default function Profile() {
     const { slug } = useParams();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const effectiveSlug = slug || "Siddhartha";
 
     useEffect(() => {
-        // if (!slug) {
-        //     setError("No profile specified.");
-        //     setLoading(false);
-        //     return;
-        // }
         const fetchProfile = async () => {
             setLoading(true);
             setError(null);
             try {
-                const res = await fetch(`http://localhost:5000/api/converse/profile_json/Siddhartha`);
+                const res = await fetch(
+                    `http://localhost:5000/api/converse/profile_json/${encodeURIComponent(
+                        effectiveSlug
+                    )}`
+                );
                 if (!res.ok) {
                     const body = await res.json().catch(() => ({}));
                     throw new Error(body?.error || `Server returned ${res.status}`);
@@ -32,108 +40,108 @@ export default function Profile() {
             }
         };
         fetchProfile();
-    }, [slug]);
+    }, [effectiveSlug]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative p-6">
-            {/* Floating accents */}
-            <div className="absolute top-8 left-8 w-56 h-56 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-40 animate-pulse" />
-            <div className="absolute top-20 right-8 w-48 h-48 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-40 animate-pulse delay-1000" />
+        <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative font-sans">
+            {/* floating blobs */}
+            <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-40" />
+            <div className="absolute bottom-10 right-8 w-64 h-64 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-30" />
 
-            <div className="relative z-10 max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-800">Artisan Profile</h2>
-                        <p className="text-sm text-gray-600 mt-1">A concise profile generated from the interview</p>
-                    </div>
-                    <div>
-                        <Link
-                            to="/"
-                            className="inline-block bg-white/80 backdrop-blur-sm px-4 py-2 rounded-2xl shadow hover:shadow-lg border border-white/30 text-gray-700"
-                        >
-                            Back
-                        </Link>
-                    </div>
-                </div>
+            {/* hamburger */}
+            <button
+                onClick={() => setMenuOpen(true)}
+                className="absolute top-4 left-4 z-20 p-2 rounded-lg bg-white/95 shadow-sm"
+                aria-label="Open menu"
+            >
+                <Menu className="w-6 h-6 text-gray-800" />
+            </button>
 
+            <main className="relative z-10 max-w-md mx-auto px-6 py-8">
+                {/* loader */}
                 {loading && (
-                    <div className="p-8 bg-white/60 rounded-2xl shadow-md border border-white/30">
-                        <div className="animate-pulse space-y-4">
-                            <div className="h-8 bg-gray-200 rounded w-3/5" />
-                            <div className="h-6 bg-gray-200 rounded w-2/5" />
-                            <div className="h-4 bg-gray-200 rounded w-full" />
-                            <div className="h-4 bg-gray-200 rounded w-full" />
-                        </div>
+                    <div className="mt-12 flex flex-col items-center gap-4">
+                        <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-purple-400 to-pink-400 animate-pulse shadow-md" />
+                        <div className="h-6 w-44 rounded bg-gray-200/30 animate-pulse" />
+                        <div className="h-4 w-64 rounded bg-gray-200/20 animate-pulse" />
                     </div>
                 )}
 
                 {!loading && error && (
-                    <div className="p-6 bg-white rounded-2xl shadow-md border border-red-100 text-red-700">
+                    <div className="mt-8 text-center text-red-700">
                         <strong>Error:</strong> {error}
+                        <div className="mt-3">
+                            <button onClick={() => window.location.reload()} className="px-3 py-2 rounded-lg bg-purple-600 text-white">
+                                Retry
+                            </button>
+                        </div>
                     </div>
                 )}
 
+                {/* profile content */}
                 {!loading && profile && (
-                    <div className="bg-white rounded-2xl shadow-lg p-8 mt-4">
-                        <div className="flex items-center space-x-6">
-                            <div className="w-28 h-28 rounded-xl bg-gradient-to-br from-purple-200 to-pink-200 flex items-center justify-center text-3xl font-bold text-white">
-                                {profile["Full Name"] ? profile["Full Name"].split(" ").map(n => n[0]).slice(0, 2).join("") : "A"}
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h1 className="text-2xl font-extrabold text-gray-900">
-                                            {profile["Full Name"] || "Unknown Artisan"}
-                                        </h1>
-                                        <p className="text-sm text-gray-600 mt-1">{profile["Tagline"] || profile["Bio"]?.slice(0, 80)}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-sm text-gray-500">Location</div>
-                                        <div className="text-base font-semibold text-gray-800">{profile["Location"] || "—"}</div>
-                                    </div>
+                    <article className="mt-6">
+                        <div className="relative flex flex-col items-center text-center">
+                            <div className="absolute -top-8 -left-8 w-32 h-32 bg-white/6 rounded-full blur-2xl pointer-events-none" />
+
+                            {/* avatar */}
+                            <div className="relative">
+                                <div className="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl md:text-4xl font-semibold text-white shadow-xl ring-2 ring-white/20">
+                                    {profile["Full Name"]
+                                        ? profile["Full Name"].split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
+                                        : "A"}
                                 </div>
                             </div>
+
+                            {/* Name - match ProductDetail heading style */}
+                            <h1 className="mt-4 text-3xl md:text-4xl font-heading font-bold leading-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-700 to-pink-600 tracking-tight">
+                                {profile["Full Name"] || "Unknown Artisan"}
+                            </h1>
+
+                            {/* tagline */}
+                            <p className="mt-2 text-sm md:text-base text-gray-600 max-w-xs">
+                                {profile["Tagline"] || (profile["Bio"] ? profile["Bio"].slice(0, 110) : "")}
+                            </p>
+
+                            <div className="mt-3 text-xs text-gray-500">Location</div>
+                            <div className="text-sm font-semibold text-gray-800">{profile["Location"] || "—"}</div>
+
+                            {/* small CTAs */}
+
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                            <div>
-                                <h3 className="text-sm font-semibold text-gray-700 mb-2">Bio</h3>
-                                <div className="text-gray-600 leading-relaxed">
-                                    {profile["Bio"] || "No bio available."}
-                                </div>
-                            </div>
+                        {/* Details sections - headings match ProductDetail */}
+                        <div className="mt-8 px-1 space-y-6">
+                            <section>
+                                <h3 className="text-lg font-semibold text-purple-700 mb-2 flex items-center gap-2">
+                                    Bio
+                                </h3>
+                                <p className="text-gray-700 leading-relaxed text-sm md:text-base max-w-prose mx-auto">{profile["Bio"] || "No bio available."}</p>
+                            </section>
 
-                            <div>
-                                <h3 className="text-sm font-semibold text-gray-700 mb-2">Materials Used</h3>
-                                <div className="text-gray-600 leading-relaxed">
-                                    {profile["Materials Used"] || "Not specified."}
-                                </div>
+                            <section>
+                                <h3 className="text-lg font-semibold text-purple-700 mb-2 flex items-center gap-2">
+                                    Materials Used
+                                </h3>
+                                <p className="text-gray-700 leading-relaxed text-sm md:text-base max-w-prose mx-auto">{profile["Materials Used"] || "Not specified."}</p>
+                            </section>
 
-                                <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-2">Aspiration</h3>
-                                <div className="text-gray-600 leading-relaxed">
-                                    {profile["Aspiration"] || "Not specified."}
-                                </div>
-                            </div>
+                            <section>
+                                <h3 className="text-lg font-semibold text-purple-700 mb-2 flex items-center gap-2">
+                                    Aspiration
+                                </h3>
+                                <p className="text-gray-700 leading-relaxed text-sm md:text-base max-w-prose mx-auto">{profile["Aspiration"] || "Not specified."}</p>
+                            </section>
+
+
                         </div>
-
-                        <div className="mt-8 flex items-center justify-between">
-                            <div className="text-sm text-gray-500">
-                                Generated on <strong>{new Date().toLocaleDateString()}</strong>
-                            </div>
-                            <div>
-                                <a
-                                    href={`http://localhost:5000/api/converse/profile_json/${slug}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-block bg-gradient-to-br from-blue-500 to-purple-500 text-white px-4 py-2 rounded-2xl shadow hover:shadow-lg"
-                                >
-                                    View JSON
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                    </article>
                 )}
-            </div>
+            </main>
+
+            <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+            <style>{`@layer utilities { .font-heading { font-family: Poppins, Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; } }`}</style>
         </div>
     );
 }
