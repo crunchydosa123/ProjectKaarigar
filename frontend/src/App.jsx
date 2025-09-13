@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Conversational from "./pages/Conversational";
 import VideoEditor from "./pages/VideoEditor";
-import ProductListing from "./pages/ProductListing";
+import ProductListing  from "./pages/ProductListing";
 import Profile from "./pages/Profile";
 
 export default function App() {
