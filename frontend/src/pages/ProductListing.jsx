@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Search, Upload, Plus, X, ArrowLeft } from "lucide-react";
+// src/pages/ProductListings.jsx
+import React, { useState, useEffect, useRef, useContext } from "react";
+import { Search, Upload, Plus, X, Package } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import MenuDrawer from "../components/MenuDrawer";
+import { ProductContext } from "../context/ProductContext";
 
 const API_BASE = "http://localhost:5000/api"; // adjust if your backend is hosted elsewhere
 
-export default function MobileProductListings() {
-  const [products, setProducts] = useState([]);
+export default function ProductListings() {
+  const { products, addProduct } = useContext(ProductContext);
   const [query, setQuery] = useState("");
-  const [detail, setDetail] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Add-product form state
@@ -23,6 +25,7 @@ export default function MobileProductListings() {
 
   const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
+  const navigate = useNavigate();
 
   // Handle multiple image uploads
   const handleImagesChange = (e) => {
@@ -119,7 +122,7 @@ export default function MobileProductListings() {
         },
       };
 
-      setProducts((prev) => [newProd, ...prev]);
+      addProduct(newProd);
 
       // reset form — revoke local preview URLs
       pImages.forEach((img) => {
@@ -180,74 +183,14 @@ export default function MobileProductListings() {
       p.short.toLowerCase().includes(query.toLowerCase())
   );
 
-  if (detail) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative p-4">
-        {/* Floating background blobs */}
-        <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
-        <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
-        <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
-
-        {/* Details Header */}
-        <div className="flex items-center gap-3 mb-6 relative z-10">
-          <button
-            className="p-2 rounded-lg bg-white shadow-md"
-            onClick={() => setDetail(null)}
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-700" />
-          </button>
-          <h2 className="text-lg font-semibold flex-1 text-center">Product Details</h2>
-        </div>
-
-        {/* Product Details Content */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 relative z-10">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold">{detail.name}</h2>
-            <div className="text-sm text-gray-500">₹{detail.price}</div>
-          </div>
-
-          <div className="w-full h-56 bg-gray-100 mb-3 overflow-hidden rounded-xl flex gap-2">
-            {detail.images?.map((url, idx) => (
-              <img key={idx} src={url} alt={`product-${idx}`} className="w-1/2 h-full object-cover rounded" />
-            ))}
-          </div>
-
-          {detail.video && (
-            <div className="w-full mb-3">
-              <video src={detail.video} className="w-full rounded-lg" controls />
-            </div>
-          )}
-
-          <p className="text-sm text-gray-700 mb-3">{detail.short}</p>
-
-          {detail.optimized?.product_json_url && (
-            <div className="mt-4">
-              <a
-                href={detail.optimized.product_json_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block bg-gradient-to-br from-blue-500 to-purple-500 text-white px-4 py-2 rounded-2xl shadow hover:shadow-lg"
-              >
-                View Optimized JSON
-              </a>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative p-4">
-      {/* Floating background blobs (adapted from Conversational AI page) */}
+      {/* Floating background blobs */}
       <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
       <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
       <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
-
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6 relative z-10">
         <button
-          className="p-2 rounded-lg bg-white shadow-md"
+          className="p-2 rounded-lg bg-white border border-purple-200 shadow-md"
           onClick={() => setMenuOpen(true)}
         >
           <svg
@@ -259,13 +202,26 @@ export default function MobileProductListings() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
+      {/* Header */}
+      <header className="relative z-10 p-4">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl mb-4 shadow-lg">
+            <Package className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-700 to-pink-600 bg-clip-text text-transparent">
+            Product Listings
+          </h1>
+        </div>
+      </header>
+
+      <div className="flex items-center gap-3 mb-6 relative z-10">
 
         <div className="flex-1 relative">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products"
-            className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none"
+            className="w-full h-12 px-4 rounded-xl border border-purple-200 bg-white shadow-sm focus:outline-none"
           />
           <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
         </div>
@@ -287,8 +243,8 @@ export default function MobileProductListings() {
           </div>
         ) : (
           filtered.map((p) => (
-            <article key={p.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <button className="w-full block text-left" onClick={() => setDetail(p)}>
+            <article key={p.id} className="bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 rounded-2xl shadow-sm overflow-hidden">
+              <button className="w-full block text-left" onClick={() => navigate(`/product/${p.id}`)}>
                 <div className="w-full h-44 bg-gray-100 overflow-hidden">
                   {p.images?.length > 0 ? (
                     <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
@@ -323,7 +279,7 @@ export default function MobileProductListings() {
         className={`fixed left-0 right-0 bottom-0 z-60 transition-transform duration-300 ${addSheetOpen ? "translate-y-0" : "translate-y-full"}`}
         aria-hidden={!addSheetOpen}
       >
-        <div className="max-w-xl mx-auto bg-white/98 backdrop-blur-xl rounded-t-3xl shadow-2xl p-4 text-black">
+        <div className="max-w-xl mx-auto bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 backdrop-blur-xl rounded-t-3xl shadow-2xl p-4 text-black">
           <div className="flex items-center justify-between mb-3">
             <div className="text-lg font-semibold">Add Product</div>
             <button onClick={() => setAddSheetOpen(false)} className="p-2 rounded-lg">
@@ -372,7 +328,7 @@ export default function MobileProductListings() {
                   </div>
                 ) : (
                   <>
-                    <label htmlFor="add-video" className="px-3 py-2 rounded-lg bg-white border border-gray-200 cursor-pointer inline-block">Choose video</label>
+                    <label htmlFor="add-video" className="px-3 py-2 rounded-lg bg-transparent border border-purple-200 cursor-pointer inline-block">Choose video</label>
                     <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoChange} className="hidden" id="add-video" />
                   </>
                 )}
@@ -382,19 +338,19 @@ export default function MobileProductListings() {
             {/* Name */}
             <div>
               <label className="text-sm font-medium">Name</label>
-              <input value={pName} onChange={(e) => setPName(e.target.value)} className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-200" placeholder="Product name" />
+              <input value={pName} onChange={(e) => setPName(e.target.value)} className="w-full mt-2 px-3 py-2 rounded-lg border border-purple-200 bg-transparent" placeholder="Product name" />
             </div>
 
             {/* Price */}
             <div>
               <label className="text-sm font-medium">Selling Price (₹)</label>
-              <input value={pPrice} onChange={(e) => setPPrice(e.target.value)} type="number" className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-200" placeholder="e.g. 2499" />
+              <input value={pPrice} onChange={(e) => setPPrice(e.target.value)} type="number" className="w-full mt-2 px-3 py-2 rounded-lg border border-purple-200 bg-transparent" placeholder="e.g. 2499" />
             </div>
 
             {/* Short description */}
             <div>
               <label className="text-sm font-medium">Short description</label>
-              <input value={pShort} onChange={(e) => setPShort(e.target.value)} className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-200" placeholder="One-liner for list view" />
+              <input value={pShort} onChange={(e) => setPShort(e.target.value)} className="w-full mt-2 px-3 py-2 rounded-lg border border-purple-200 bg-transparent" placeholder="One-liner for list view" />
             </div>
 
             {optError && <div className="text-sm text-red-600">{optError}</div>}
