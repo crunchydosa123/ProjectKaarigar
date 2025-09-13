@@ -1,6 +1,7 @@
 from flask import Flask
 from routes.edit_routes import edit_bp
 from routes.converse_routes import conv_bp
+from routes.product_optimize_routes import product_bp
 import os
 from flask_cors import CORS
 
@@ -19,6 +20,7 @@ def create_app():
     # Register blueprints
     app.register_blueprint(edit_bp, url_prefix="/api")
     app.register_blueprint(conv_bp, url_prefix="/api")
+    app.register_blueprint(product_bp, url_prefix="/api")
 
 
     @app.route("/", methods=["GET"])
