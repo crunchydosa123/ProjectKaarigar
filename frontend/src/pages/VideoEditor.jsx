@@ -1,32 +1,30 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
-import { X } from "lucide-react";
-import "../index.css";
-
-import VideoHeader from "../components/VideoHeader";
-import ChatWindow from "../components/ChatWindow";
-import EditorControls from "../components/EditorControls";
-import VideoPreview from "../components/VideoPreview";
+import { Upload, Mic, MicOff, Send, X, ArrowLeft, RotateCw, Stars } from "lucide-react";
 import MenuDrawer from "../components/MenuDrawer";
 
+// Mobile-first single-file video editor UI
+// - Fullscreen video on mobile
+// - Floating Prompt FAB opens a bottom-sheet for voice/text prompts
+// - Keeps original logic for uploading, editing, history, TTS and SpeechRecognition
 
-export default function VideoEditor() {
+export default function MobileVideoEditor() {
   const [messages, setMessages] = useState([]);
   const [conversationState, setConversationState] = useState("upload_video");
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState([]); // { blob, url }
   const [promptHistory, setPromptHistory] = useState([]);
   const [listening, setListening] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [inputText, setInputText] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const recognitionRef = useRef(null);
-  const audioRef = useRef(null); // for playing TTS audio
-  const hasGreetedRef = useRef(false);
+  const audioRef = useRef(null);
 
+  // Initialize SpeechRecognition
   useEffect(() => {
-    // Initialize browser SpeechRecognition for voice input (frontend)
     if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -44,14 +42,14 @@ export default function VideoEditor() {
       };
     }
 
-    // When arriving at upload page, greet using ElevenLabs TTS
+    // greet when arriving to upload state
     if (conversationState === "upload_video") {
-      addAIMessage("Upload your video to begin editing");
+      addAIMessage("Tap to upload a video to begin editing.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationState]);
 
-  // Play base64 audio returned from server ElevenLabs TTS
+  // TTS: play base64 audio
   async function playBase64Audio(base64, mime = "audio/mpeg") {
     if (!base64) return;
     const byteString = atob(base64);
@@ -66,12 +64,10 @@ export default function VideoEditor() {
     try {
       await audio.play();
     } catch (err) {
-      // autoplay might be blocked; still set the source so user can press play
       console.warn("Playback blocked or failed:", err);
     }
   }
 
-  // Request ElevenLabs TTS for given text via backend
   async function requestServerTTS(text) {
     try {
       const res = await axios.post("http://localhost:5000/api/tts", { text });
@@ -83,30 +79,21 @@ export default function VideoEditor() {
     }
   }
 
-  // Add an AI message and speak it using server-side ElevenLabs TTS
+  // Adds AI message and speaks it. Prevents duplicate final text messages.
   async function addAIMessage(text) {
     if (!text) return;
-
-    // We'll decide inside the functional updater whether to add.
     let shouldAdd = true;
-
     setMessages((prev) => {
       const last = prev[prev.length - 1];
-      // Compare trimmed text to avoid false negatives from extra whitespace
       if (last && last.role === "ai" && last.content.trim() === text.trim()) {
         shouldAdd = false;
-        return prev; // return unchanged array — no duplicate added
+        return prev;
       }
       return [...prev, { role: "ai", content: text }];
     });
 
-    if (!shouldAdd) {
-      // Optional: log for debugging
-      console.debug("addAIMessage: duplicate AI message skipped");
-      return;
-    }
+    if (!shouldAdd) return;
 
-    // If we added the message, request TTS and play it.
     try {
       const tts = await requestServerTTS(text);
       if (tts && tts.audio_base64) {
@@ -114,12 +101,8 @@ export default function VideoEditor() {
       }
     } catch (e) {
       console.error("addAIMessage: TTS/playback failed", e);
-      // requestServerTTS already sets error in your original code, so no extra setError required,
-      // but you can set one here if you'd like:
-      // setError("TTS request failed: " + (e?.message || e));
     }
   }
-
 
   const addUserMessage = (text) => {
     if (!text) return;
@@ -155,9 +138,7 @@ export default function VideoEditor() {
         if (history.length > 1) {
           setHistory((prev) => {
             const removed = prev[prev.length - 1];
-            try {
-              URL.revokeObjectURL(removed.url);
-            } catch (e) { }
+            try { URL.revokeObjectURL(removed.url); } catch (e) {}
             return prev.slice(0, -1);
           });
           setPromptHistory((prev) => prev.slice(0, -1));
@@ -167,12 +148,7 @@ export default function VideoEditor() {
           addAIMessage("No previous version available. What edits would you like?");
           setConversationState("get_prompt");
         }
-      } else if (
-        lowerTranscript.includes("edit") ||
-        lowerTranscript.includes("change") ||
-        lowerTranscript.includes("more") ||
-        lowerTranscript.includes("yes")
-      ) {
+      } else if (lowerTranscript.includes("edit") || lowerTranscript.includes("change") || lowerTranscript.includes("more") || lowerTranscript.includes("yes")) {
         addAIMessage("What additional edits would you like?");
         setConversationState("get_prompt");
       } else if (lowerTranscript.includes("done") || lowerTranscript.includes("no")) {
@@ -196,7 +172,7 @@ export default function VideoEditor() {
 
     let fullPrompt = prompt;
     if (promptHistory.length > 0) {
-      fullPrompt = `Previous edits: ${promptHistory.join(". ")}. Additional edit: ${prompt}`;
+      fullPrompt = `Previous edits: ${promptHistory.join('. ')}. Additional edit: ${prompt}`;
     }
 
     const formData = new FormData();
@@ -220,6 +196,7 @@ export default function VideoEditor() {
       setPromptHistory((prev) => [...prev, prompt]);
       addAIMessage("Edit complete. Continue editing, restore previous version, or finish?");
       setConversationState("review");
+      setSheetOpen(false);
     } catch (err) {
       console.error(err);
       setError(err.message);
@@ -237,15 +214,37 @@ export default function VideoEditor() {
 
   const current = history[history.length - 1] || null;
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-purple-50 to-pink-100 overflow-hidden relative">
-      {/* Floating background blobs (soft purple/pink) */}
-      <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
-      <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-purple-300 to-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
-      <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
+  // UI helpers
+  const openSheetForPrompt = () => {
+    if (!current) {
+      // open upload instead
+      document.getElementById("mobile-upload").click();
+      return;
+    }
+    setSheetOpen(true);
+  };
 
-      {/* Hamburger */}
-      <button
+  const restorePrevious = () => {
+    if (history.length > 1) {
+      setHistory((prev) => {
+        const removed = prev[prev.length - 1];
+        try { URL.revokeObjectURL(removed.url); } catch (e) {}
+        return prev.slice(0, -1);
+      });
+      setPromptHistory((prev) => prev.slice(0, -1));
+      addAIMessage("Previous version restored. What would you like to edit next?");
+      setConversationState("get_prompt");
+    }
+  };
+
+  return (
+  <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative">
+    {/* Floating background blobs */}
+    <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
+    <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
+    <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
+
+    <button
         onClick={() => setMenuOpen(true)}
         className="absolute top-4 left-4 z-20 cursor-pointer"
         aria-label="Open menu"
@@ -255,63 +254,140 @@ export default function VideoEditor() {
         </svg>
       </button>
 
-      {/* Main content */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="max-w-5xl mx-auto relative">
-          <VideoHeader />
+    {/* Fullscreen video area */}
+    <div className="fixed inset-0 flex items-center justify-center">
+      {current ? (
+        <video
+          controls
+          playsInline
+          src={current.url}
+          className="w-full h-full object-contain"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 relative z-10">
+          <div className="w-28 h-28 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center mb-6 shadow-lg">
+            <Upload className="w-12 h-12 text-white" />
+          </div>
+          <p className="text-lg font-medium mb-2 text-gray-700">No video uploaded</p>
+          <p className="text-sm opacity-80 mb-6 text-center text-gray-600">
+            Tap the button below to upload a video and start editing
+          </p>
+          <label
+            htmlFor="mobile-upload"
+            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium cursor-pointer shadow-md hover:scale-105 transition-transform"
+          >
+            Choose video
+          </label>
+          <input id="mobile-upload" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+        </div>
+      )}
+    </div>
 
-          <div className="grid lg:grid-cols-2 gap-8 mt-6">
-            {/* Left: Chat + Controls */}
-            <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-2xl border border-purple-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-200 to-pink-200 p-6">
-                <h2 className="text-xl font-semibold flex items-center text-purple-700">
-                  <div className="w-2 h-2 bg-pink-100 rounded-full mr-3 animate-pulse" />
-                  Assistant
-                </h2>
-              </div>
+    {/* Floating FAB */}
+    <div className="fixed left-0 right-0 bottom-6 flex items-center justify-center pointer-events-none z-20">
+      <button
+        onClick={openSheetForPrompt}
+        className="pointer-events-auto inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-xl text-white font-bold transform hover:scale-105 active:scale-95"
+        aria-label="Open prompt"
+      >
+        <Stars className="w-10 h-10" />
+      </button>
+    </div>
 
-              <ChatWindow messages={messages} />
-
-              <div className="p-6 bg-purple-50 border-t border-purple-200">
-                <EditorControls
-                  conversationState={conversationState}
-                  recognitionRef={recognitionRef}
-                  listening={listening}
-                  setListening={setListening}
-                  uploading={uploading}
-                  inputText={inputText}
-                  setInputText={setInputText}
-                  startListening={startListening}
-                  handleFileChange={handleFileChange}
-                  handleTextSubmit={handleTextSubmit}
-                />
-              </div>
+    {/* Bottom Sheet */}
+    <div
+      className={`fixed left-0 right-0 bottom-0 z-50 transition-transform duration-300 ${
+        sheetOpen ? "translate-y-0" : "translate-y-full"
+      }`}
+      aria-hidden={!sheetOpen}
+    >   
+      <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-xl rounded-t-3xl shadow-2xl p-4 text-black">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-lg font-semibold">Assistant</div>
+            <div className="flex items-center gap-2">
+              {history.length > 1 && (
+                <button onClick={restorePrevious} className="px-3 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm">Restore</button>
+              )}
+              <button aria-label="Close" onClick={() => setSheetOpen(false)} className="p-2 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-
-            {/* Right: Video preview */}
-            <VideoPreview current={current} promptHistory={promptHistory} />
           </div>
 
-          {/* Error box (styled to match Conversational) */}
-          {error && (
-            <div className="mt-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-300 rounded-2xl p-4">
-              <div className="flex items-center">
-                <X className="w-5 h-5 text-purple-500 mr-3" />
-                <p className="text-purple-700 font-medium">{error}</p>
+          {/* Messages preview (compact) */}
+          <div className="h-32 overflow-y-auto mb-3 p-2 bg-gray-50 rounded-lg">
+            {messages.length === 0 ? (
+              <div className="text-gray-500 text-sm">No messages yet — use voice or type to talk to the assistant.</div>
+            ) : (
+              messages.slice(-6).map((m, i) => (
+                <div key={i} className={`mb-2 text-sm ${m.role === 'ai' ? 'text-purple-700' : 'text-gray-800 text-right'}`}>
+                  {m.content}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Prompt input / voice controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (recognitionRef.current && !listening) {
+                  setListening(true);
+                  recognitionRef.current.start();
+                } else {
+                  startListening();
+                }
+              }}
+              className={`p-3 rounded-xl flex items-center justify-center border ${listening ? 'bg-red-100 border-red-200' : 'bg-white border-gray-200'}`}
+              aria-label="Voice input"
+            >
+              {listening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
+              placeholder={uploading ? 'Processing...' : 'Describe the edit you want...'}
+              className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:outline-none"
+              disabled={uploading}
+            />
+
+            <button
+              onClick={handleTextSubmit}
+              disabled={uploading || !inputText.trim()}
+              className={`p-3 rounded-xl ${uploading || !inputText.trim() ? 'bg-gray-200 text-gray-400' : 'bg-purple-600 text-white'}`}
+              aria-label="Send"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Prompt history list */}
+          {promptHistory.length > 0 && (
+            <div className="mt-3 p-2 bg-gray-50 rounded-lg text-sm">
+              <div className="font-medium mb-2">Edit History</div>
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {promptHistory.map((p, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs">{idx + 1}</div>
+                    <div className="text-sm text-gray-800">{p}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <audio ref={audioRef} className="hidden" />
+          {/* Error display */}
+          {error && (
+            <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
+          )}
 
-          {/* Floating accent elements */}
-          <div className="absolute top-10 right-10 w-40 h-40 bg-gradient-to-r from-purple-200 to-pink-200 rounded-full opacity-30 blur-3xl animate-pulse" />
-          <div className="absolute bottom-10 left-10 w-32 h-32 bg-gradient-to-r from-purple-300 to-pink-200 rounded-full opacity-30 blur-3xl animate-pulse" />
-          <div className="absolute top-1/2 right-1/4 w-28 h-28 bg-gradient-to-r from-purple-200 to-pink-200 rounded-full opacity-25 blur-2xl" />
+          <audio ref={audioRef} className="hidden" />
         </div>
       </div>
-
       <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
-  );
+);
 }
