@@ -45,14 +45,13 @@ export default function EditorControls({
                 startListening();
               }
             }}
-            disabled={listening || uploading}
-            className={`w-full py-4 px-6 rounded-2xl font-medium transition-all duration-300 flex items-center justify-center shadow-lg ${
-              listening
+
+            className={`w-full py-4 px-6 rounded-2xl font-medium transition-all duration-300 flex items-center justify-center shadow-lg ${listening
                 ? "bg-gradient-to-r from-purple-300 to-pink-300 text-white animate-pulse"
                 : uploading
-                ? "bg-purple-200 text-purple-400 cursor-not-allowed"
-                : "bg-gradient-to-r from-purple-300 to-purple-500 text-white hover:from-purple-350 hover:to-pink-300 transform hover:scale-[1.02] active:scale-[0.98]"
-            }`}
+                  ? "bg-purple-200 text-purple-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-purple-300 to-purple-500 text-white hover:from-purple-350 hover:to-pink-300 transform hover:scale-[1.02] active:scale-[0.98]"
+              }`}
           >
             {listening ? (
               <>
@@ -85,11 +84,10 @@ export default function EditorControls({
             <button
               onClick={handleTextSubmit}
               disabled={uploading || !inputText.trim()}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                uploading || !inputText.trim()
+              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${uploading || !inputText.trim()
                   ? "bg-purple-200 text-purple-400 cursor-not-allowed"
                   : "bg-gradient-to-r from-purple-300 to-pink-300 text-white hover:from-purple-400 hover:to-pink-400 shadow-lg transform hover:scale-105 active:scale-95"
-              }`}
+                }`}
             >
               <Send className="w-5 h-5" />
             </button>

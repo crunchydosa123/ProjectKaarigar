@@ -9,6 +9,7 @@ import EditorControls from "../components/EditorControls";
 import VideoPreview from "../components/VideoPreview";
 import MenuDrawer from "../components/MenuDrawer";
 
+
 export default function VideoEditor() {
   const [messages, setMessages] = useState([]);
   const [conversationState, setConversationState] = useState("upload_video");
@@ -24,79 +25,57 @@ export default function VideoEditor() {
   const audioRef = useRef(null); // for playing TTS audio
   const hasGreetedRef = useRef(false);
 
-  // SpeechRecognition init
   useEffect(() => {
+    // Initialize browser SpeechRecognition for voice input (frontend)
     if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recog = new SpeechRecognition();
-      recog.continuous = false;
-      recog.interimResults = false;
-
-      recog.onresult = (event) => {
-        try {
-          const transcript = event.results[0][0].transcript.trim();
-          setListening(false);
-          handleUserInput(transcript);
-        } catch (e) {
-          console.warn("Recognition parse error", e);
-        }
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.trim();
+        setListening(false);
+        handleUserInput(transcript);
       };
-
-      recog.onend = () => setListening(false);
-      recog.onerror = (e) => {
-        setError(`Speech recognition error: ${e?.message || e}`);
+      recognitionRef.current.onend = () => setListening(false);
+      recognitionRef.current.onerror = (e) => {
+        setError(`Speech recognition error: ${e.message}`);
         setListening(false);
       };
-
-      recognitionRef.current = recog;
     }
 
-    return () => {
-      try {
-        if (recognitionRef.current && typeof recognitionRef.current.abort === "function") {
-          recognitionRef.current.abort();
-        }
-        recognitionRef.current = null;
-      } catch (e) {
-        console.warn("cleanup error", e);
-      }
-    };
-  }, []);
-
-  // greet once (same behavior as Conversational)
-  useEffect(() => {
-    if (conversationState === "upload_video" && !hasGreetedRef.current) {
-      hasGreetedRef.current = true;
+    // When arriving at upload page, greet using ElevenLabs TTS
+    if (conversationState === "upload_video") {
       addAIMessage("Upload your video to begin editing");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationState]);
 
-  // Play base64 audio
+  // Play base64 audio returned from server ElevenLabs TTS
   async function playBase64Audio(base64, mime = "audio/mpeg") {
     if (!base64) return;
+    const byteString = atob(base64);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i += 1) ia[i] = byteString.charCodeAt(i);
+    const blob = new Blob([ab], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.src = url;
     try {
-      const byteString = atob(base64);
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-      const blob = new Blob([ab], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const audio = audioRef.current;
-      if (!audio) return;
-      audio.src = url;
-      await audio.play().catch((e) => {
-        console.warn("Playback blocked:", e);
-      });
-    } catch (e) {
-      console.error("playBase64Audio error", e);
+      await audio.play();
+    } catch (err) {
+      // autoplay might be blocked; still set the source so user can press play
+      console.warn("Playback blocked or failed:", err);
     }
   }
 
-  // TTS request
+  // Request ElevenLabs TTS for given text via backend
   async function requestServerTTS(text) {
     try {
       const res = await axios.post("http://localhost:5000/api/tts", { text });
-      return res.data;
+      return res.data; // expects { audio_base64, mime }
     } catch (err) {
       console.error("TTS request failed", err);
       setError("TTS request failed: " + (err?.response?.data?.error || err.message));
@@ -104,15 +83,43 @@ export default function VideoEditor() {
     }
   }
 
-  // Add AI message + speak
+  // Add an AI message and speak it using server-side ElevenLabs TTS
   async function addAIMessage(text) {
     if (!text) return;
-    setMessages((prev) => [...prev, { role: "ai", content: text }]);
-    const tts = await requestServerTTS(text);
-    if (tts && tts.audio_base64) {
-      await playBase64Audio(tts.audio_base64, tts.mime || "audio/mpeg");
+
+    // We'll decide inside the functional updater whether to add.
+    let shouldAdd = true;
+
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      // Compare trimmed text to avoid false negatives from extra whitespace
+      if (last && last.role === "ai" && last.content.trim() === text.trim()) {
+        shouldAdd = false;
+        return prev; // return unchanged array — no duplicate added
+      }
+      return [...prev, { role: "ai", content: text }];
+    });
+
+    if (!shouldAdd) {
+      // Optional: log for debugging
+      console.debug("addAIMessage: duplicate AI message skipped");
+      return;
+    }
+
+    // If we added the message, request TTS and play it.
+    try {
+      const tts = await requestServerTTS(text);
+      if (tts && tts.audio_base64) {
+        await playBase64Audio(tts.audio_base64, tts.mime || "audio/mpeg");
+      }
+    } catch (e) {
+      console.error("addAIMessage: TTS/playback failed", e);
+      // requestServerTTS already sets error in your original code, so no extra setError required,
+      // but you can set one here if you'd like:
+      // setError("TTS request failed: " + (e?.message || e));
     }
   }
+
 
   const addUserMessage = (text) => {
     if (!text) return;
@@ -121,18 +128,13 @@ export default function VideoEditor() {
 
   const startListening = () => {
     if (recognitionRef.current && !listening) {
-      try {
-        setListening(true);
-        recognitionRef.current.start();
-      } catch (e) {
-        setError("Failed to start speech recognition: " + (e?.message || e));
-        setListening(false);
-      }
+      setListening(true);
+      recognitionRef.current.start();
     }
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (file) {
       const url = URL.createObjectURL(file);
       setHistory([{ blob: file, url }]);
@@ -148,12 +150,14 @@ export default function VideoEditor() {
     if (conversationState === "get_prompt") {
       submitEdit(transcript);
     } else if (conversationState === "review") {
-      const lower = transcript.toLowerCase();
-      if (lower.includes("restore")) {
+      const lowerTranscript = transcript.toLowerCase();
+      if (lowerTranscript.includes("restore")) {
         if (history.length > 1) {
           setHistory((prev) => {
             const removed = prev[prev.length - 1];
-            try { URL.revokeObjectURL(removed.url); } catch (e) {}
+            try {
+              URL.revokeObjectURL(removed.url);
+            } catch (e) { }
             return prev.slice(0, -1);
           });
           setPromptHistory((prev) => prev.slice(0, -1));
@@ -163,14 +167,20 @@ export default function VideoEditor() {
           addAIMessage("No previous version available. What edits would you like?");
           setConversationState("get_prompt");
         }
-      } else if (["edit", "change", "more", "yes"].some(k => lower.includes(k))) {
+      } else if (
+        lowerTranscript.includes("edit") ||
+        lowerTranscript.includes("change") ||
+        lowerTranscript.includes("more") ||
+        lowerTranscript.includes("yes")
+      ) {
         addAIMessage("What additional edits would you like?");
         setConversationState("get_prompt");
-      } else if (lower.includes("done") || lower.includes("no")) {
+      } else if (lowerTranscript.includes("done") || lowerTranscript.includes("no")) {
         addAIMessage("Session complete. Upload a new video to continue.");
         setConversationState("upload_video");
-        setHistory([]); setPromptHistory([]); setMessages([]);
-        hasGreetedRef.current = false;
+        setHistory([]);
+        setPromptHistory([]);
+        setMessages([]);
       } else {
         addAIMessage("Please specify: more edits, restore previous version, or done?");
       }
@@ -180,6 +190,7 @@ export default function VideoEditor() {
   const submitEdit = async (prompt) => {
     const current = history[history.length - 1];
     if (!current) return;
+
     setUploading(true);
     setError(null);
 
@@ -188,19 +199,21 @@ export default function VideoEditor() {
       fullPrompt = `Previous edits: ${promptHistory.join(". ")}. Additional edit: ${prompt}`;
     }
 
-    const fd = new FormData();
-    fd.append("video", current.blob);
-    fd.append("user_prompt", fullPrompt);
+    const formData = new FormData();
+    formData.append("video", current.blob);
+    formData.append("user_prompt", fullPrompt);
 
     try {
       const response = await fetch("http://localhost:5000/api/edit", {
         method: "POST",
-        body: fd
+        body: formData,
       });
+
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Processing failed");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Processing failed");
       }
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setHistory((prev) => [...prev, { blob, url }]);
