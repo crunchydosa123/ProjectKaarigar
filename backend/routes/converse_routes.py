@@ -2,8 +2,9 @@ import os
 import base64
 import json
 import requests
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_from_directory
 import datetime
+from werkzeug.utils import secure_filename
 
 # attempt to import Gemini client if available
 try:
@@ -174,8 +175,15 @@ def start_language():
         current_app.logger.exception("Error in start_language")
         return jsonify({"error": str(e)}), 500
 
+# ---------- Endpoints (changed) ----------
+
 @conv_bp.route("/converse/submit_audio", methods=["POST"])
 def submit_audio():
+    """
+    Only changed portions: after collecting user_responses and generating profile JSON,
+    include profile_json_url and profile_slug in the response payload so the frontend
+    can open the React profile page (`/profile/<slug>`) which will fetch the JSON.
+    """
     if call_gemini_raw is None:
         current_app.logger.error("Gemini helper not imported")
         return jsonify({"error": "server misconfiguration: Gemini helper not available"}), 500
@@ -194,7 +202,9 @@ def submit_audio():
 
         stt_language_hint = request.form.get("stt_language_hint")
 
-        stt_resp = eleven_stt_transcribe(file_bytes, filename=file.filename or "audio.webm", language_code=stt_language_hint)
+        stt_resp = eleven_stt_transcribe(
+            file_bytes, filename=file.filename or "audio.webm", language_code=stt_language_hint
+        )
         transcript = stt_resp.get("text") or ""
         stt_lang_code = stt_resp.get("language_code") or stt_language_hint or None
 
@@ -205,7 +215,13 @@ def submit_audio():
         if not GEMINI_API_KEY:
             return jsonify({"error": "GEMINI_API_KEY not configured on server"}), 500
 
-        assistant_text = call_gemini_raw(prompt=prompt, api_key=GEMINI_API_KEY, model_name=GEMINI_MODEL_NAME, max_output_tokens=512, temperature=0.6)
+        assistant_text = call_gemini_raw(
+            prompt=prompt,
+            api_key=GEMINI_API_KEY,
+            model_name=GEMINI_MODEL_NAME,
+            max_output_tokens=512,
+            temperature=0.6,
+        )
         if not isinstance(assistant_text, str):
             assistant_text = str(assistant_text)
         assistant_text = assistant_text.strip()
@@ -213,38 +229,232 @@ def submit_audio():
         updated_history = history + [{"role": "user", "text": transcript}, {"role": "assistant", "text": assistant_text}]
 
         # ------------------ Collect user responses ------------------
-        user_responses = [turn['text'] for turn in updated_history if turn['role'] == 'user']
+        user_responses = [turn["text"] for turn in updated_history if turn["role"] == "user"]
+
+        profile_api_path = None
+        profile_slug = None
 
         # If we have 5 answers, create a single doc and stop further questions
         if len(user_responses) >= 5:
-            uploads_dir = os.path.join(current_app.root_path, 'uploads')
+            uploads_dir = os.path.join(current_app.root_path, "uploads")
             os.makedirs(uploads_dir, exist_ok=True)
             file_path = os.path.join(uploads_dir, "user_responses.txt")
             document = "\n".join([f"User Response {i+1}: {resp}" for i, resp in enumerate(user_responses)])
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(document)
 
+            # Generate profile JSON automatically
+            try:
+                profile_api_path = generate_profile_from_responses(file_path)
+                if profile_api_path:
+                    # profile_api_path is like "/api/converse/profile_json/<slug>"
+                    profile_slug = profile_api_path.rstrip("/").split("/")[-1]
+            except Exception:
+                current_app.logger.exception("Failed to generate profile from responses")
+                profile_api_path = None
+                profile_slug = None
+
             # Force assistant to produce summary only, no more questions
-            assistant_text = "[SUMMARY] Conversation complete. Thank you for sharing your story."  
+            assistant_text = "[SUMMARY] Conversation complete. Thank you for sharing your story."
 
         # Strip summary prefix if present
         if assistant_text.startswith("[SUMMARY] "):
-            assistant_text = assistant_text[len("[SUMMARY] "):].strip()
+            assistant_text = assistant_text[len("[SUMMARY] ") :].strip()
 
         assistant_audio = eleven_tts_bytes(assistant_text, voice_id=ELEVEN_VOICE_ID)
         assistant_b64 = base64.b64encode(assistant_audio).decode("utf-8")
 
-        return jsonify({
+        response_payload = {
             "transcript": transcript,
             "stt_language_code": stt_lang_code,
             "preferred_language": preferred_lang,
             "assistant_text": assistant_text,
             "audio_base64": assistant_b64,
-            "mime": "audio/mpeg"
-        })
+            "mime": "audio/mpeg",
+        }
+
+        # Add profile API path (absolute) and slug if generated so frontend can fetch and route to it
+        if profile_api_path and profile_slug:
+            base = request.url_root.rstrip("/")
+            response_payload["profile_json_url"] = f"{base}{profile_api_path}"
+            # Recommend the frontend route for viewing the profile (assumes React at port 3000)
+            # Frontend can instead use profile_slug to build an internal route like /profile/<slug>
+            response_payload["profile_slug"] = profile_slug
+            # optional: example frontend URL (adjust if your front-end is hosted elsewhere)
+            response_payload["profile_page_suggestion"] = f"http://localhost:3000/profile/{profile_slug}"
+
+        return jsonify(response_payload)
     except requests.HTTPError as http_err:
         current_app.logger.exception("HTTP error in submit_audio")
         return jsonify({"error": f"HTTP error contacting external API: {http_err}"}), 502
     except Exception as e:
         current_app.logger.exception("Error in submit_audio")
         return jsonify({"error": str(e)}), 500
+
+
+@conv_bp.route("converse/profile_json/<slug>", methods=["GET"])
+def serve_profile_json(slug):
+    """
+    Serve generated profile JSON files from uploads/profiles/<slug>.json
+    Frontend will fetch this endpoint to display the profile.
+    """
+    print(1)
+    profiles_dir = os.path.join(current_app.root_path, "uploads", "profiles")
+    print("Profiles dir:", profiles_dir)
+    filename = secure_filename(f"{slug}.json")
+    print("Serving profile JSON:", filename)
+    full_path = os.path.join(profiles_dir, filename)
+    if not os.path.exists(full_path):
+        print(f"Profile JSON not found: {full_path}")
+        return jsonify({"error": "Profile not found"}), 404
+
+    try:
+        with open(full_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception:
+        current_app.logger.exception("Failed to read profile JSON")
+        return jsonify({"error": "Failed to read profile file"}), 500
+
+
+# ---------- Utilities (changed) ----------
+
+def slugify(value: str) -> str:
+    """Simple slug generator for filenames/URLs."""
+    v = value or "artisan"
+    v = v.strip().lower()
+    out = []
+    prev_dash = False
+    for ch in v:
+        if ch.isalnum():
+            out.append(ch)
+            prev_dash = False
+        else:
+            if not prev_dash:
+                out.append("-")
+                prev_dash = True
+    s = "".join(out).strip("-")
+    if not s:
+        s = f"artisan-{int(datetime.datetime.utcnow().timestamp())}"
+    return s[:64]
+
+
+def extract_json_from_text(text: str) -> dict:
+    """Try to extract a JSON object from AI output. Return dict or empty dict."""
+    if not text:
+        return {}
+    # Try to find first {...} block
+    try:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end+1]
+            return json.loads(candidate)
+    except Exception:
+        pass
+    # Last-resort: try to parse whole text
+    try:
+        return json.loads(text)
+    except Exception:
+        return {}
+
+
+
+def generate_profile_from_responses(file_path: str) -> str:
+    """
+    Read the transcript file, call Gemini to extract structured fields (English),
+    create a JSON profile at uploads/profiles/<slug>.json and return public API path
+    (e.g. "/api/converse/profile_json/<slug>") or None on failure.
+    """
+    if not GEMINI_API_KEY:
+        current_app.logger.warning("GEMINI_API_KEY not set; skipping profile generation")
+        return None
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        convo_text = f.read()
+
+    # Prompt asks Gemini to output structured JSON (the assistant should return fields we will map).
+    prompt = (
+        "You are a helpful assistant. The following is an interview transcript (may be in Hindi). "
+        "Extract the artisan's facts and output valid JSON ONLY. The JSON should include any of these keys if available:\n"
+        "full_name, name, location, brief_bio, bio, craft, tagline, materials_and_techniques, materials, "
+        "aspirations_needs, aspiration, suggested_support, short_summary Tagline and aspiration should be in less words are more Gen-z styled.\n\n"
+        "We will map those into this final profile schema (English):\n"
+        "- Full Name\n"
+        "- Location\n"
+        "- Bio\n"
+        "- Tagline\n"
+        "- Materials Used\n"
+        "- Aspiration\n\n"
+        "If a piece of information is not present, set the value to an empty string. Make sure your output is STRICT JSON.\n\n"
+        "Interview:\n" + convo_text + "\n\nOutput strictly a single JSON object and nothing else. Even if the input is in Hindi, respond in English."
+    )
+
+    try:
+        gemini_out = call_gemini_raw(
+            prompt=prompt,
+            api_key=GEMINI_API_KEY,
+            model_name=GEMINI_MODEL_NAME,
+            max_output_tokens=512,
+            temperature=0.0,
+        )
+    except Exception:
+        current_app.logger.exception("Gemini extraction failed")
+        gemini_out = ""
+
+    parsed = extract_json_from_text(gemini_out or "")
+
+    # Normalize keys and create final profile structure with fallbacks
+    def get_any(d, keys, fallback=""):
+        for k in keys:
+            if k in d and d[k]:
+                return d[k]
+        return fallback
+
+    # parsed might be nested or may contain english/hindi text — keep as-is
+    full_name = get_any(parsed, ["full_name", "name"])
+    location = get_any(parsed, ["location", "place", "village", "city"])
+    bio = get_any(parsed, ["brief_bio", "bio", "short_summary"])
+    tagline = get_any(parsed, ["tagline", "short_summary"])
+    materials = get_any(parsed, ["materials_and_techniques", "materials", "materials_used"])
+    aspiration = get_any(parsed, ["aspirations_needs", "aspiration", "aspirations", "needs"])
+
+    # If many values empty, attempt tiny heuristic from raw convo_text
+    if not full_name:
+        # try to extract a simple "मेरा नाम X" pattern (very small heuristic)
+        # (we keep it simple — server-side heuristics can be extended)
+        import re
+        m = re.search(r"नाम\s*[:\-]?\s*([^\n।,]+)", convo_text)
+        if m:
+            full_name = m.group(1).strip()
+
+    # Build final JSON payload (keys exactly as requested)
+    final_profile = {
+        "Full Name": full_name or "",
+        "Location": location or "",
+        "Bio": bio or convo_text.strip()[:600],
+        "Tagline": tagline or (f"{parsed.get('craft','').strip()} artisan" if parsed.get("craft") else ""),
+        "Materials Used": materials or "",
+        "Aspiration": aspiration or ""
+    }
+
+    # Make sure uploads/profiles exists
+    profiles_dir = os.path.join(current_app.root_path, "uploads", "profiles")
+    os.makedirs(profiles_dir, exist_ok=True)
+
+    # Build slug from full name or fallback
+    slug_base = full_name or parsed.get("craft") or "artisan"
+    slug = slugify(slug_base)
+
+    out_path = os.path.join(profiles_dir, f"{slug}.json")
+    try:
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(final_profile, f, ensure_ascii=False, indent=2)
+    except Exception:
+        current_app.logger.exception("Failed to write profile JSON")
+        return None
+
+    public_api_path = f"/api/converse/profile_json/{slug}"
+    return public_api_path
+
+
