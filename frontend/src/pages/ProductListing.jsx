@@ -7,6 +7,9 @@ import { ProductContext } from "../context/ProductContext";
 import SearchBar from "../components/SearchBar";
 import ProductCard from "../components/ProductCard";
 import AddProductSheet from "../components/AddProductSheet";
+import FloatingBackgroundBlobs from "../components/FloatingBackgroundBlobs";
+import FloatingFAB from "../components/FloatingFAB";
+import HamburgerMenu from "../components/Hamburger";
 
 const API_BASE = "http://localhost:5000/api"; // adjust if backend hosted elsewhere
 
@@ -47,30 +50,10 @@ export default function ProductListings() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative p-4">
       {/* Floating background blobs */}
-      <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
-      <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
-      <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
+      <FloatingBackgroundBlobs />
 
-      {/* Hamburger */}
-      <button
-        onClick={() => setMenuOpen(true)}
-        className="absolute top-4 left-4 z-20 cursor-pointer"
-        aria-label="Open menu"
-      >
-        <svg
-          className="w-8 h-8 text-gray-800"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 6h16M4 12h16M4 18h16"
-          />
-        </svg>
-      </button>
+      {/* Hamburger menu button */}
+      <HamburgerMenu onClick={() => setMenuOpen(true)} />
 
       {/* Header */}
       <header className="relative z-10 p-4">
@@ -104,10 +87,17 @@ export default function ProductListings() {
           </div>
         ) : (
           filtered.map((p) => (
-            <ProductCard key={p.id} product={p} onClick={() => navigate(`/product/${p.id}`)} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              onClick={() => navigate(`/product/${p.id}`)}
+            />
           ))
         )}
       </div>
+
+      {/* Floating FAB (optional action button, e.g., AI prompt) */}
+      <FloatingFAB onClick={() => console.log("FAB clicked")} />
 
       {/* Add Product sheet */}
       <AddProductSheet
