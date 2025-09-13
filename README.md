@@ -74,14 +74,19 @@ We transform your sales data into:
 …to **boost revenue and engagement**.
 
 ---
+# List Of Features:
+<img width="1090" height="617" alt="image" src="https://github.com/user-attachments/assets/4464f28c-ebcc-41ef-9790-e1d32c206bb6" />
 
 
 # Architecture
 ![GenAI Exchange-Page-9](https://github.com/user-attachments/assets/6f82dd99-0f92-4b51-bc04-3383dd0dc150)
 
+# Use Case Diagram:
+<img width="1082" height="510" alt="image" src="https://github.com/user-attachments/assets/45ffeeaf-c03b-42bb-9b0e-b2bd2862f62e" />
+
 
 ## Tech Stack Deep Dive:
-<img width="1056" height="596" alt="image" src="https://github.com/user-attachments/assets/cec7642a-181d-4505-a3ae-3a4ce95a3a24" />
+<img width="1090" height="612" alt="image" src="https://github.com/user-attachments/assets/9617a1d7-0e2f-4544-9338-2a56cca6efb7" />
 
 
 ### Frontend
