@@ -7,6 +7,8 @@ import StatusText from "../components/StatusText";
 import ErrorBox from "../components/ErrorBox";
 import TranscriptOverlay from "../components/TranscriptOverlay";
 import MenuDrawer from "../components/MenuDrawer";
+import FloatingBackgroundBlobs from "../components/FloatingBackgroundBlobs";
+import HamburgerMenu from "../components/Hamburger";
 
 export default function Conversational() {
   const [status, setStatus] = useState("idle");
@@ -19,7 +21,7 @@ export default function Conversational() {
 
   const audioElRef = useRef(null);
 
-  // Recording & VAD state refs
+  // Recording & VAD refs
   const mediaStreamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
@@ -54,12 +56,8 @@ export default function Conversational() {
           return;
         }
         audio.src = url;
-        audio.onended = () => {
-          resolve();
-        };
-        audio.onerror = (e) => {
-          reject(e);
-        };
+        audio.onended = () => resolve();
+        audio.onerror = (e) => reject(e);
         audio.play().catch((e) => {
           console.warn("Playback may be blocked:", e);
           resolve();
@@ -103,23 +101,17 @@ export default function Conversational() {
     if (audioCtxRef.current) {
       try {
         audioCtxRef.current.close();
-      } catch (e) {}
+      } catch {}
       audioCtxRef.current = null;
     }
     try {
-      if (sourceRef.current) {
-        sourceRef.current.disconnect();
-        sourceRef.current = null;
-      }
-      if (analyserRef.current) {
-        analyserRef.current.disconnect();
-        analyserRef.current = null;
-      }
-    } catch (e) {}
+      if (sourceRef.current) sourceRef.current.disconnect();
+      if (analyserRef.current) analyserRef.current.disconnect();
+    } catch {}
     if (mediaStreamRef.current) {
       try {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      } catch (e) {}
+      } catch {}
       mediaStreamRef.current = null;
     }
   }
@@ -127,8 +119,7 @@ export default function Conversational() {
   // Start recording with VAD
   async function startRecording() {
     setError(null);
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setError("Microphone not supported in this browser.");
       return;
     }
@@ -143,20 +134,16 @@ export default function Conversational() {
       recordedChunksRef.current = [];
 
       mr.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) recordedChunksRef.current.push(ev.data);
+        if (ev.data?.size > 0) recordedChunksRef.current.push(ev.data);
       };
-
       mr.onerror = (e) => {
         console.error("MediaRecorder error", e);
         setError("Recording error: " + e?.message);
         stopRecordingImmediate();
       };
-
       mr.onstart = () => {
         setStatus("recording");
-        timeoutStopRef.current = setTimeout(() => {
-          stopRecording();
-        }, MAX_RECORDING_MS);
+        timeoutStopRef.current = setTimeout(stopRecording, MAX_RECORDING_MS);
       };
 
       mr.start(250);
@@ -168,7 +155,6 @@ export default function Conversational() {
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
       analyserRef.current = analyser;
-
       source.connect(analyser);
 
       const dataArray = new Float32Array(analyser.fftSize);
@@ -178,29 +164,15 @@ export default function Conversational() {
         try {
           analyser.getFloatTimeDomainData(dataArray);
           let sumSquares = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const v = dataArray[i];
-            sumSquares += v * v;
-          }
+          for (let i = 0; i < dataArray.length; i++) sumSquares += dataArray[i] ** 2;
           const rms = Math.sqrt(sumSquares / dataArray.length);
 
           if (rms < SILENCE_THRESHOLD) {
-            if (silenceStartRef.current == null) {
-              silenceStartRef.current = Date.now();
-            } else {
-              const elapsed = Date.now() - silenceStartRef.current;
-              if (elapsed >= SILENCE_DETECT_MS) {
-                setTimeout(() => {
-                  if (
-                    mediaRecorderRef.current &&
-                    mediaRecorderRef.current.state === "recording"
-                  ) {
-                    stopRecording();
-                  }
-                }, RECORDING_TAIL_MS);
-                clearInterval(vadIntervalRef.current);
-                vadIntervalRef.current = null;
-              }
+            if (!silenceStartRef.current) silenceStartRef.current = Date.now();
+            else if (Date.now() - silenceStartRef.current >= SILENCE_DETECT_MS) {
+              setTimeout(stopRecording, RECORDING_TAIL_MS);
+              clearInterval(vadIntervalRef.current);
+              vadIntervalRef.current = null;
             }
           } else {
             silenceStartRef.current = null;
@@ -216,57 +188,37 @@ export default function Conversational() {
     }
   }
 
-  // Stop recording
   function stopRecording() {
-    if (vadIntervalRef.current) {
-      clearInterval(vadIntervalRef.current);
-      vadIntervalRef.current = null;
-    }
-    if (timeoutStopRef.current) {
-      clearTimeout(timeoutStopRef.current);
-      timeoutStopRef.current = null;
-    }
+    if (vadIntervalRef.current) clearInterval(vadIntervalRef.current);
+    if (timeoutStopRef.current) clearTimeout(timeoutStopRef.current);
     const mr = mediaRecorderRef.current;
     if (mr && (mr.state === "recording" || mr.state === "paused")) {
       try {
         mr.stop();
-      } catch (e) {
-        console.warn("stop error", e);
-      }
+      } catch {}
     } else {
       stopRecordingImmediate();
     }
-
-    setTimeout(() => {
-      finalizeRecordingAndUpload();
-    }, 400);
+    setTimeout(finalizeRecordingAndUpload, 400);
   }
 
-  // Force stop
   function stopRecordingImmediate() {
     try {
-      if (
-        mediaRecorderRef.current &&
-        (mediaRecorderRef.current.state === "recording" ||
-          mediaRecorderRef.current.state === "paused")
-      ) {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (e) {}
+      if (mediaRecorderRef.current?.state === "recording" || mediaRecorderRef.current?.state === "paused") {
+        mediaRecorderRef.current.stop();
       }
-    } catch (e) {}
+    } catch {}
     cleanupRecordingResources();
     mediaRecorderRef.current = null;
     recordedChunksRef.current = [];
     setStatus("ready_record");
   }
 
-  // Finalize recording and upload
   async function finalizeRecordingAndUpload() {
     try {
       setStatus("uploading");
       const pieces = recordedChunksRef.current || [];
-      if (!pieces || pieces.length === 0) {
+      if (!pieces.length) {
         setStatus("ready_record");
         return;
       }
@@ -283,7 +235,6 @@ export default function Conversational() {
     }
   }
 
-  // Upload audio blob
   async function uploadAudioBlob(blob) {
     setError(null);
     setStatus("uploading");
@@ -316,7 +267,6 @@ export default function Conversational() {
     }
   }
 
-  // Toggle recording
   function handleMicToggle() {
     if (status === "ready_record" || status === "idle") {
       startRecording();
@@ -327,35 +277,16 @@ export default function Conversational() {
     }
   }
 
-  // Toggle transcript visibility
   function toggleTranscript() {
     setShowTranscript(!showTranscript);
   }
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cleanupRecordingResources();
-    };
-  }, []);
+  useEffect(() => cleanupRecordingResources, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 overflow-hidden relative">
-      {/* Floating background blobs */}
-      <div className="absolute top-10 left-10 transform -translate-x-1/2 w-72 h-72 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse md:transform-none" />
-      <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-1000 hidden md:block" />
-      <div className="absolute bottom-10 left-1/2 w-80 h-80 bg-gradient-to-br from-pink-300 to-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse delay-2000" />
-
-      {/* Hamburger */}
-      <button
-        onClick={() => setMenuOpen(true)}
-        className="absolute top-4 left-4 z-20 cursor-pointer"
-        aria-label="Open menu"
-      >
-        <svg className="w-8 h-8 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
+      <FloatingBackgroundBlobs />
+      <HamburgerMenu onClick={() => setMenuOpen(true)} />
 
       {/* Main */}
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
@@ -374,10 +305,22 @@ export default function Conversational() {
               onClick={toggleTranscript}
               className="bg-white/80 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg hover:shadow-xl transition-all duration-300 border border-white/30 flex items-center space-x-2"
             >
-              <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <svg
+                className="w-4 h-4 text-gray-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
               </svg>
-              <span className="text-gray-700 font-medium">View Conversation</span>
+              <span className="text-gray-700 font-medium">
+                View Conversation
+              </span>
             </button>
           </div>
 
