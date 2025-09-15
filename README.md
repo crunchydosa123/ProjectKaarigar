@@ -104,12 +104,11 @@ We transform your sales data into:
 - **LangChain (RAG)** → Personalized insights from sales data  
 
 ### Google Cloud Infrastructure
-- **Cloud Functions** → Serverless async compute  
-- **PostgreSQL (Cloud SQL)** → Structured artisan/product data  
-- **Cloud Storage** → Secure media storage (photos, videos, audio)  
-- **Pub/Sub** → Async service communication  
-- **BigQuery** → Real-time sales analyt
-
+- **Cloud Functions** → Serverless async compute  .
+- **PostgreSQL (AlloyDB)** → Structured artisan/product data, with embeddings support for retrieval augemented generation process.  
+- **Cloud Storage** → Secure media storage (photos, videos, audio)  .
+- **Pub/Sub** → Async service communication  , for scalable input processing.
+- **BigQuery** → Real-time sales and social media trends  analysis.
 
 ---
 
