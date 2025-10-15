@@ -1,4 +1,4 @@
-#pip install "fastapi[standard]" <- to install all the standard dependencies
+#pip install "fastapi[standard]" <- to install all the standard dependencies in fastapi
 
 from typing import Union
 from fastapi import FastAPI
