@@ -1,0 +1,96 @@
+{
+  "input": {
+    "module_name": "diary",
+    "platform_selected": "amazon",
+    "user_price": 30.0,
+    "images": {
+      "local_paths": [
+        "D:\\projects\\Anuj_Portfolio\\portfolio_anuj_tadkase\\src\\assets\\tom-riddle-diary-closed.png"
+      ]
+    },
+    "inferred_keywords": [
+      "tom",
+      "riddle",
+      "diary",
+      "closed"
+    ]
+  },
+  "listing": {
+    "title": "Mystic Grimoire Journal - Vintage Spellbook Diary with Golden 'S' Emblem - Antique Leather-Bound Fantasy Notebook for Magic & Witchcraft Enthusiasts",
+    "bullets": [
+      "✨ **Enchanting Vintage Design:** Features a dark, possibly deep green or black, leather-like cover with intricate gold foil detailing, including a stylized 'S' emblem and ornate borders, evoking an ancient grimoire.",
+      "📜 **Aged Parchment-Style Pages:** The warm, aged edges of the pages hint at old paper or parchment, perfect for capturing your spells, thoughts, or mystical musings.",
+      "🖋️ **Durable & Sturdy Craftsmanship:** A traditionally bound hardcover design ensures this diary is not just beautiful but also built to last, preserving your precious writings for years to come.",
+      "🎁 **Unique Gift for Fantasy Lovers:** An ideal present for witches, wizards, role-players, D&D enthusiasts, or anyone who appreciates the arcane aesthetics and magical lore.",
+      "🕯️ **Atmospheric & Inspiring:** Designed to transport you to a world of magic and mystery, providing the perfect canvas for creative writing, spellcasting notes, or personal reflections.",
+      "🔮 **Versatile Use:** Excellent for journaling, sketching, scrapbooking, or as a distinctive prop for magical-themed events, cosplay, or home decor.",
+      "🌟 **Authentic Aesthetic:** Combines a classic antique look with mystical elements, making it a standout piece in any collection."
+    ],
+    "description": "Unlock the secrets of the ancients with our Mystic Grimoire Journal, a beautifully crafted diary designed for magic and fantasy enthusiasts. This exquisite book boasts a dark, possibly deep green or black, leather-like cover, meticulously adorned with intricate gold foil detailing, including a prominent, stylized 'S' emblem and ornate borders that evoke the feel of a genuine spellbook. The aged, parchment-style pages beckon you to fill them with your deepest thoughts, powerful spells, or fantastical tales. Its durable hardcover binding ensures your treasured writings are protected, making it a timeless keepsake. Whether you're a budding witch, a seasoned wizard, a role-playing adventurer, or simply someone who appreciates unique, mystical aesthetics, this grimoire journal is an essential addition. Perfect as a personal diary, a creative writing notebook, or a captivating decorative piece.",
+    "specifications": {
+      "Material": "Faux Leather (Dark Green/Black), Gold Foil Embossing, Aged Paper",
+      "Binding": "Hardcover, Traditional Stitched",
+      "Page Edges": "Aged/Parchment style",
+      "Embellishment": "Golden 'S' Emblem, Ornate Golden Borders",
+      "Theme": "Magical, Fantasy, Grimoire, Witchcraft, Antique",
+      "Included Accessories": "None",
+      "Brand": "Mystic Scribe Designs (Fictional for listing)"
+    },
+    "seo_tags": [
+      "grimoire journal",
+      "spellbook diary",
+      "vintage notebook",
+      "magic journal",
+      "witchcraft supplies",
+      "fantasy diary",
+      "leather journal",
+      "antique book",
+      "golden 'S' journal",
+      "mystical notebook",
+      "gothic diary",
+      "pagan journal",
+      "cosplay prop book",
+      "D&D journal",
+      "wizard journal",
+      "unique gift",
+      "collectible diary",
+      "aged paper journal",
+      "ornate cover diary",
+      "esoteric journal"
+    ],
+    "faqs": [
+      {
+        "q": "Are the pages blank or lined?",
+        "a": "The pages are typically blank to offer maximum flexibility for writing, drawing, or spellcasting notes. Please check the product images for specific page layouts if available."
+      },
+      {
+        "q": "Is this a real spellbook with actual spells?",
+        "a": "No, this is a decorative and functional journal designed to resemble a spellbook or grimoire. It does not contain pre-written spells or magical instructions."
+      },
+      {
+        "q": "What is the primary material of the cover?",
+        "a": "The cover is made from a durable, high-quality faux leather material (deep green or black) with intricate gold foil embellishments, designed to look and feel like an antique leather-bound book."
+      },
+      {
+        "q": "Can I use this for everyday journaling?",
+        "a": "Absolutely! While it has a magical aesthetic, it's a fully functional journal perfect for daily reflections, creative writing, sketching, or any notes you wish to record."
+      }
+    ],
+    "pricing": {
+      "ai_price": 27.99,
+      "recommended_range": [
+        24.99,
+        34.99
+      ]
+    },
+    "policies": {
+      "Returns": "30-day free returns on unused items in original packaging.",
+      "Shipping": "Standard Amazon shipping policies apply. Expedited options available.",
+      "Warranty": "Manufacturer's limited warranty against defects."
+    },
+    "whats_in_the_box": [
+      "1 x Mystic Grimoire Journal"
+    ],
+    "platform": "amazon"
+  }
+}
