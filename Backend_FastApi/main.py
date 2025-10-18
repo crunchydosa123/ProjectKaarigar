@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # import the router
-from Backend_FastApi.routes.video_edit import router as edit_router  # adjust import path if needed
+from routes.video_edit import router as edit_router  # adjust import path if needed
 
 logger = logging.getLogger("uvicorn.error")
 
