@@ -21,11 +21,8 @@ print("Step 2: Processing image response...")
 generated_image = None
 for part in image_response.candidates[0].content.parts:
     if part.inline_data is not None:
-        # Format the image data according to the API requirements
-        generated_image = {
-            "bytesBase64Encoded": part.inline_data.data,
-            "mimeType": part.inline_data.mime_type
-        }
+        # Create a proper image object for video generation
+        generated_image = part.inline_data
         break
 
 if generated_image is None:
