@@ -263,26 +263,64 @@ class GCSVideoEditor:
             input_stream_ffmpeg = ffmpeg.input(input_temp_path)
             
             if action == "keep":
-                # Keep the segment
-                if start is not None and end is not None:
-                    stream = input_stream_ffmpeg.trim(start=start, end=end).setpts('PTS-STARTPTS')
-                elif start is not None and duration is not None:
-                    stream = input_stream_ffmpeg.trim(start=start, duration=duration).setpts('PTS-STARTPTS')
-                elif duration is not None:
-                    stream = input_stream_ffmpeg.trim(duration=duration).setpts('PTS-STARTPTS')
-                else:
-                    stream = input_stream_ffmpeg
+                # Get video duration first for negative time handling
+                probe = ffmpeg.probe(input_temp_path)
+                video_duration = float(probe['format']['duration'])
                 
-                output = ffmpeg.output(stream, output_temp_path, vcodec='libx264', acodec='aac', **{'shortest': None})
+                # Handle negative start times (from end)
+                if start is not None and start < 0:
+                    start = max(0, video_duration + start)
+                
+                # Handle negative end times (from end)
+                if end is not None and end < 0:
+                    end = max(0, video_duration + end)
+                
+                # Ensure start and end are within bounds
+                start = max(0, min(start or 0, video_duration))
+                end = max(0, min(end or video_duration, video_duration))
+                
+                # Ensure start < end
+                if start >= end:
+                    print("❌ Invalid time range: start must be less than end")
+                    return None
+                
+                # Keep the segment - handle both video and audio
+                if start is not None and end is not None:
+                    video_stream = input_stream_ffmpeg.video.trim(start=start, end=end).setpts('PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', start=start, end=end).afilter('asetpts', 'PTS-STARTPTS')
+                elif start is not None and duration is not None:
+                    video_stream = input_stream_ffmpeg.video.trim(start=start, duration=duration).setpts('PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', start=start, duration=duration).afilter('asetpts', 'PTS-STARTPTS')
+                elif duration is not None:
+                    video_stream = input_stream_ffmpeg.video.trim(duration=duration).setpts('PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', duration=duration).afilter('asetpts', 'PTS-STARTPTS')
+                else:
+                    video_stream = input_stream_ffmpeg.video
+                    audio_stream = input_stream_ffmpeg.audio
+                
+                output = ffmpeg.output(video_stream, audio_stream, output_temp_path, vcodec='libx264', acodec='aac')
                 
             else:  # action == "remove"
                 # This is more complex - need to concatenate parts before and after
                 probe = ffmpeg.probe(input_temp_path)
                 video_duration = float(probe['format']['duration'])
-                    
-                # Get video duration if end is negative (relative to end)
-                if end and end < 0:
-                    end = video_duration + end
+                
+                # Handle negative start times (from end)
+                if start is not None and start < 0:
+                    start = max(0, video_duration + start)
+                
+                # Handle negative end times (from end)
+                if end is not None and end < 0:
+                    end = max(0, video_duration + end)
+                
+                # Ensure start and end are within bounds
+                start = max(0, min(start or 0, video_duration))
+                end = max(0, min(end or video_duration, video_duration))
+                
+                # Ensure start < end
+                if start >= end:
+                    print("❌ Invalid time range: start must be less than end")
+                    return None
                 
                 # Create segments
                 segments = []
@@ -290,16 +328,18 @@ class GCSVideoEditor:
                 # Part 1: Before removal
                 if start > 0:
                     temp1_path = os.path.join(tempfile.gettempdir(), f"part1_{os.urandom(8).hex()}.mp4")
-                    part1 = ffmpeg.input(input_temp_path).trim(start=0, end=start).setpts('PTS-STARTPTS')
-                    ffmpeg.output(part1, temp1_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                    part1_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=start).setpts('PTS-STARTPTS')
+                    part1_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=start).afilter('asetpts', 'PTS-STARTPTS')
+                    ffmpeg.output(part1_video, part1_audio, temp1_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                     segments.append(temp1_path)
                     temp_files.append(temp1_path)
                 
                 # Part 2: After removal
                 if end < video_duration:
                     temp2_path = os.path.join(tempfile.gettempdir(), f"part2_{os.urandom(8).hex()}.mp4")
-                    part2 = ffmpeg.input(input_temp_path).trim(start=end).setpts('PTS-STARTPTS')
-                    ffmpeg.output(part2, temp2_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                    part2_video = ffmpeg.input(input_temp_path).video.trim(start=end).setpts('PTS-STARTPTS')
+                    part2_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=end).afilter('asetpts', 'PTS-STARTPTS')
+                    ffmpeg.output(part2_video, part2_audio, temp2_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                     segments.append(temp2_path)
                     temp_files.append(temp2_path)
                 
@@ -369,6 +409,23 @@ class GCSVideoEditor:
                 target_position = edit_config.get("target_position", "end")
                 offset = float(edit_config.get("offset", 0))
                 
+                # Handle negative start times (from end)
+                if source_start < 0:
+                    source_start = max(0, video_duration + source_start)
+                
+                # Handle negative end times (from end)
+                if source_end < 0:
+                    source_end = max(0, video_duration + source_end)
+                
+                # Ensure start and end are within bounds
+                source_start = max(0, min(source_start, video_duration))
+                source_end = max(0, min(source_end, video_duration))
+                
+                # Ensure start < end
+                if source_start >= source_end:
+                    print("❌ Invalid time range: source_start must be less than source_end")
+                    return None
+                
                 print(f"\n🎬 COMPLEX EDIT DETAILS:")
                 print(f"   📍 Source: {source_start}s → {source_end}s")
                 print(f"   📍 Target: {target_position}")
@@ -396,8 +453,9 @@ class GCSVideoEditor:
                 temp_files.append(temp_segment_path)
                 
                 print(f"\n   📹 Step 1: Extracting segment to move ({source_start}s to {source_end}s)...")
-                segment = ffmpeg.input(input_temp_path).trim(start=source_start, end=source_end).setpts('PTS-STARTPTS')
-                ffmpeg.output(segment, temp_segment_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                segment_video = ffmpeg.input(input_temp_path).video.trim(start=source_start, end=source_end).setpts('PTS-STARTPTS')
+                segment_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_start, end=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                ffmpeg.output(segment_video, segment_audio, temp_segment_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                 
                 segments_to_concat = []
                 
@@ -408,8 +466,9 @@ class GCSVideoEditor:
                     if source_start > 0:
                         temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
                         print(f"      → Before segment: 0s to {source_start}s")
-                        before = ffmpeg.input(input_temp_path).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                        ffmpeg.output(before, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        before_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=source_start).setpts('PTS-STARTPTS')
+                        before_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=source_start).afilter('asetpts', 'PTS-STARTPTS')
+                        ffmpeg.output(before_video, before_audio, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_before_path)
                         temp_files.append(temp_before_path)
                     
@@ -417,8 +476,9 @@ class GCSVideoEditor:
                     if source_end < video_duration:
                         temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
                         print(f"      → After segment: {source_end}s to {video_duration}s")
-                        after = ffmpeg.input(input_temp_path).trim(start=source_end).setpts('PTS-STARTPTS')
-                        ffmpeg.output(after, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        after_video = ffmpeg.input(input_temp_path).video.trim(start=source_end).setpts('PTS-STARTPTS')
+                        after_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                        ffmpeg.output(after_video, after_audio, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_after_path)
                         temp_files.append(temp_after_path)
                     
@@ -432,16 +492,18 @@ class GCSVideoEditor:
                     # Part 1: Before the cut segment
                     if source_start > 0:
                         temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
-                        before = ffmpeg.input(input_temp_path).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                        ffmpeg.output(before, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        before_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=source_start).setpts('PTS-STARTPTS')
+                        before_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=source_start).afilter('asetpts', 'PTS-STARTPTS')
+                        ffmpeg.output(before_video, before_audio, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_before_path)
                         temp_files.append(temp_before_path)
                     
                     # Part 2: After the cut segment
                     if source_end < video_duration:
                         temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
-                        after = ffmpeg.input(input_temp_path).trim(start=source_end).setpts('PTS-STARTPTS')
-                        ffmpeg.output(after, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        after_video = ffmpeg.input(input_temp_path).video.trim(start=source_end).setpts('PTS-STARTPTS')
+                        after_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                        ffmpeg.output(after_video, after_audio, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_after_path)
                         temp_files.append(temp_after_path)
                 
@@ -672,6 +734,8 @@ TRIMMING & CUTTING (SIMPLE OPERATIONS - NO APPENDING):
 - "trim last 5 seconds" → {{"trim_operation": {{"start": -5, "end": 0, "action": "remove"}}, "explanation": "Removes last 5 seconds"}}
 - "cut first 4 seconds" → {{"trim_operation": {{"start": 0, "end": 4, "action": "remove"}}, "explanation": "Removes first 4 seconds"}}
 - "cut last 3 seconds" → {{"trim_operation": {{"start": -3, "end": 0, "action": "remove"}}, "explanation": "Removes last 3 seconds"}}
+- "remove first 6 seconds" → {{"trim_operation": {{"start": 0, "end": 6, "action": "remove"}}, "explanation": "Removes first 6 seconds"}}
+- "remove last 4 seconds" → {{"trim_operation": {{"start": -4, "end": 0, "action": "remove"}}, "explanation": "Removes last 4 seconds"}}
 - "keep only first 20 seconds" → {{"trim_operation": {{"start": 0, "end": 20, "action": "keep"}}, "explanation": "Keeps only first 20 seconds"}}
 - "cut from 10 to 30 seconds" → {{"trim_operation": {{"start": 10, "end": 30, "action": "keep"}}, "explanation": "Extracts segment from 10s to 30s"}}
 - "remove middle 10 seconds" → {{"complex_edit": {{"type": "remove_middle", "start": 10, "duration": 10}}, "explanation": "Removes 10 seconds from middle"}}
@@ -685,7 +749,8 @@ ADVANCED CUTTING & REARRANGING (MOST IMPORTANT):
 - "cut first 5 seconds and add to end" → {{"complex_edit": {{"type": "move_segment", "source_start": 0, "source_end": 5, "target_position": "end"}}, "explanation": "Cuts first 5s and appends to end"}}
 - "cut first 10 seconds and move to end" → {{"complex_edit": {{"type": "move_segment", "source_start": 0, "source_end": 10, "target_position": "end"}}, "explanation": "Moves first 10s to end"}}
 - "cut first 3 seconds and add to last" → {{"complex_edit": {{"type": "move_segment", "source_start": 0, "source_end": 3, "target_position": "end"}}, "explanation": "Moves first 3s to end"}}
-- "cut last 5 seconds and add to beginning" → {{"complex_edit": {{"type": "move_segment", "source_start": {video_duration-5}, "source_end": {video_duration}, "target_position": "beginning"}}, "explanation": "Moves last 5s to beginning"}}
+- "cut last 5 seconds and add to beginning" → {{"complex_edit": {{"type": "move_segment", "source_start": -5, "source_end": 0, "target_position": "start"}}, "explanation": "Moves last 5s to beginning"}}
+- "cut last 3 seconds and append to end" → {{"complex_edit": {{"type": "move_segment", "source_start": -3, "source_end": 0, "target_position": "end"}}, "explanation": "Moves last 3s to end"}}
 - "cut middle 10 seconds (from 20s) and add to end" → {{"complex_edit": {{"type": "move_segment", "source_start": 20, "source_end": 30, "target_position": "end"}}, "explanation": "Moves middle segment to end"}}
 - "cut first 5 seconds and insert before last 2 seconds" → {{"complex_edit": {{"type": "move_segment", "source_start": 0, "source_end": 5, "target_position": "before_end", "offset": 2}}, "explanation": "Inserts first 5s before last 2s"}}
 - "reverse the video" → {{"filter_chain": "reverse", "explanation": "Reverses video playback", "additional_params": {{"filter:a": "areverse"}}}}
