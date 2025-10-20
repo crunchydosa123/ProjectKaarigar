@@ -329,9 +329,11 @@ class GCSVideoEditor:
                 if result.returncode != 0:
                     return None
             
-            # Run FFmpeg for keep action
-            print(f"🔧 Running trim operation...")
-            ffmpeg.run(output, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                # Run FFmpeg
+                print(f"🔧 Running trim operation...")
+                if action == "keep":
+                    ffmpeg.run(output, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                # For "remove" action, FFmpeg was already run in the subprocess above
             
             # Upload output to GCS
             output_blob = bucket.blob(output_blob_name)
@@ -354,6 +356,9 @@ class GCSVideoEditor:
     def complex_video_edit_in_memory(self, input_stream: io.BytesIO, edit_config: Dict, 
                                    video_duration: float) -> io.BytesIO:
         """Handle complex video editing operations in memory"""
+        temp_files = []
+        temp_blobs = []
+        
         try:
             edit_type = edit_config.get("type")
             
@@ -369,171 +374,195 @@ class GCSVideoEditor:
                 print(f"   📍 Target: {target_position}")
                 print(f"   📍 Video Duration: {video_duration}s")
                 
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
-                    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                        # Write input to temp file
-                        input_stream.seek(0)
-                        input_temp.write(input_stream.read())
-                        input_temp.flush()
-                        
-                        # Extract the segment that will be moved
-                        temp_segment = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                        print(f"\n   📹 Step 1: Extracting segment to move ({source_start}s to {source_end}s)...")
-                        segment = ffmpeg.input(input_temp.name).trim(start=source_start, end=source_end).setpts('PTS-STARTPTS')
-                        ffmpeg.output(segment, temp_segment.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                        
-                        segments_to_concat = []
-                        
-                        if target_position == "end":
-                            print(f"\n   📹 Step 2: Extracting remaining parts...")
-                            
-                            # Part 1: Before the cut segment (if exists)
-                            if source_start > 0:
-                                temp_before = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                                print(f"      → Before segment: 0s to {source_start}s")
-                                before = ffmpeg.input(input_temp.name).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                                ffmpeg.output(before, temp_before.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                                segments_to_concat.append(temp_before.name)
-                            
-                            # Part 2: After the cut segment (if exists)
-                            if source_end < video_duration:
-                                temp_after = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                                print(f"      → After segment: {source_end}s to {video_duration}s")
-                                after = ffmpeg.input(input_temp.name).trim(start=source_end).setpts('PTS-STARTPTS')
-                                ffmpeg.output(after, temp_after.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                                segments_to_concat.append(temp_after.name)
-                            
-                            # Add moved segment at the end
-                            segments_to_concat.append(temp_segment.name)
-                            
-                        elif target_position == "beginning":
-                            # Moved segment goes first
-                            segments_to_concat.append(temp_segment.name)
-                            
-                            # Part 1: Before the cut segment
-                            if source_start > 0:
-                                temp_before = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                                before = ffmpeg.input(input_temp.name).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                                ffmpeg.output(before, temp_before.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                                segments_to_concat.append(temp_before.name)
-                            
-                            # Part 2: After the cut segment
-                            if source_end < video_duration:
-                                temp_after = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                                after = ffmpeg.input(input_temp.name).trim(start=source_end).setpts('PTS-STARTPTS')
-                                ffmpeg.output(after, temp_after.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                                segments_to_concat.append(temp_after.name)
-                        
-                        if len(segments_to_concat) == 0:
-                            return None
-                        
-                        # Concatenate all segments
-                        concat_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                        for seg in segments_to_concat:
-                            concat_file.write(f"file '{os.path.abspath(seg)}'\n")
-                        concat_file.close()
-                        
-                        print(f"\n   🔗 Concatenating {len(segments_to_concat)} segments...")
-                        
-                        # Use FFmpeg concat demuxer
-                        cmd = [
-                            'ffmpeg',
-                            '-f', 'concat',
-                            '-safe', '0',
-                            '-i', concat_file.name,
-                            '-c', 'copy',
-                            '-y',
-                            output_temp.name
-                        ]
-                        
-                        result = subprocess.run(cmd, capture_output=True, text=True)
-                        
-                        if result.returncode != 0:
-                            # If copy fails, try re-encoding
-                            cmd = [
-                                'ffmpeg',
-                                '-f', 'concat',
-                                '-safe', '0',
-                                '-i', concat_file.name,
-                                '-c:v', 'libx264',
-                                '-c:a', 'aac',
-                                '-y',
-                                output_temp.name
-                            ]
-                            result = subprocess.run(cmd, capture_output=True, text=True)
-                        
-                        # Cleanup temp files
-                        os.unlink(concat_file.name)
-                        for seg in segments_to_concat:
-                            os.unlink(seg)
-                        os.unlink(temp_segment.name)
-                        os.unlink(input_temp.name)
-                        
-                        if result.returncode != 0:
-                            return None
-                        
-                        # Read output back to memory
-                        with open(output_temp.name, 'rb') as f:
-                            output_stream = io.BytesIO(f.read())
-                        
-                        os.unlink(output_temp.name)
-                        
-                        return output_stream
+                # Upload input to GCS temporarily
+                input_blob_name = f"temp/complex_input_{os.urandom(8).hex()}.mp4"
+                output_blob_name = f"temp/complex_output_{os.urandom(8).hex()}.mp4"
+                
+                input_stream.seek(0)
+                input_blob = bucket.blob(input_blob_name)
+                input_blob.upload_from_file(input_stream, content_type='video/mp4')
+                temp_blobs.append(input_blob_name)
+                
+                # Create unique temp file names
+                input_temp_path = os.path.join(tempfile.gettempdir(), f"complex_input_{os.urandom(8).hex()}.mp4")
+                output_temp_path = os.path.join(tempfile.gettempdir(), f"complex_output_{os.urandom(8).hex()}.mp4")
+                temp_files.extend([input_temp_path, output_temp_path])
+                
+                # Download from GCS
+                input_blob.download_to_filename(input_temp_path)
+                
+                # Extract the segment that will be moved
+                temp_segment_path = os.path.join(tempfile.gettempdir(), f"segment_{os.urandom(8).hex()}.mp4")
+                temp_files.append(temp_segment_path)
+                
+                print(f"\n   📹 Step 1: Extracting segment to move ({source_start}s to {source_end}s)...")
+                segment = ffmpeg.input(input_temp_path).trim(start=source_start, end=source_end).setpts('PTS-STARTPTS')
+                ffmpeg.output(segment, temp_segment_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                
+                segments_to_concat = []
+                
+                if target_position == "end":
+                    print(f"\n   📹 Step 2: Extracting remaining parts...")
+                    
+                    # Part 1: Before the cut segment (if exists)
+                    if source_start > 0:
+                        temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
+                        print(f"      → Before segment: 0s to {source_start}s")
+                        before = ffmpeg.input(input_temp_path).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
+                        ffmpeg.output(before, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments_to_concat.append(temp_before_path)
+                        temp_files.append(temp_before_path)
+                    
+                    # Part 2: After the cut segment (if exists)
+                    if source_end < video_duration:
+                        temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
+                        print(f"      → After segment: {source_end}s to {video_duration}s")
+                        after = ffmpeg.input(input_temp_path).trim(start=source_end).setpts('PTS-STARTPTS')
+                        ffmpeg.output(after, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments_to_concat.append(temp_after_path)
+                        temp_files.append(temp_after_path)
+                    
+                    # Add moved segment at the end
+                    segments_to_concat.append(temp_segment_path)
+                    
+                elif target_position == "beginning":
+                    # Moved segment goes first
+                    segments_to_concat.append(temp_segment_path)
+                    
+                    # Part 1: Before the cut segment
+                    if source_start > 0:
+                        temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
+                        before = ffmpeg.input(input_temp_path).trim(start=0, end=source_start).setpts('PTS-STARTPTS')
+                        ffmpeg.output(before, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments_to_concat.append(temp_before_path)
+                        temp_files.append(temp_before_path)
+                    
+                    # Part 2: After the cut segment
+                    if source_end < video_duration:
+                        temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
+                        after = ffmpeg.input(input_temp_path).trim(start=source_end).setpts('PTS-STARTPTS')
+                        ffmpeg.output(after, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments_to_concat.append(temp_after_path)
+                        temp_files.append(temp_after_path)
+                
+                if len(segments_to_concat) == 0:
+                    return None
+                
+                # Concatenate all segments
+                concat_file_path = os.path.join(tempfile.gettempdir(), f"concat_{os.urandom(8).hex()}.txt")
+                temp_files.append(concat_file_path)
+                
+                with open(concat_file_path, 'w') as concat_file:
+                    for seg in segments_to_concat:
+                        concat_file.write(f"file '{os.path.abspath(seg)}'\n")
+                
+                print(f"\n   🔗 Concatenating {len(segments_to_concat)} segments...")
+                
+                # Use FFmpeg concat demuxer
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', concat_file_path,
+                    '-c', 'copy',
+                    '-y',
+                    output_temp_path
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    # If copy fails, try re-encoding
+                    cmd = [
+                        'ffmpeg',
+                        '-f', 'concat',
+                        '-safe', '0',
+                        '-i', concat_file_path,
+                        '-c:v', 'libx264',
+                        '-c:a', 'aac',
+                        '-y',
+                        output_temp_path
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    return None
+                
+                # Upload output to GCS
+                output_blob = bucket.blob(output_blob_name)
+                output_blob.upload_from_filename(output_temp_path, content_type='video/mp4')
+                temp_blobs.append(output_blob_name)
+                
+                # Download back to memory
+                output_stream = io.BytesIO()
+                output_blob.download_to_file(output_stream)
+                
+                return output_stream
             
             elif edit_type == "loop":
                 # Loop video N times
                 count = edit_config.get("count", 2)
                 print(f"   🔁 Creating {count} loops...")
                 
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
-                    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                        # Write input to temp file
-                        input_stream.seek(0)
-                        input_temp.write(input_stream.read())
-                        input_temp.flush()
-                        
-                        # Create temp copies
-                        temp_copies = []
-                        for i in range(count):
-                            temp_copy = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                            shutil.copy2(input_temp.name, temp_copy.name)
-                            temp_copies.append(temp_copy.name)
-                        
-                        # Create concat file
-                        concat_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                        for copy in temp_copies:
-                            concat_file.write(f"file '{os.path.abspath(copy)}'\n")
-                        concat_file.close()
-                        
-                        # Concatenate
-                        cmd = [
-                            'ffmpeg',
-                            '-f', 'concat',
-                            '-safe', '0',
-                            '-i', concat_file.name,
-                            '-c', 'copy',
-                            '-y',
-                            output_temp.name
-                        ]
-                        
-                        result = subprocess.run(cmd, capture_output=True, text=True)
-                        
-                        # Cleanup
-                        os.unlink(concat_file.name)
-                        for copy in temp_copies:
-                            os.unlink(copy)
-                        os.unlink(input_temp.name)
-                        
-                        if result.returncode != 0:
-                            return None
-                        
-                        # Read output back to memory
-                        with open(output_temp.name, 'rb') as f:
-                            output_stream = io.BytesIO(f.read())
-                        
-                        os.unlink(output_temp.name)
-                        
-                        return output_stream
+                # Upload input to GCS temporarily
+                input_blob_name = f"temp/loop_input_{os.urandom(8).hex()}.mp4"
+                output_blob_name = f"temp/loop_output_{os.urandom(8).hex()}.mp4"
+                
+                input_stream.seek(0)
+                input_blob = bucket.blob(input_blob_name)
+                input_blob.upload_from_file(input_stream, content_type='video/mp4')
+                temp_blobs.append(input_blob_name)
+                
+                # Create unique temp file names
+                input_temp_path = os.path.join(tempfile.gettempdir(), f"loop_input_{os.urandom(8).hex()}.mp4")
+                output_temp_path = os.path.join(tempfile.gettempdir(), f"loop_output_{os.urandom(8).hex()}.mp4")
+                temp_files.extend([input_temp_path, output_temp_path])
+                
+                # Download from GCS
+                input_blob.download_to_filename(input_temp_path)
+                
+                # Create temp copies
+                temp_copies = []
+                for i in range(count):
+                    temp_copy_path = os.path.join(tempfile.gettempdir(), f"loop_copy_{i}_{os.urandom(8).hex()}.mp4")
+                    shutil.copy2(input_temp_path, temp_copy_path)
+                    temp_copies.append(temp_copy_path)
+                    temp_files.append(temp_copy_path)
+                
+                # Create concat file
+                concat_file_path = os.path.join(tempfile.gettempdir(), f"loop_concat_{os.urandom(8).hex()}.txt")
+                temp_files.append(concat_file_path)
+                
+                with open(concat_file_path, 'w') as concat_file:
+                    for copy in temp_copies:
+                        concat_file.write(f"file '{os.path.abspath(copy)}'\n")
+                
+                # Concatenate
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', concat_file_path,
+                    '-c', 'copy',
+                    '-y',
+                    output_temp_path
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    return None
+                
+                # Upload output to GCS
+                output_blob = bucket.blob(output_blob_name)
+                output_blob.upload_from_filename(output_temp_path, content_type='video/mp4')
+                temp_blobs.append(output_blob_name)
+                
+                # Download back to memory
+                output_stream = io.BytesIO()
+                output_blob.download_to_file(output_stream)
+                
+                return output_stream
             
             elif edit_type == "remove_middle":
                 # Remove X seconds from middle
@@ -551,6 +580,9 @@ class GCSVideoEditor:
         except Exception as e:
             print(f"❌ Complex edit failed: {e}")
             return None
+        finally:
+            # Clean up all temporary files and GCS blobs
+            self.cleanup_all_temp(blob_names=temp_blobs, file_paths=temp_files)
     
     def download_song(self, song: dict) -> str:
         """Download a song from URL and return local path"""
