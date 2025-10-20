@@ -65,18 +65,25 @@ class GCSVideoEditor:
             print(f"❌ Download failed: {e}")
             return None
     
-    def upload_video_from_memory(self, blob_name: str, video_stream: io.BytesIO) -> bool:
-        """Upload video from memory to GCS"""
+    def upload_video_from_memory(self, blob_name: str, video_stream: io.BytesIO) -> str:
+        """Upload video from memory to GCS and return public URL"""
         try:
             print(f"📤 Uploading video to GCS: {blob_name}")
             blob = bucket.blob(blob_name)
             video_stream.seek(0)
             blob.upload_from_file(video_stream, content_type='video/mp4')
+            
+            # Make the blob publicly accessible
+            blob.make_public()
+            
+            # Get the public URL
+            public_url = blob.public_url
             print(f"✅ Uploaded successfully")
-            return True
+            print(f"🔗 Public URL: {public_url}")
+            return public_url
         except Exception as e:
             print(f"❌ Upload failed: {e}")
-            return False
+            return None
     
     def get_video_info_from_memory(self, video_stream: io.BytesIO) -> Dict[str, Any]:
         """Get video information from memory stream"""
@@ -971,9 +978,11 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                     if not save_name.startswith("videos/"):
                         save_name = f"videos/{save_name}"
                     
-                    if self.upload_video_from_memory(save_name, video_stream):
+                    public_url = self.upload_video_from_memory(save_name, video_stream)
+                    if public_url:
                         print(f"✅ Video saved to GCS: {save_name}")
-                        self.edit_history.append(f"Saved as: {save_name}")
+                        print(f"🔗 Download Link: {public_url}")
+                        self.edit_history.append(f"Saved as: {save_name} - {public_url}")
                     continue
                 elif not prompt:
                     print("❌ No prompt provided.")
@@ -1019,8 +1028,24 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 if not save_name.startswith("videos/"):
                     save_name = f"videos/{save_name}"
                 
-                if self.upload_video_from_memory(save_name, video_stream):
+                public_url = self.upload_video_from_memory(save_name, video_stream)
+                if public_url:
                     print(f"✅ Final video saved to GCS: {save_name}")
+                    print(f"🔗 Download Link: {public_url}")
+                    print(f"\n📋 You can share this link or download the video directly!")
+            
+            # Show all saved video links
+            saved_videos = [edit for edit in self.edit_history if "Saved as:" in edit and "http" in edit]
+            if saved_videos:
+                print("\n" + "=" * 70)
+                print("🔗 ALL SAVED VIDEO LINKS:")
+                print("=" * 70)
+                for idx, video_info in enumerate(saved_videos, 1):
+                    # Extract URL from the edit history entry
+                    if " - " in video_info:
+                        url = video_info.split(" - ")[-1]
+                        print(f"  {idx}. {url}")
+                print("=" * 70)
         
         # Cleanup any temporary objects
         if temp_objects:
