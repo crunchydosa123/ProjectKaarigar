@@ -430,7 +430,7 @@ class AudioLoop:
             print("\n🔇 Voice chat session ended.")
             
             # Print collected information
-            self.print_collected_information()
+                self.print_collected_information()
 
 
 if __name__ == "__main__":

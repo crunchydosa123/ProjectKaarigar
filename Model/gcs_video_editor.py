@@ -81,18 +81,25 @@ class GCSVideoEditor:
     def get_video_info_from_memory(self, video_stream: io.BytesIO) -> Dict[str, Any]:
         """Get video information from memory stream"""
         try:
-            # Create a temporary file to probe
+            # Upload to GCS temporarily for probing
+            temp_blob_name = f"temp/probe_{os.urandom(8).hex()}.mp4"
+            video_stream.seek(0)
+            
+            # Upload to GCS
+            blob = bucket.blob(temp_blob_name)
+            blob.upload_from_file(video_stream, content_type='video/mp4')
+            
+            # Download to a proper temp file for probing
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
-                video_stream.seek(0)
-                temp_file.write(video_stream.read())
-                temp_file.flush()
+                blob.download_to_filename(temp_file.name)
                 
                 probe = ffmpeg.probe(temp_file.name)
                 video_info = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
                 audio_info = next((s for s in probe['streams'] if s['codec_type'] == 'audio'), None)
                 
-                # Clean up temp file
+                # Clean up temp file and GCS blob
                 os.unlink(temp_file.name)
+                blob.delete()
                 
                 return {
                     "success": True,
@@ -109,15 +116,21 @@ class GCSVideoEditor:
     
     def process_video_in_memory(self, input_stream: io.BytesIO, filter_chain: str = "", 
                                additional_params: Dict = None, audio_file: str = None) -> io.BytesIO:
-        """Process video entirely in memory using FFmpeg"""
+        """Process video using GCS for temporary storage"""
         try:
-            # Create temporary files for input and output
+            # Upload input to GCS temporarily
+            input_blob_name = f"temp/input_{os.urandom(8).hex()}.mp4"
+            output_blob_name = f"temp/output_{os.urandom(8).hex()}.mp4"
+            
+            input_stream.seek(0)
+            input_blob = bucket.blob(input_blob_name)
+            input_blob.upload_from_file(input_stream, content_type='video/mp4')
+            
+            # Download to local temp file for FFmpeg processing
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
                 with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                    # Write input to temp file
-                    input_stream.seek(0)
-                    input_temp.write(input_stream.read())
-                    input_temp.flush()
+                    # Download from GCS
+                    input_blob.download_to_filename(input_temp.name)
                     
                     # Build FFmpeg command
                     input_stream_ffmpeg = ffmpeg.input(input_temp.name)
@@ -148,19 +161,25 @@ class GCSVideoEditor:
                         stream = ffmpeg.output(input_stream_ffmpeg, output_temp.name, **output_params)
                     
                     # Run FFmpeg
-                    print(f"🔧 Processing video in memory...")
+                    print(f"🔧 Processing video...")
                     if filter_chain:
                         print(f"   Filter: {filter_chain}")
                     
                     ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
                     
-                    # Read output back to memory
-                    with open(output_temp.name, 'rb') as f:
-                        output_stream = io.BytesIO(f.read())
+                    # Upload output to GCS
+                    output_blob = bucket.blob(output_blob_name)
+                    output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
                     
-                    # Clean up temp files
+                    # Download back to memory
+                    output_stream = io.BytesIO()
+                    output_blob.download_to_file(output_stream)
+                    
+                    # Clean up temp files and GCS blobs
                     os.unlink(input_temp.name)
                     os.unlink(output_temp.name)
+                    input_blob.delete()
+                    output_blob.delete()
                     
                     return output_stream
                     
@@ -170,14 +189,20 @@ class GCSVideoEditor:
     
     def trim_video_in_memory(self, input_stream: io.BytesIO, start: float = None, 
                            end: float = None, duration: float = None, action: str = "keep") -> io.BytesIO:
-        """Trim video in memory"""
+        """Trim video using GCS for temporary storage"""
         try:
+            # Upload input to GCS temporarily
+            input_blob_name = f"temp/trim_input_{os.urandom(8).hex()}.mp4"
+            output_blob_name = f"temp/trim_output_{os.urandom(8).hex()}.mp4"
+            
+            input_stream.seek(0)
+            input_blob = bucket.blob(input_blob_name)
+            input_blob.upload_from_file(input_stream, content_type='video/mp4')
+            
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
                 with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                    # Write input to temp file
-                    input_stream.seek(0)
-                    input_temp.write(input_stream.read())
-                    input_temp.flush()
+                    # Download from GCS
+                    input_blob.download_to_filename(input_temp.name)
                     
                     input_stream_ffmpeg = ffmpeg.input(input_temp.name)
                     
@@ -250,12 +275,19 @@ class GCSVideoEditor:
                         if result.returncode != 0:
                             return None
                         
-                        # Read output back to memory
-                        with open(output_temp.name, 'rb') as f:
-                            output_stream = io.BytesIO(f.read())
+                        # Upload output to GCS
+                        output_blob = bucket.blob(output_blob_name)
+                        output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
                         
+                        # Download back to memory
+                        output_stream = io.BytesIO()
+                        output_blob.download_to_file(output_stream)
+                        
+                        # Clean up temp files and GCS blobs
                         os.unlink(input_temp.name)
                         os.unlink(output_temp.name)
+                        input_blob.delete()
+                        output_blob.delete()
                         
                         return output_stream
                     
@@ -263,13 +295,19 @@ class GCSVideoEditor:
                     print(f"🔧 Running trim operation...")
                     ffmpeg.run(output, overwrite_output=True, capture_stdout=True, capture_stderr=True)
                     
-                    # Read output back to memory
-                    with open(output_temp.name, 'rb') as f:
-                        output_stream = io.BytesIO(f.read())
+                    # Upload output to GCS
+                    output_blob = bucket.blob(output_blob_name)
+                    output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
                     
-                    # Clean up temp files
+                    # Download back to memory
+                    output_stream = io.BytesIO()
+                    output_blob.download_to_file(output_stream)
+                    
+                    # Clean up temp files and GCS blobs
                     os.unlink(input_temp.name)
                     os.unlink(output_temp.name)
+                    input_blob.delete()
+                    output_blob.delete()
                     
                     return output_stream
                     
@@ -661,18 +699,14 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 "error": str(e)
             }
     
-    def list_gcs_videos(self) -> list:
-        """List all video files in GCS bucket"""
-        try:
-            blobs = storage_client.list_blobs(BUCKET_NAME, prefix="videos/")
-            video_files = []
-            for blob in blobs:
-                if blob.name.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv')):
-                    video_files.append(blob.name)
-            return sorted(video_files)
-        except Exception as e:
-            print(f"❌ Error listing GCS videos: {e}")
-            return []
+    def list_local_videos(self) -> list:
+        """List all video files in current directory"""
+        video_exts = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"}
+        files = []
+        for file in os.listdir('.'):
+            if Path(file).suffix.lower() in video_exts:
+                files.append(file)
+        return sorted(files)
     
     def apply_edit(self, video_stream: io.BytesIO, edit_request: str) -> io.BytesIO:
         """Apply a single edit to the video stream"""
@@ -787,21 +821,22 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
         """Interactive main interface"""
         print("=" * 70)
         print("🎬 AI-Powered FFmpeg Editor - Google Cloud Storage Edition")
-        print("   All operations happen directly on GCS - No temporary folders!")
+        print("   Local videos with GCS temporary storage - No local temp folders!")
         print("=" * 70)
         
-        # List videos in GCS
-        video_files = self.list_gcs_videos()
+        # List local videos
+        video_files = self.list_local_videos()
         
         if not video_files:
-            print("\n❌ No video files found in GCS bucket!")
-            print(f"   Bucket: {BUCKET_NAME}")
-            print("   Expected path: videos/")
+            print("\n❌ No video files found in current directory!")
+            print("\nSupported formats:")
+            print("  Videos: .mp4, .avi, .mov, .mkv, .webm, .flv")
             return
         
-        print(f"\n📂 Found {len(video_files)} video file(s) in GCS:\n")
+        print(f"\n📂 Found {len(video_files)} video file(s) in current directory:\n")
         for idx, file in enumerate(video_files, 1):
-            print(f"  {idx}. {file}")
+            size = os.path.getsize(file) / (1024 * 1024)
+            print(f"  {idx}. {file} ({size:.2f} MB)")
         
         print("\n" + "=" * 70)
         while True:
@@ -824,10 +859,14 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 print("\n\n👋 Goodbye!")
                 return
         
-        # Download video to memory
-        video_stream = self.download_video_to_memory(selected_video)
-        if not video_stream:
-            print("❌ Failed to download video")
+        # Load local video to memory
+        print(f"📥 Loading video: {selected_video}")
+        try:
+            with open(selected_video, 'rb') as f:
+                video_stream = io.BytesIO(f.read())
+            print(f"✅ Video loaded: {len(video_stream.getvalue()) / (1024*1024):.2f} MB")
+        except Exception as e:
+            print(f"❌ Failed to load video: {e}")
             return
         
         # Get video info
@@ -844,7 +883,6 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 print(f"🔇 Audio: No")
         
         # Store current video info
-        self.current_video_blob = selected_video
         self.current_video_info = video_info
         
         print("\n" + "=" * 70)
@@ -892,7 +930,7 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                     # Save current video to GCS
                     save_name = input("Enter name for saved video (or press Enter for auto-generated): ").strip()
                     if not save_name:
-                        save_name = f"edited_{Path(self.current_video_blob).stem}_{len(self.edit_history)}.mp4"
+                        save_name = f"edited_{Path(selected_video).stem}_{len(self.edit_history)}.mp4"
                     
                     if not save_name.startswith("videos/"):
                         save_name = f"videos/{save_name}"
@@ -940,7 +978,7 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
             if save_final == 'y':
                 save_name = input("Enter name for final video (or press Enter for auto-generated): ").strip()
                 if not save_name:
-                    save_name = f"final_edited_{Path(self.current_video_blob).stem}.mp4"
+                    save_name = f"final_edited_{Path(selected_video).stem}.mp4"
                 
                 if not save_name.startswith("videos/"):
                     save_name = f"videos/{save_name}"
