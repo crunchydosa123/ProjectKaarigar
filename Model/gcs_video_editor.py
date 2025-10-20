@@ -273,7 +273,7 @@ class GCSVideoEditor:
                 else:
                     stream = input_stream_ffmpeg
                 
-                output = ffmpeg.output(stream, output_temp_path, vcodec='libx264', acodec='aac')
+                output = ffmpeg.output(stream, output_temp_path, vcodec='libx264', acodec='aac', **{'shortest': None})
                 
             else:  # action == "remove"
                 # This is more complex - need to concatenate parts before and after
@@ -667,12 +667,18 @@ SPEED & TIME:
 - "speed up 2x" → {{"filter_chain": "setpts=0.5*PTS", "explanation": "Speeds up video by 2x", "additional_params": {{"filter:a": "atempo=2.0"}}}}
 - "slow down 2x" → {{"filter_chain": "setpts=2.0*PTS", "explanation": "Slows down video by 2x", "additional_params": {{"filter:a": "atempo=0.5"}}}}
 
-TRIMMING & CUTTING:
+TRIMMING & CUTTING (SIMPLE OPERATIONS - NO APPENDING):
 - "trim first 10 seconds" → {{"trim_operation": {{"start": 0, "end": 10, "action": "remove"}}, "explanation": "Removes first 10 seconds"}}
 - "trim last 5 seconds" → {{"trim_operation": {{"start": -5, "end": 0, "action": "remove"}}, "explanation": "Removes last 5 seconds"}}
+- "cut first 4 seconds" → {{"trim_operation": {{"start": 0, "end": 4, "action": "remove"}}, "explanation": "Removes first 4 seconds"}}
+- "cut last 3 seconds" → {{"trim_operation": {{"start": -3, "end": 0, "action": "remove"}}, "explanation": "Removes last 3 seconds"}}
 - "keep only first 20 seconds" → {{"trim_operation": {{"start": 0, "end": 20, "action": "keep"}}, "explanation": "Keeps only first 20 seconds"}}
 - "cut from 10 to 30 seconds" → {{"trim_operation": {{"start": 10, "end": 30, "action": "keep"}}, "explanation": "Extracts segment from 10s to 30s"}}
 - "remove middle 10 seconds" → {{"complex_edit": {{"type": "remove_middle", "start": 10, "duration": 10}}, "explanation": "Removes 10 seconds from middle"}}
+
+IMPORTANT DISTINCTION:
+- "cut first 4 seconds" = SIMPLE TRIM (remove only) → use trim_operation
+- "cut first 4 seconds and add to end" = COMPLEX EDIT (remove + append) → use move_segment
 
 ADVANCED CUTTING & REARRANGING (MOST IMPORTANT):
 - "cut first 2 seconds and add to end" → {{"complex_edit": {{"type": "move_segment", "source_start": 0, "source_end": 2, "target_position": "end"}}, "explanation": "Cuts first 2s and appends to end. New video: [2s→end] + [0→2s]"}}
@@ -714,13 +720,15 @@ ADVANCED EFFECTS:
 - "pixelate" → {{"filter_chain": "scale=iw/10:ih/10,scale=iw*10:ih*10:flags=neighbor", "explanation": "Creates pixelated effect"}}
 
 CRITICAL RULES:
-1. "cut first X and add to end" ALWAYS means: remove first X seconds from beginning and append to end
-2. Use "move_segment" type with "target_position": "end" for these operations
-3. source_start and source_end must be the EXACT seconds to cut
-4. The remaining video (after the cut) comes FIRST, then the cut segment
-5. For portrait mode: ALWAYS use 9:16 aspect ratio (width = height * 9/16)
-6. Portrait crop formula: crop=ih*9/16:ih:(iw-ih*9/16)/2:0 (crops from center)
-7. For Instagram/TikTok: Add ,scale=1080:1920 after crop for standard resolution
+1. SIMPLE CUTTING: "cut first X seconds" or "trim first X seconds" = REMOVE only, NO appending
+2. COMPLEX CUTTING: "cut first X and add to end" = REMOVE first X seconds AND append to end
+3. Use "trim_operation" for simple cutting (remove only)
+4. Use "move_segment" type with "target_position": "end" for complex cutting (remove + append)
+5. source_start and source_end must be the EXACT seconds to cut
+6. The remaining video (after the cut) comes FIRST, then the cut segment
+7. For portrait mode: ALWAYS use 9:16 aspect ratio (width = height * 9/16)
+8. Portrait crop formula: crop=ih*9/16:ih:(iw-ih*9/16)/2:0 (crops from center)
+9. For Instagram/TikTok: Add ,scale=1080:1920 after crop for standard resolution
 
 Only return valid JSON. Do not include any markdown formatting or extra text.
 """
