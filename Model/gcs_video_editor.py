@@ -65,15 +65,47 @@ class GCSVideoEditor:
             print(f"❌ Download failed: {e}")
             return None
     
+    def download_video_from_url(self, url: str) -> io.BytesIO:
+        """Download video from URL to memory"""
+        try:
+            print(f"📥 Downloading video from URL...")
+            response = requests.get(url, stream=True, timeout=60)
+            response.raise_for_status()
+            
+            video_bytes = io.BytesIO()
+            total_size = 0
+            
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    video_bytes.write(chunk)
+                    total_size += len(chunk)
+            
+            print(f"✅ Downloaded {total_size / (1024*1024):.2f} MB")
+            video_bytes.seek(0)
+            return video_bytes
+        except Exception as e:
+            print(f"❌ Download from URL failed: {e}")
+            return None
+    
     def upload_video_from_memory(self, blob_name: str, video_stream: io.BytesIO) -> str:
-        """Upload video from memory to GCS"""
+        """Upload video from memory to GCS and return signed URL"""
         try:
             print(f"📤 Uploading video to GCS: {blob_name}")
             blob = bucket.blob(blob_name)
             video_stream.seek(0)
             blob.upload_from_file(video_stream, content_type='video/mp4')
+            
+            # Generate signed URL (valid for 7 days)
+            from datetime import datetime, timedelta
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.utcnow() + timedelta(days=7),
+                method="GET"
+            )
+            
             print(f"✅ Uploaded successfully")
-            return blob_name
+            print(f"🔗 Download URL: {url}")
+            return url
         except Exception as e:
             print(f"❌ Upload failed: {e}")
             return None
@@ -744,6 +776,40 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 files.append(file)
         return sorted(files)
     
+    def list_edited_videos(self) -> list:
+        """List all edited videos from GCS with their URLs"""
+        try:
+            blobs = bucket.list_blobs(prefix="edited_videos/")
+            edited_videos = []
+            
+            for blob in blobs:
+                if blob.name.endswith('.mp4'):
+                    # Generate signed URL for each video
+                    from datetime import datetime, timedelta
+                    url = blob.generate_signed_url(
+                        version="v4",
+                        expiration=datetime.utcnow() + timedelta(days=7),
+                        method="GET"
+                    )
+                    
+                    # Get blob metadata
+                    blob.reload()
+                    size_mb = blob.size / (1024 * 1024) if blob.size else 0
+                    created = blob.time_created.strftime("%Y-%m-%d %H:%M") if blob.time_created else "Unknown"
+                    
+                    edited_videos.append({
+                        'name': blob.name,
+                        'filename': blob.name.split('/')[-1],
+                        'url': url,
+                        'size_mb': size_mb,
+                        'created': created
+                    })
+            
+            return sorted(edited_videos, key=lambda x: x['created'], reverse=True)
+        except Exception as e:
+            print(f"❌ Failed to list edited videos: {e}")
+            return []
+    
     def apply_edit(self, video_stream: io.BytesIO, edit_request: str) -> io.BytesIO:
         """Apply a single edit to the video stream"""
         # Get current video info
@@ -854,12 +920,34 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 print(f"⚠️  Could not clean up {blob_name}: {e}")
     
     def main(self):
-        """Interactive main interface"""
+        """Interactive main interface with progressive editing"""
         print("=" * 70)
-        print("🎬 AI-Powered FFmpeg Editor - Google Cloud Storage Edition")
-        print("   Local videos with GCS storage - Auto-saves after each edit!")
+        print("🎬 AI-Powered FFmpeg Editor - Progressive Editing System")
+        print("   Edit local videos or continue editing from GCS!")
         print("=" * 70)
         
+        while True:
+            print("\n" + "=" * 50)
+            print("📋 CHOOSE VIDEO SOURCE:")
+            print("=" * 50)
+            print("1. 📁 Edit local video files")
+            print("2. 🔗 Continue editing from GCS (edited videos)")
+            print("3. 🚪 Exit")
+            
+            choice = input("\nEnter your choice (1-3): ").strip()
+            
+            if choice == "1":
+                self.edit_local_video()
+            elif choice == "2":
+                self.edit_from_gcs()
+            elif choice == "3":
+                print("\n👋 Goodbye!")
+                break
+            else:
+                print("❌ Invalid choice. Please enter 1, 2, or 3.")
+    
+    def edit_local_video(self):
+        """Edit a local video file"""
         # List local videos
         video_files = self.list_local_videos()
         
@@ -905,6 +993,55 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
             print(f"❌ Failed to load video: {e}")
             return
         
+        self.start_editing_session(video_stream, selected_video)
+    
+    def edit_from_gcs(self):
+        """Continue editing from GCS edited videos"""
+        edited_videos = self.list_edited_videos()
+        
+        if not edited_videos:
+            print("\n❌ No edited videos found in GCS!")
+            print("💡 Edit a local video first to create edited videos.")
+            return
+        
+        print(f"\n🔗 Found {len(edited_videos)} edited video(s) in GCS:\n")
+        for idx, video in enumerate(edited_videos, 1):
+            print(f"  {idx}. {video['filename']}")
+            print(f"     📅 Created: {video['created']}")
+            print(f"     💾 Size: {video['size_mb']:.2f} MB")
+            print(f"     🔗 URL: {video['url']}")
+            print()
+        
+        print("=" * 70)
+        while True:
+            try:
+                selection = input("Enter video number to continue editing: ").strip()
+                
+                if selection.isdigit():
+                    idx = int(selection) - 1
+                    if 0 <= idx < len(edited_videos):
+                        selected_video = edited_videos[idx]
+                        break
+                    else:
+                        print(f"❌ Invalid number. Please enter 1-{len(edited_videos)}")
+                else:
+                    print("❌ Please enter a valid number.")
+            except KeyboardInterrupt:
+                print("\n\n👋 Goodbye!")
+                return
+        
+        # Download video from GCS URL
+        print(f"📥 Downloading video: {selected_video['filename']}")
+        video_stream = self.download_video_from_url(selected_video['url'])
+        
+        if not video_stream:
+            print("❌ Failed to download video from GCS")
+            return
+        
+        self.start_editing_session(video_stream, selected_video['filename'])
+    
+    def start_editing_session(self, video_stream: io.BytesIO, video_name: str):
+        """Start an editing session with a video"""
         # Get video info
         video_info = self.get_video_info_from_memory(video_stream)
         if video_info.get("success"):
@@ -966,15 +1103,15 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                     # Save current video to GCS
                     save_name = input("Enter name for saved video (or press Enter for auto-generated): ").strip()
                     if not save_name:
-                        save_name = f"edited_{Path(selected_video).stem}_{len(self.edit_history)}.mp4"
+                        save_name = f"edited_{Path(video_name).stem}_{len(self.edit_history)}.mp4"
                     
-                    if not save_name.startswith("videos/"):
-                        save_name = f"videos/{save_name}"
+                    if not save_name.startswith("edited_videos/"):
+                        save_name = f"edited_videos/{save_name}"
                     
-                    saved_name = self.upload_video_from_memory(save_name, video_stream)
-                    if saved_name:
+                    saved_url = self.upload_video_from_memory(save_name, video_stream)
+                    if saved_url:
                         print(f"✅ Video saved to GCS: {save_name}")
-                        self.edit_history.append(f"Saved as: {save_name}")
+                        self.edit_history.append(f"Saved as: {save_name} - {saved_url}")
                     continue
                 elif not prompt:
                     print("❌ No prompt provided.")
@@ -999,14 +1136,12 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                         print(f"💾 New Size: {updated_info['size'] / (1024*1024):.2f} MB")
                         
                         # Automatically save after each edit
-                        auto_save_name = f"auto_save_{Path(selected_video).stem}_{len(self.edit_history)}.mp4"
-                        if not auto_save_name.startswith("videos/"):
-                            auto_save_name = f"videos/{auto_save_name}"
+                        auto_save_name = f"edited_videos/auto_save_{Path(video_name).stem}_{len(self.edit_history)}.mp4"
                         
-                        saved_name = self.upload_video_from_memory(auto_save_name, video_stream)
-                        if saved_name:
-                            print(f"💾 Auto-saved to GCS: {saved_name}")
-                            self.edit_history.append(f"Auto-saved: {saved_name}")
+                        saved_url = self.upload_video_from_memory(auto_save_name, video_stream)
+                        if saved_url:
+                            print(f"💾 Auto-saved to GCS: {auto_save_name}")
+                            self.edit_history.append(f"Auto-saved: {auto_save_name} - {saved_url}")
                 else:
                     print("❌ Edit failed")
                 
@@ -1025,15 +1160,16 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
             if save_final == 'y':
                 save_name = input("Enter name for final video (or press Enter for auto-generated): ").strip()
                 if not save_name:
-                    save_name = f"final_edited_{Path(selected_video).stem}.mp4"
+                    save_name = f"final_edited_{Path(video_name).stem}.mp4"
                 
-                if not save_name.startswith("videos/"):
-                    save_name = f"videos/{save_name}"
+                if not save_name.startswith("edited_videos/"):
+                    save_name = f"edited_videos/{save_name}"
                 
-                saved_name = self.upload_video_from_memory(save_name, video_stream)
-                if saved_name:
+                saved_url = self.upload_video_from_memory(save_name, video_stream)
+                if saved_url:
                     print(f"✅ Final video saved to GCS: {save_name}")
-                    print(f"\n📋 Video saved! You can access it through Google Cloud Console or gsutil commands.")
+                    print(f"🔗 Download URL: {saved_url}")
+                    print(f"\n📋 Video saved! You can download it using the URL above.")
             
             # Show all saved videos
             saved_videos = [edit for edit in self.edit_history if "Auto-saved:" in edit or "Saved as:" in edit]
