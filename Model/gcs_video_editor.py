@@ -66,21 +66,14 @@ class GCSVideoEditor:
             return None
     
     def upload_video_from_memory(self, blob_name: str, video_stream: io.BytesIO) -> str:
-        """Upload video from memory to GCS and return public URL"""
+        """Upload video from memory to GCS"""
         try:
             print(f"📤 Uploading video to GCS: {blob_name}")
             blob = bucket.blob(blob_name)
             video_stream.seek(0)
             blob.upload_from_file(video_stream, content_type='video/mp4')
-            
-            # Make the blob publicly accessible
-            blob.make_public()
-            
-            # Get the public URL
-            public_url = blob.public_url
             print(f"✅ Uploaded successfully")
-            print(f"🔗 Public URL: {public_url}")
-            return public_url
+            return blob_name
         except Exception as e:
             print(f"❌ Upload failed: {e}")
             return None
@@ -864,7 +857,7 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
         """Interactive main interface"""
         print("=" * 70)
         print("🎬 AI-Powered FFmpeg Editor - Google Cloud Storage Edition")
-        print("   Local videos with GCS temporary storage - No local temp folders!")
+        print("   Local videos with GCS storage - Auto-saves after each edit!")
         print("=" * 70)
         
         # List local videos
@@ -978,11 +971,10 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                     if not save_name.startswith("videos/"):
                         save_name = f"videos/{save_name}"
                     
-                    public_url = self.upload_video_from_memory(save_name, video_stream)
-                    if public_url:
+                    saved_name = self.upload_video_from_memory(save_name, video_stream)
+                    if saved_name:
                         print(f"✅ Video saved to GCS: {save_name}")
-                        print(f"🔗 Download Link: {public_url}")
-                        self.edit_history.append(f"Saved as: {save_name} - {public_url}")
+                        self.edit_history.append(f"Saved as: {save_name}")
                     continue
                 elif not prompt:
                     print("❌ No prompt provided.")
@@ -1005,6 +997,16 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                         if updated_info.get('duration'):
                             print(f"⏱️  New Duration: {updated_info['duration']:.2f}s")
                         print(f"💾 New Size: {updated_info['size'] / (1024*1024):.2f} MB")
+                        
+                        # Automatically save after each edit
+                        auto_save_name = f"auto_save_{Path(selected_video).stem}_{len(self.edit_history)}.mp4"
+                        if not auto_save_name.startswith("videos/"):
+                            auto_save_name = f"videos/{auto_save_name}"
+                        
+                        saved_name = self.upload_video_from_memory(auto_save_name, video_stream)
+                        if saved_name:
+                            print(f"💾 Auto-saved to GCS: {saved_name}")
+                            self.edit_history.append(f"Auto-saved: {saved_name}")
                 else:
                     print("❌ Edit failed")
                 
@@ -1028,23 +1030,19 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 if not save_name.startswith("videos/"):
                     save_name = f"videos/{save_name}"
                 
-                public_url = self.upload_video_from_memory(save_name, video_stream)
-                if public_url:
+                saved_name = self.upload_video_from_memory(save_name, video_stream)
+                if saved_name:
                     print(f"✅ Final video saved to GCS: {save_name}")
-                    print(f"🔗 Download Link: {public_url}")
-                    print(f"\n📋 You can share this link or download the video directly!")
+                    print(f"\n📋 Video saved! You can access it through Google Cloud Console or gsutil commands.")
             
-            # Show all saved video links
-            saved_videos = [edit for edit in self.edit_history if "Saved as:" in edit and "http" in edit]
+            # Show all saved videos
+            saved_videos = [edit for edit in self.edit_history if "Auto-saved:" in edit or "Saved as:" in edit]
             if saved_videos:
                 print("\n" + "=" * 70)
-                print("🔗 ALL SAVED VIDEO LINKS:")
+                print("💾 ALL SAVED VIDEOS:")
                 print("=" * 70)
                 for idx, video_info in enumerate(saved_videos, 1):
-                    # Extract URL from the edit history entry
-                    if " - " in video_info:
-                        url = video_info.split(" - ")[-1]
-                        print(f"  {idx}. {url}")
+                    print(f"  {idx}. {video_info}")
                 print("=" * 70)
         
         # Cleanup any temporary objects
