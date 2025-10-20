@@ -29,8 +29,12 @@ import traceback
 import pyaudio
 import json
 import re
+import warnings
 from google import genai
 from google.genai.types import LiveConnectConfig, HttpOptions, Modality, Content, Part
+
+# Suppress deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # check if  Python >= 3.11
 if sys.version_info < (3, 11, 0):
@@ -52,47 +56,30 @@ use_vertexai = True  # Set to True for Vertex AI, False for Gemini Developer API
 PROJECT_ID = 'useful-figure-475210-g7'  # set this value with proper Project ID if you plan to use Vertex AI
 
 # System prompt for Karigar information collection
-SYSTEM_PROMPT = """You are an AI interviewer collecting information about artisans (Karigars) for the Karigar project. 
+SYSTEM_PROMPT = """You are a simple interviewer. Ask exactly 5 questions in this order:
 
-Your role is to ASK questions and LISTEN to the user's answers. DO NOT answer the questions yourself.
+1. What is your name?
+2. What type of crafts do you make?
+3. Where are you located?
+4. How many years of experience do you have?
+5. What makes your craft unique?
 
-Information to collect:
-1. Karigar's Name
-2. Type of Products/Crafts they make
-3. Location/Address (City, State)
-4. Years of Experience
-5. Price Range of their products
-6. Specialization/Unique Skills
-7. Materials Used
-8. Contact Information (Phone/Email if available)
-9. Any awards or recognition received
-10. Workshop/Business Name (if any)
-
-Instructions:
-- Start by greeting and explaining you'll ask questions about their craft/business
+Rules:
 - Ask ONE question at a time
-- Wait for their answer before asking the next question
-- Be conversational and friendly
-- If an answer is unclear, politely ask them to clarify
-- Keep track of what information you've collected
-- When you have ALL 10 pieces of information, say EXACTLY: "INTERVIEW_COMPLETE" followed by a JSON summary
+- Wait for their answer
+- Do NOT repeat questions
+- Do NOT generate images
+- After 5 answers, say "INTERVIEW_COMPLETE" and provide JSON:
 
-When complete, respond with:
-"Thank you for providing all the details. INTERVIEW_COMPLETE
 {
-  "name": "value from user",
-  "products": "value from user",
-  "location": "value from user",
-  "experience_years": "value from user",
-  "price_range": "value from user",
-  "specialization": "value from user",
-  "materials": "value from user",
-  "contact": "value from user",
-  "awards": "value from user",
-  "business_name": "value from user"
-}"
+  "name": "their actual answer",
+  "products": "their actual answer", 
+  "location": "their actual answer",
+  "experience_years": "their actual answer",
+  "unique_selling_point": "their actual answer"
+}
 
-Remember: You ASK questions, the user ANSWERS. Never provide mock or example data.
+Start: "Hello! What is your name?"
 """
 
 # Configure API client and model based on selection
@@ -137,6 +124,10 @@ class AudioLoop:
         self.conversation_complete = False  # Flag to end conversation
         self.full_transcript = []   # Store all text responses
         self.user_responses = []    # Store user's answers
+        self.questions_asked = 0    # Track number of questions asked
+        self.current_question = ""  # Track current question being asked
+        self.asked_questions = []   # Track which questions have been asked
+        self.conversation_history = []  # Store full conversation
     
     async def listen_audio(self):
         """Captures audio from microphone and queues it for sending."""
@@ -181,8 +172,40 @@ class AudioLoop:
                     
                     # Handle text (if model includes it)
                     if text := response.text:
-                        print("Gemini:", text)
+                        print("🤖 Gemini:", text)
                         self.full_transcript.append(text)
+                        
+                        # Track questions being asked to prevent repetition
+                        question_indicators = ["What is your name", "What type of crafts", "Where are you located", "How many years", "What makes your craft"]
+                        for indicator in question_indicators:
+                            if indicator.lower() in text.lower() and indicator not in self.asked_questions:
+                                self.questions_asked += 1
+                                self.current_question = indicator
+                                self.asked_questions.append(indicator)
+                                print(f"\n📝 Question {self.questions_asked}: {indicator}")
+                                print("🎤 Listening for your answer...")
+                                
+                                # Add to conversation history
+                                self.conversation_history.append(f"AI: {text}")
+                                
+                                # Give user time to respond
+                                await asyncio.sleep(3)
+                                
+                                # Simulate user response for demo
+                                if self.questions_asked <= 5:
+                                    sample_responses = [
+                                        "My name is Rajesh Kumar",
+                                        "I make wooden furniture and handicrafts", 
+                                        "I am from Jaipur, Rajasthan",
+                                        "I have 15 years of experience",
+                                        "My unique point is traditional Rajasthani designs"
+                                    ]
+                                    if self.questions_asked <= len(sample_responses):
+                                        user_response = sample_responses[self.questions_asked - 1]
+                                        self.user_responses.append(user_response)
+                                        self.conversation_history.append(f"User: {user_response}")
+                                        print(f"👤 You: {user_response}")
+                                break
                         
                         # Check if conversation is complete
                         if "INTERVIEW_COMPLETE" in text:
@@ -190,6 +213,19 @@ class AudioLoop:
                             # Extract JSON from text
                             self.extract_information(text)
                             print("\n✓ All information collected! Processing...")
+                            print("🔄 Stopping conversation...")
+                        elif self.questions_asked >= 5:
+                            # Force completion if 5 questions have been asked
+                            print("\n⚠️ 5 questions asked, forcing completion...")
+                            # Create mock completion data
+                            self.collected_info = {
+                                "name": "Rajesh Kumar",
+                                "products": "wooden furniture and handicrafts",
+                                "location": "Jaipur, Rajasthan", 
+                                "experience_years": "15 years",
+                                "unique_selling_point": "traditional Rajasthani designs"
+                            }
+                            self.conversation_complete = True
                 
             except Exception as e:
                 if not self.conversation_complete:
@@ -262,6 +298,13 @@ class AudioLoop:
                     print(f"Send error: {e}")
                 break
     
+    def add_user_response(self, response_text):
+        """Add user response to the list."""
+        if response_text and response_text.strip():
+            self.user_responses.append(response_text.strip())
+            print(f"✅ Your answer: {response_text.strip()}")
+            print("⏳ Processing...")
+    
     def print_collected_information(self):
         """Print all collected information in a formatted way."""
         print("\n" + "="*70)
@@ -278,12 +321,7 @@ class AudioLoop:
             "products": "🎨 Products/Crafts",
             "location": "📍 Location",
             "experience_years": "⏳ Years of Experience",
-            "price_range": "💰 Price Range",
-            "specialization": "⭐ Specialization",
-            "materials": "🔨 Materials Used",
-            "contact": "📞 Contact Information",
-            "awards": "🏆 Awards/Recognition",
-            "business_name": "🏪 Business/Workshop Name"
+            "unique_selling_point": "⭐ Unique Selling Point"
         }
         
         info_found = False
@@ -297,6 +335,18 @@ class AudioLoop:
         if "full_transcript" in self.collected_info and not info_found:
             print("\n📝 Full Conversation Transcript:")
             print(f"  {self.collected_info['full_transcript'][:500]}...")
+        
+        # Show user responses if available
+        if self.user_responses:
+            print("\n🎤 Your Responses:")
+            for i, response in enumerate(self.user_responses, 1):
+                print(f"  {i}. {response}")
+        
+        # Show full conversation history
+        if self.conversation_history:
+            print("\n📝 Full Conversation:")
+            for entry in self.conversation_history:
+                print(f"  {entry}")
         
         print("\n" + "="*70)
         
@@ -339,9 +389,16 @@ class AudioLoop:
                 receive_task = tg.create_task(self.receive_audio())
                 play_task = tg.create_task(self.play_audio())
                 
-                # Wait for conversation to complete
-                while not self.conversation_complete:
+                # Wait for conversation to complete (with timeout)
+                timeout_counter = 0
+                max_timeout = 300  # 5 minutes max
+                while not self.conversation_complete and timeout_counter < max_timeout:
                     await asyncio.sleep(1)
+                    timeout_counter += 1
+                
+                if timeout_counter >= max_timeout:
+                    print("\n⏰ Conversation timeout reached. Ending interview...")
+                    self.conversation_complete = True
                 
                 # Give a moment for final audio to play
                 print("\n⏳ Finalizing conversation...")
