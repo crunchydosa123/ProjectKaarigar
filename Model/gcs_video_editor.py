@@ -1142,6 +1142,30 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                         if saved_url:
                             print(f"💾 Auto-saved to GCS: {auto_save_name}")
                             self.edit_history.append(f"Auto-saved: {auto_save_name} - {saved_url}")
+                            
+                            # Optional: choose which edited video to continue editing
+                            print("\n" + "-" * 70)
+                            print("🔗 Edited videos in GCS (choose one to continue editing, or press Enter to keep current):")
+                            edited_videos = self.list_edited_videos()
+                            if edited_videos:
+                                for idx, vid in enumerate(edited_videos, 1):
+                                    print(f"  {idx}. {vid['filename']}  (📅 {vid['created']}, 💾 {vid['size_mb']:.2f} MB)")
+                                    print(f"     URL: {vid['url']}")
+                                selection = input("Enter number to switch, or press Enter to keep current: ").strip()
+                                if selection.isdigit():
+                                    sel_idx = int(selection) - 1
+                                    if 0 <= sel_idx < len(edited_videos):
+                                        chosen = edited_videos[sel_idx]
+                                        print(f"\n📥 Loading selected edited video: {chosen['filename']}")
+                                        new_stream = self.download_video_from_url(chosen['url'])
+                                        if new_stream:
+                                            video_stream = new_stream
+                                            video_name = chosen['filename']
+                                            print("✅ Switched to selected edited video.")
+                                        else:
+                                            print("❌ Failed to load selected video; continuing with current video.")
+                            else:
+                                print("(No edited videos found yet; continuing with current video.)")
                 else:
                     print("❌ Edit failed")
                 
