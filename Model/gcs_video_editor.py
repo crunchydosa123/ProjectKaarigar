@@ -89,17 +89,16 @@ class GCSVideoEditor:
             blob = bucket.blob(temp_blob_name)
             blob.upload_from_file(video_stream, content_type='video/mp4')
             
-            # Download to a proper temp file for probing
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
-                blob.download_to_filename(temp_file.name)
+            # Create a unique temp file name
+            temp_file_path = os.path.join(tempfile.gettempdir(), f"probe_{os.urandom(8).hex()}.mp4")
+            
+            try:
+                # Download from GCS
+                blob.download_to_filename(temp_file_path)
                 
-                probe = ffmpeg.probe(temp_file.name)
+                probe = ffmpeg.probe(temp_file_path)
                 video_info = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
                 audio_info = next((s for s in probe['streams'] if s['codec_type'] == 'audio'), None)
-                
-                # Clean up temp file and GCS blob
-                os.unlink(temp_file.name)
-                blob.delete()
                 
                 return {
                     "success": True,
@@ -111,6 +110,18 @@ class GCSVideoEditor:
                     "has_audio": audio_info is not None,
                     "audio_codec": audio_info.get('codec_name') if audio_info else None
                 }
+            finally:
+                # Clean up temp file and GCS blob
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                except:
+                    pass
+                try:
+                    blob.delete()
+                except:
+                    pass
+                    
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -126,62 +137,79 @@ class GCSVideoEditor:
             input_blob = bucket.blob(input_blob_name)
             input_blob.upload_from_file(input_stream, content_type='video/mp4')
             
-            # Download to local temp file for FFmpeg processing
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                    # Download from GCS
-                    input_blob.download_to_filename(input_temp.name)
+            # Create unique temp file names
+            input_temp_path = os.path.join(tempfile.gettempdir(), f"input_{os.urandom(8).hex()}.mp4")
+            output_temp_path = os.path.join(tempfile.gettempdir(), f"output_{os.urandom(8).hex()}.mp4")
+            
+            try:
+                # Download from GCS
+                input_blob.download_to_filename(input_temp_path)
+                
+                # Build FFmpeg command
+                input_stream_ffmpeg = ffmpeg.input(input_temp_path)
+                
+                if audio_file and os.path.exists(audio_file):
+                    print(f"   🎵 Adding audio from: {os.path.basename(audio_file)}")
+                    audio_input = ffmpeg.input(audio_file)
                     
-                    # Build FFmpeg command
-                    input_stream_ffmpeg = ffmpeg.input(input_temp.name)
-                    
-                    if audio_file and os.path.exists(audio_file):
-                        print(f"   🎵 Adding audio from: {os.path.basename(audio_file)}")
-                        audio_input = ffmpeg.input(audio_file)
-                        
-                        if filter_chain:
-                            video = input_stream_ffmpeg.video.filter_(filter_chain)
-                        else:
-                            video = input_stream_ffmpeg.video
-                        
-                        stream = ffmpeg.output(
-                            video, 
-                            audio_input.audio,
-                            output_temp.name,
-                            vcodec='libx264',
-                            acodec='aac',
-                            shortest=None,
-                            **(additional_params or {})
-                        )
-                    else:
-                        output_params = additional_params or {}
-                        if filter_chain:
-                            output_params['vf'] = filter_chain
-                        
-                        stream = ffmpeg.output(input_stream_ffmpeg, output_temp.name, **output_params)
-                    
-                    # Run FFmpeg
-                    print(f"🔧 Processing video...")
                     if filter_chain:
-                        print(f"   Filter: {filter_chain}")
+                        video = input_stream_ffmpeg.video.filter_(filter_chain)
+                    else:
+                        video = input_stream_ffmpeg.video
                     
-                    ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                    stream = ffmpeg.output(
+                        video, 
+                        audio_input.audio,
+                        output_temp_path,
+                        vcodec='libx264',
+                        acodec='aac',
+                        shortest=None,
+                        **(additional_params or {})
+                    )
+                else:
+                    output_params = additional_params or {}
+                    if filter_chain:
+                        output_params['vf'] = filter_chain
                     
-                    # Upload output to GCS
-                    output_blob = bucket.blob(output_blob_name)
-                    output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
-                    
-                    # Download back to memory
-                    output_stream = io.BytesIO()
-                    output_blob.download_to_file(output_stream)
-                    
-                    # Clean up temp files and GCS blobs
-                    os.unlink(input_temp.name)
-                    os.unlink(output_temp.name)
+                    stream = ffmpeg.output(input_stream_ffmpeg, output_temp_path, **output_params)
+                
+                # Run FFmpeg
+                print(f"🔧 Processing video...")
+                if filter_chain:
+                    print(f"   Filter: {filter_chain}")
+                
+                ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                
+                # Upload output to GCS
+                output_blob = bucket.blob(output_blob_name)
+                output_blob.upload_from_filename(output_temp_path, content_type='video/mp4')
+                
+                # Download back to memory
+                output_stream = io.BytesIO()
+                output_blob.download_to_file(output_stream)
+                
+                return output_stream
+                
+            finally:
+                # Clean up temp files and GCS blobs
+                try:
+                    if os.path.exists(input_temp_path):
+                        os.remove(input_temp_path)
+                except:
+                    pass
+                try:
+                    if os.path.exists(output_temp_path):
+                        os.remove(output_temp_path)
+                except:
+                    pass
+                try:
                     input_blob.delete()
+                except:
+                    pass
+                try:
                     output_blob.delete()
-                    
-                    return output_stream
+                except:
+                    pass
                     
         except Exception as e:
             print(f"❌ Processing failed: {e}")
@@ -199,117 +227,125 @@ class GCSVideoEditor:
             input_blob = bucket.blob(input_blob_name)
             input_blob.upload_from_file(input_stream, content_type='video/mp4')
             
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_temp:
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                    # Download from GCS
-                    input_blob.download_to_filename(input_temp.name)
+            # Create unique temp file names
+            input_temp_path = os.path.join(tempfile.gettempdir(), f"trim_input_{os.urandom(8).hex()}.mp4")
+            output_temp_path = os.path.join(tempfile.gettempdir(), f"trim_output_{os.urandom(8).hex()}.mp4")
+            
+            try:
+                # Download from GCS
+                input_blob.download_to_filename(input_temp_path)
+                
+                input_stream_ffmpeg = ffmpeg.input(input_temp_path)
+                
+                if action == "keep":
+                    # Keep the segment
+                    if start is not None and end is not None:
+                        stream = input_stream_ffmpeg.trim(start=start, end=end).setpts('PTS-STARTPTS')
+                    elif start is not None and duration is not None:
+                        stream = input_stream_ffmpeg.trim(start=start, duration=duration).setpts('PTS-STARTPTS')
+                    elif duration is not None:
+                        stream = input_stream_ffmpeg.trim(duration=duration).setpts('PTS-STARTPTS')
+                    else:
+                        stream = input_stream_ffmpeg
                     
-                    input_stream_ffmpeg = ffmpeg.input(input_temp.name)
+                    output = ffmpeg.output(stream, output_temp_path, vcodec='libx264', acodec='aac')
                     
-                    if action == "keep":
-                        # Keep the segment
-                        if start is not None and end is not None:
-                            stream = input_stream_ffmpeg.trim(start=start, end=end).setpts('PTS-STARTPTS')
-                        elif start is not None and duration is not None:
-                            stream = input_stream_ffmpeg.trim(start=start, duration=duration).setpts('PTS-STARTPTS')
-                        elif duration is not None:
-                            stream = input_stream_ffmpeg.trim(duration=duration).setpts('PTS-STARTPTS')
-                        else:
-                            stream = input_stream_ffmpeg
+                else:  # action == "remove"
+                    # This is more complex - need to concatenate parts before and after
+                    probe = ffmpeg.probe(input_temp_path)
+                    video_duration = float(probe['format']['duration'])
                         
-                        output = ffmpeg.output(stream, output_temp.name, vcodec='libx264', acodec='aac')
-                        
-                    else:  # action == "remove"
-                        # This is more complex - need to concatenate parts before and after
-                        probe = ffmpeg.probe(input_temp.name)
-                        video_duration = float(probe['format']['duration'])
-                        
-                        # Get video duration if end is negative (relative to end)
-                        if end and end < 0:
-                            end = video_duration + end
-                        
-                        # Create segments
-                        segments = []
-                        
-                        # Part 1: Before removal
-                        if start > 0:
-                            temp1 = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                            part1 = ffmpeg.input(input_temp.name).trim(start=0, end=start).setpts('PTS-STARTPTS')
-                            ffmpeg.output(part1, temp1.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                            segments.append(temp1.name)
-                        
-                        # Part 2: After removal
-                        if end < video_duration:
-                            temp2 = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-                            part2 = ffmpeg.input(input_temp.name).trim(start=end).setpts('PTS-STARTPTS')
-                            ffmpeg.output(part2, temp2.name, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
-                            segments.append(temp2.name)
-                        
-                        if len(segments) == 0:
-                            return None
-                        
-                        # Concatenate segments
-                        concat_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                    # Get video duration if end is negative (relative to end)
+                    if end and end < 0:
+                        end = video_duration + end
+                    
+                    # Create segments
+                    segments = []
+                    
+                    # Part 1: Before removal
+                    if start > 0:
+                        temp1_path = os.path.join(tempfile.gettempdir(), f"part1_{os.urandom(8).hex()}.mp4")
+                        part1 = ffmpeg.input(input_temp_path).trim(start=0, end=start).setpts('PTS-STARTPTS')
+                        ffmpeg.output(part1, temp1_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments.append(temp1_path)
+                    
+                    # Part 2: After removal
+                    if end < video_duration:
+                        temp2_path = os.path.join(tempfile.gettempdir(), f"part2_{os.urandom(8).hex()}.mp4")
+                        part2 = ffmpeg.input(input_temp_path).trim(start=end).setpts('PTS-STARTPTS')
+                        ffmpeg.output(part2, temp2_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
+                        segments.append(temp2_path)
+                    
+                    if len(segments) == 0:
+                        return None
+                    
+                    # Concatenate segments
+                    concat_file_path = os.path.join(tempfile.gettempdir(), f"concat_{os.urandom(8).hex()}.txt")
+                    with open(concat_file_path, 'w') as concat_file:
                         for seg in segments:
                             concat_file.write(f"file '{os.path.abspath(seg)}'\n")
-                        concat_file.close()
-                        
-                        # Use FFmpeg concat demuxer
-                        cmd = [
-                            'ffmpeg',
-                            '-f', 'concat',
-                            '-safe', '0',
-                            '-i', concat_file.name,
-                            '-c', 'copy',
-                            '-y',
-                            output_temp.name
-                        ]
-                        
-                        result = subprocess.run(cmd, capture_output=True, text=True)
-                        
-                        # Cleanup
-                        os.unlink(concat_file.name)
-                        for seg in segments:
-                            os.unlink(seg)
-                        
-                        if result.returncode != 0:
-                            return None
-                        
-                        # Upload output to GCS
-                        output_blob = bucket.blob(output_blob_name)
-                        output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
-                        
-                        # Download back to memory
-                        output_stream = io.BytesIO()
-                        output_blob.download_to_file(output_stream)
-                        
-                        # Clean up temp files and GCS blobs
-                        os.unlink(input_temp.name)
-                        os.unlink(output_temp.name)
-                        input_blob.delete()
-                        output_blob.delete()
-                        
-                        return output_stream
                     
-                    # Run FFmpeg for keep action
-                    print(f"🔧 Running trim operation...")
-                    ffmpeg.run(output, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                    # Use FFmpeg concat demuxer
+                    cmd = [
+                        'ffmpeg',
+                        '-f', 'concat',
+                        '-safe', '0',
+                        '-i', concat_file_path,
+                        '-c', 'copy',
+                        '-y',
+                        output_temp_path
+                    ]
                     
-                    # Upload output to GCS
-                    output_blob = bucket.blob(output_blob_name)
-                    output_blob.upload_from_filename(output_temp.name, content_type='video/mp4')
+                    result = subprocess.run(cmd, capture_output=True, text=True)
                     
-                    # Download back to memory
-                    output_stream = io.BytesIO()
-                    output_blob.download_to_file(output_stream)
+                    # Cleanup segments and concat file
+                    try:
+                        os.remove(concat_file_path)
+                    except:
+                        pass
+                    for seg in segments:
+                        try:
+                            os.remove(seg)
+                        except:
+                            pass
                     
-                    # Clean up temp files and GCS blobs
-                    os.unlink(input_temp.name)
-                    os.unlink(output_temp.name)
+                    if result.returncode != 0:
+                        return None
+                
+                # Run FFmpeg for keep action
+                print(f"🔧 Running trim operation...")
+                ffmpeg.run(output, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                
+                # Upload output to GCS
+                output_blob = bucket.blob(output_blob_name)
+                output_blob.upload_from_filename(output_temp_path, content_type='video/mp4')
+                
+                # Download back to memory
+                output_stream = io.BytesIO()
+                output_blob.download_to_file(output_stream)
+                
+                return output_stream
+                
+            finally:
+                # Clean up temp files and GCS blobs
+                try:
+                    if os.path.exists(input_temp_path):
+                        os.remove(input_temp_path)
+                except:
+                    pass
+                try:
+                    if os.path.exists(output_temp_path):
+                        os.remove(output_temp_path)
+                except:
+                    pass
+                try:
                     input_blob.delete()
+                except:
+                    pass
+                try:
                     output_blob.delete()
-                    
-                    return output_stream
+                except:
+                    pass
                     
         except Exception as e:
             print(f"❌ Trim operation failed: {e}")
