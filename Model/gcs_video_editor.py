@@ -52,6 +52,8 @@ class GCSVideoEditor:
         self.current_video_blob = None
         self.current_video_info = None
         self.edit_history = []
+        self.current_topic = None
+        self.current_base_prefix = None
         
     def download_video_to_memory(self, blob_name: str) -> io.BytesIO:
         """Download video from GCS to memory"""
@@ -776,10 +778,11 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 files.append(file)
         return sorted(files)
     
-    def list_edited_videos(self) -> list:
-        """List all edited videos from GCS with their URLs"""
+    def list_edited_videos(self, prefix: str = None) -> list:
+        """List all edited videos from GCS with their URLs, optionally filtered by prefix"""
         try:
-            blobs = bucket.list_blobs(prefix="edited_videos/")
+            effective_prefix = prefix if prefix is not None else "edited_videos/"
+            blobs = bucket.list_blobs(prefix=effective_prefix)
             edited_videos = []
             
             for blob in blobs:
@@ -997,14 +1000,51 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
     
     def edit_from_gcs(self):
         """Continue editing from GCS edited videos"""
-        edited_videos = self.list_edited_videos()
+        # List available topics (subfolders under edited_videos/)
+        try:
+            print("\n🗂️  Fetching topics...")
+            all_blobs = list(bucket.list_blobs(prefix="edited_videos/"))
+            topics = sorted({b.name.split('/')[1] for b in all_blobs if b.name.count('/') >= 2})
+        except Exception as e:
+            print(f"❌ Failed to list topics: {e}")
+            topics = []
         
-        if not edited_videos:
-            print("\n❌ No edited videos found in GCS!")
-            print("💡 Edit a local video first to create edited videos.")
+        if not topics:
+            print("\n❌ No topics found in GCS edited_videos/!")
+            print("💡 Edit a local video first to create a topic.")
             return
         
-        print(f"\n🔗 Found {len(edited_videos)} edited video(s) in GCS:\n")
+        print(f"\n📚 Found {len(topics)} topic(s):\n")
+        for idx, topic in enumerate(topics, 1):
+            print(f"  {idx}. {topic}")
+        
+        print("=" * 70)
+        while True:
+            try:
+                selection = input("Enter topic number to open: ").strip()
+                if selection.isdigit():
+                    t_idx = int(selection) - 1
+                    if 0 <= t_idx < len(topics):
+                        chosen_topic = topics[t_idx]
+                        break
+                    else:
+                        print(f"❌ Invalid number. Please enter 1-{len(topics)}")
+                else:
+                    print("❌ Please enter a valid number.")
+            except KeyboardInterrupt:
+                print("\n\n👋 Goodbye!")
+                return
+        
+        # Now list videos within the chosen topic
+        self.current_topic = chosen_topic
+        self.current_base_prefix = f"edited_videos/{self.current_topic}/"
+        edited_videos = self.list_edited_videos(prefix=self.current_base_prefix)
+        
+        if not edited_videos:
+            print("\n❌ No edited videos found in this topic!")
+            return
+        
+        print(f"\n🔗 Found {len(edited_videos)} edited video(s) in topic '{self.current_topic}':\n")
         for idx, video in enumerate(edited_videos, 1):
             print(f"  {idx}. {video['filename']}")
             print(f"     📅 Created: {video['created']}")
@@ -1058,9 +1098,15 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
         # Store current video info
         self.current_video_info = video_info
         
+        # Ask for topic and set base prefix
+        default_topic = Path(video_name).stem
+        topic = input(f"\n🗂️  Enter topic/folder name (default: {default_topic}): ").strip() or default_topic
+        self.current_topic = topic
+        self.current_base_prefix = f"edited_videos/{self.current_topic}/"
+        
         # Save original video once to edited_videos so users can revert/edit from it later
         try:
-            original_blob_name = f"edited_videos/original_{Path(video_name).stem}.mp4"
+            original_blob_name = f"{self.current_base_prefix}original_{Path(video_name).stem}.mp4"
             original_blob = bucket.blob(original_blob_name)
             if not original_blob.exists():
                 print(f"\n💾 Saving original video copy to GCS: {original_blob_name}")
@@ -1120,8 +1166,8 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                     if not save_name:
                         save_name = f"edited_{Path(video_name).stem}_{len(self.edit_history)}.mp4"
                     
-                    if not save_name.startswith("edited_videos/"):
-                        save_name = f"edited_videos/{save_name}"
+                    if not save_name.startswith(self.current_base_prefix):
+                        save_name = f"{self.current_base_prefix}{save_name}"
                     
                     saved_url = self.upload_video_from_memory(save_name, video_stream)
                     if saved_url:
@@ -1151,7 +1197,7 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                         print(f"💾 New Size: {updated_info['size'] / (1024*1024):.2f} MB")
                         
                         # Automatically save after each edit
-                        auto_save_name = f"edited_videos/auto_save_{Path(video_name).stem}_{len(self.edit_history)}.mp4"
+                        auto_save_name = f"{self.current_base_prefix}auto_save_{Path(video_name).stem}_{len(self.edit_history)}.mp4"
                         
                         saved_url = self.upload_video_from_memory(auto_save_name, video_stream)
                         if saved_url:
@@ -1160,8 +1206,8 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                             
                             # Optional: choose which edited video to continue editing
                             print("\n" + "-" * 70)
-                            print("🔗 Edited videos in GCS (choose one to continue editing, or press Enter to keep current):")
-                            edited_videos = self.list_edited_videos()
+                            print(f"🔗 Edited videos in topic '{self.current_topic}' (choose one to continue editing, or press Enter to keep current):")
+                            edited_videos = self.list_edited_videos(prefix=self.current_base_prefix)
                             if edited_videos:
                                 for idx, vid in enumerate(edited_videos, 1):
                                     print(f"  {idx}. {vid['filename']}  (📅 {vid['created']}, 💾 {vid['size_mb']:.2f} MB)")
@@ -1180,7 +1226,7 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                                         else:
                                             print("❌ Failed to load selected video; continuing with current video.")
                             else:
-                                print("(No edited videos found yet; continuing with current video.)")
+                                print("(No edited videos found yet in this topic; continuing with current video.)")
                 else:
                     print("❌ Edit failed")
                 
@@ -1201,8 +1247,8 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 if not save_name:
                     save_name = f"final_edited_{Path(video_name).stem}.mp4"
                 
-                if not save_name.startswith("edited_videos/"):
-                    save_name = f"edited_videos/{save_name}"
+                if not save_name.startswith(self.current_base_prefix):
+                    save_name = f"{self.current_base_prefix}{save_name}"
                 
                 saved_url = self.upload_video_from_memory(save_name, video_stream)
                 if saved_url:
