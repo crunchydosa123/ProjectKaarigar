@@ -1058,6 +1058,21 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
         # Store current video info
         self.current_video_info = video_info
         
+        # Save original video once to edited_videos so users can revert/edit from it later
+        try:
+            original_blob_name = f"edited_videos/original_{Path(video_name).stem}.mp4"
+            original_blob = bucket.blob(original_blob_name)
+            if not original_blob.exists():
+                print(f"\n💾 Saving original video copy to GCS: {original_blob_name}")
+                orig_url = self.upload_video_from_memory(original_blob_name, video_stream)
+                if orig_url:
+                    print(f"🔗 Original video URL: {orig_url}")
+                    self.edit_history.append(f"Original saved: {original_blob_name} - {orig_url}")
+            else:
+                print(f"\nℹ️  Original already saved: {original_blob_name}")
+        except Exception as e:
+            print(f"⚠️  Could not save original video: {e}")
+        
         print("\n" + "=" * 70)
         print("✨ What would you like to do with this video?")
         print("\n📝 VISUAL EFFECTS:")
