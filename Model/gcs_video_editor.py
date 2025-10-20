@@ -287,13 +287,13 @@ class GCSVideoEditor:
                 # Keep the segment - handle both video and audio
                 if start is not None and end is not None:
                     video_stream = input_stream_ffmpeg.video.trim(start=start, end=end).setpts('PTS-STARTPTS')
-                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', start=start, end=end).afilter('asetpts', 'PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.filter('atrim', start=start, end=end).filter('asetpts', 'PTS-STARTPTS')
                 elif start is not None and duration is not None:
                     video_stream = input_stream_ffmpeg.video.trim(start=start, duration=duration).setpts('PTS-STARTPTS')
-                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', start=start, duration=duration).afilter('asetpts', 'PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.filter('atrim', start=start, duration=duration).filter('asetpts', 'PTS-STARTPTS')
                 elif duration is not None:
                     video_stream = input_stream_ffmpeg.video.trim(duration=duration).setpts('PTS-STARTPTS')
-                    audio_stream = input_stream_ffmpeg.audio.afilter('atrim', duration=duration).afilter('asetpts', 'PTS-STARTPTS')
+                    audio_stream = input_stream_ffmpeg.audio.filter('atrim', duration=duration).filter('asetpts', 'PTS-STARTPTS')
                 else:
                     video_stream = input_stream_ffmpeg.video
                     audio_stream = input_stream_ffmpeg.audio
@@ -329,7 +329,7 @@ class GCSVideoEditor:
                 if start > 0:
                     temp1_path = os.path.join(tempfile.gettempdir(), f"part1_{os.urandom(8).hex()}.mp4")
                     part1_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=start).setpts('PTS-STARTPTS')
-                    part1_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=start).afilter('asetpts', 'PTS-STARTPTS')
+                    part1_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=0, end=start).filter('asetpts', 'PTS-STARTPTS')
                     ffmpeg.output(part1_video, part1_audio, temp1_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                     segments.append(temp1_path)
                     temp_files.append(temp1_path)
@@ -338,7 +338,7 @@ class GCSVideoEditor:
                 if end < video_duration:
                     temp2_path = os.path.join(tempfile.gettempdir(), f"part2_{os.urandom(8).hex()}.mp4")
                     part2_video = ffmpeg.input(input_temp_path).video.trim(start=end).setpts('PTS-STARTPTS')
-                    part2_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=end).afilter('asetpts', 'PTS-STARTPTS')
+                    part2_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=end).filter('asetpts', 'PTS-STARTPTS')
                     ffmpeg.output(part2_video, part2_audio, temp2_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                     segments.append(temp2_path)
                     temp_files.append(temp2_path)
@@ -454,7 +454,7 @@ class GCSVideoEditor:
                 
                 print(f"\n   📹 Step 1: Extracting segment to move ({source_start}s to {source_end}s)...")
                 segment_video = ffmpeg.input(input_temp_path).video.trim(start=source_start, end=source_end).setpts('PTS-STARTPTS')
-                segment_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_start, end=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                segment_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=source_start, end=source_end).filter('asetpts', 'PTS-STARTPTS')
                 ffmpeg.output(segment_video, segment_audio, temp_segment_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                 
                 segments_to_concat = []
@@ -467,7 +467,7 @@ class GCSVideoEditor:
                         temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
                         print(f"      → Before segment: 0s to {source_start}s")
                         before_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                        before_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=source_start).afilter('asetpts', 'PTS-STARTPTS')
+                        before_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=0, end=source_start).filter('asetpts', 'PTS-STARTPTS')
                         ffmpeg.output(before_video, before_audio, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_before_path)
                         temp_files.append(temp_before_path)
@@ -477,7 +477,7 @@ class GCSVideoEditor:
                         temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
                         print(f"      → After segment: {source_end}s to {video_duration}s")
                         after_video = ffmpeg.input(input_temp_path).video.trim(start=source_end).setpts('PTS-STARTPTS')
-                        after_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                        after_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=source_end).filter('asetpts', 'PTS-STARTPTS')
                         ffmpeg.output(after_video, after_audio, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_after_path)
                         temp_files.append(temp_after_path)
@@ -493,7 +493,7 @@ class GCSVideoEditor:
                     if source_start > 0:
                         temp_before_path = os.path.join(tempfile.gettempdir(), f"before_{os.urandom(8).hex()}.mp4")
                         before_video = ffmpeg.input(input_temp_path).video.trim(start=0, end=source_start).setpts('PTS-STARTPTS')
-                        before_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=0, end=source_start).afilter('asetpts', 'PTS-STARTPTS')
+                        before_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=0, end=source_start).filter('asetpts', 'PTS-STARTPTS')
                         ffmpeg.output(before_video, before_audio, temp_before_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_before_path)
                         temp_files.append(temp_before_path)
@@ -502,7 +502,7 @@ class GCSVideoEditor:
                     if source_end < video_duration:
                         temp_after_path = os.path.join(tempfile.gettempdir(), f"after_{os.urandom(8).hex()}.mp4")
                         after_video = ffmpeg.input(input_temp_path).video.trim(start=source_end).setpts('PTS-STARTPTS')
-                        after_audio = ffmpeg.input(input_temp_path).audio.afilter('atrim', start=source_end).afilter('asetpts', 'PTS-STARTPTS')
+                        after_audio = ffmpeg.input(input_temp_path).audio.filter('atrim', start=source_end).filter('asetpts', 'PTS-STARTPTS')
                         ffmpeg.output(after_video, after_audio, temp_after_path, acodec='aac', vcodec='libx264').run(overwrite_output=True, quiet=True)
                         segments_to_concat.append(temp_after_path)
                         temp_files.append(temp_after_path)
@@ -812,6 +812,12 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
                 response_text = response_text.replace("```json", "").replace("```", "").strip()
             elif response_text.startswith("```"):
                 response_text = response_text.replace("```", "").strip()
+            
+            # Fix common typos in AI response
+            response_text = response_text.replace('"removve"', '"remove"')
+            response_text = response_text.replace("'removve'", "'remove'")
+            response_text = response_text.replace('"keeep"', '"keep"')
+            response_text = response_text.replace("'keeep'", "'keep'")
             
             result = json.loads(response_text)
             
