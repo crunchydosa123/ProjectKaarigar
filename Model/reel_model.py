@@ -4,6 +4,7 @@ from google import genai
 from google.genai.types import GenerateVideosConfig
 import os, re
 import subprocess
+import shlex
 
 # ------------------------
 # CONFIGURE VERTEX AI
@@ -195,8 +196,107 @@ def create_reel(user_prompt):
         print("❌ Not all segments generated successfully. Cannot stitch final video.")
 
 # ------------------------
+# NEW: Create short video from a single image (Ken Burns style)
+# ------------------------
+def create_segment_from_image(image_path: str, index: int, duration: float = 8.0,
+                              output_size=(1080, 1920), fps: int = 25) -> str:
+    """
+    Create an 8s vertical clip from an image using ffmpeg zoompan.
+    Returns local path to generated segment or None on error.
+    """
+    out_name = os.path.join(LOCAL_DIR, f"segment_img_{index+1}.mp4")
+    w, h = output_size
+    frames = int(duration * fps)
+    # zoompan parameters: small zoom increment for gentle zoom-in
+    zoom_inc = 0.0008
+    vf = f"scale={w}:{h},zoompan=z='zoom+{zoom_inc}':d={frames}:s={w}x{h}"
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1",
+        "-i", image_path,
+        "-vf", vf,
+        "-c:v", "libx264",
+        "-t", str(duration),
+        "-r", str(fps),
+        "-pix_fmt", "yuv420p",
+        out_name
+    ]
+    try:
+        print(f"Generating segment from image: {image_path} -> {out_name}")
+        subprocess.run(cmd, check=True)
+        return out_name
+    except subprocess.CalledProcessError as e:
+        print(f"❌ ffmpeg failed for {image_path}: {e}")
+        return None
+
+# ------------------------
+# NEW: Collect image paths interactively (Windows-style)
+# ------------------------
+def collect_image_paths_from_user() -> list:
+    print("\nProvide image file paths (Windows style) separated by commas, e.g.:")
+    print("C:\\path\\img1.jpg, C:\\path\\img2.png")
+    raw = input("> Image paths: ").strip()
+    if not raw:
+        return []
+    parts = [p.strip().strip('"') for p in raw.split(",") if p.strip()]
+    return parts
+
+# ------------------------
+# NEW: Full pipeline: create reel from user images
+# ------------------------
+def create_reel_from_images():
+    image_paths = collect_image_paths_from_user()
+    if not image_paths:
+        print("❌ No images provided. Exiting.")
+        return
+
+    duration_per = 8.0
+    print(f"Creating {len(image_paths)} segments ({duration_per}s each)...")
+    video_paths = []
+    for i, img in enumerate(image_paths):
+        seg = create_segment_from_image(img, i, duration=duration_per)
+        if seg:
+            video_paths.append(seg)
+        else:
+            print(f"⚠ Skipping {img}")
+
+    if not video_paths:
+        print("❌ No segments were created.")
+        return
+
+    # Optional: allow user to add background music (simple approach)
+    add_music = input("\nAdd background music? Enter MP3 path or press Enter to skip: ").strip()
+    if add_music:
+        # Mix music into final stitched file after stitching (keeps segments untouched)
+        final_temp = "final_reel_temp.mp4"
+        stitch_videos_ffmpeg(video_paths, output_file=final_temp)
+        final_with_audio = "final_reel_with_audio.mp4"
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", final_temp,
+            "-i", add_music,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-shortest",
+            final_with_audio
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"🎉 Final video with audio saved as {final_with_audio}")
+        except subprocess.CalledProcessError as e:
+            print("⚠ Failed to add audio:", e)
+    else:
+        stitch_videos_ffmpeg(video_paths)
+
+# ------------------------
 # RUN
 # ------------------------
 if __name__ == "__main__":
-    user_prompt = input("Enter a prompt for your reel: ")
-    create_reel(user_prompt)
+    print("1: Generate reel from AI prompt (existing pipeline)")
+    print("2: Create reel from local images")
+    choice = input("Choose (1 or 2): ").strip()
+    if choice == "2":
+        create_reel_from_images()
+    else:
+        user_prompt = input("Enter a prompt for your reel: ")
+        create_reel(user_prompt)

@@ -1,0 +1,3 @@
+file 'D:\ProjectKaarigar\Model\images (2).jpeg'
+duration 8.0
+file 'D:\ProjectKaarigar\Model\images (2).jpeg'
