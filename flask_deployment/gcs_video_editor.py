@@ -96,12 +96,15 @@ class GCSVideoEditor:
             blob.upload_from_file(video_stream, content_type='video/mp4')
             
             # Generate signed URL (valid for 7 days)
+            '''
             from datetime import datetime, timedelta
             url = blob.generate_signed_url(
                 version="v4",
                 expiration=datetime.utcnow() + timedelta(days=7),
                 method="GET"
             )
+            '''
+            url = blob.public_url
             
             print(f"✅ Uploaded successfully")
             print(f"🔗 Download URL: {url}")
