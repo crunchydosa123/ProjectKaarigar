@@ -8,6 +8,7 @@ from gcs_video_editor import GCSVideoEditor, TRENDING_SONGS
 import tempfile
 import logging
 import gc
+import base64
 
 # ----------------------------
 # Flask App & Logging Setup
@@ -175,6 +176,24 @@ def edit_video():
         edited_base64 = base64.b64encode(edited_stream.read()).decode("utf-8")
         logging.info("Returning edited video base64, length=%d", len(edited_base64))
 
+    except Exception as e:
+        logging.exception("Unhandled error in /edit")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        try:
+            if 'video_stream' in locals() and video_stream:
+                video_stream.close()
+                del video_stream
+            if 'edited_stream' in locals() and edited_stream:
+                edited_stream.close()
+                del edited_stream
+            import gc
+            gc.collect()
+            logging.info("Memory cleared after edit")
+        except Exception as e:
+            logging.warning("Memory cleanup failed: %s", e)
+
         return jsonify({
             "success": True,
             "video_info": updated_info,
@@ -182,25 +201,7 @@ def edit_video():
             "edited_video": edited_base64,
             "message": "Edit applied successfully"
         })
-
-    except Exception as e:
-        logging.exception("Unhandled error in /edit")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        # Cleanup memory
-        try:
-            if video_stream:
-                video_stream.close()
-                del video_stream
-            if edited_stream:
-                edited_stream.close()
-                del edited_stream
-            gc.collect()
-            logging.info("Memory cleared after /edit")
-        except Exception as cleanup_error:
-            logging.warning("Memory cleanup failed: %s", cleanup_error)
-
+    
 
 @app.route('/trending-songs', methods=['GET'])
 def get_trending_songs():

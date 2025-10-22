@@ -497,13 +497,6 @@ class GCSVideoEditor:
                             ]
                             result = subprocess.run(cmd, capture_output=True, text=True)
                         
-                        # Cleanup temp files
-                        os.unlink(concat_file.name)
-                        for seg in segments_to_concat:
-                            os.unlink(seg)
-                        os.unlink(temp_segment.name)
-                        os.unlink(input_temp.name)
-                        
                         if result.returncode != 0:
                             return None
                         
@@ -511,7 +504,6 @@ class GCSVideoEditor:
                         with open(output_temp.name, 'rb') as f:
                             output_stream = io.BytesIO(f.read())
                         
-                        os.unlink(output_temp.name)
                         
                         return output_stream
             
@@ -553,11 +545,6 @@ class GCSVideoEditor:
                         
                         result = subprocess.run(cmd, capture_output=True, text=True)
                         
-                        # Cleanup
-                        os.unlink(concat_file.name)
-                        for copy in temp_copies:
-                            os.unlink(copy)
-                        os.unlink(input_temp.name)
                         
                         if result.returncode != 0:
                             return None
@@ -566,7 +553,6 @@ class GCSVideoEditor:
                         with open(output_temp.name, 'rb') as f:
                             output_stream = io.BytesIO(f.read())
                         
-                        os.unlink(output_temp.name)
                         
                         return output_stream
             

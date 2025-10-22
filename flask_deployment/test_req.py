@@ -9,9 +9,9 @@ with open('Ghibli_Art_Style_Video_Generated (1).mp4', 'rb') as f:
 # Apply edit
 response = requests.post('https://video-editor-298842469563.asia-south1.run.app/edit', json={
     'file': video_data,
-    'edit_prompt': 'cut the first 2 seconds of the video',
+    'edit_prompt': 'make the video vertical',
     'topic': 'my_project',
-    'save_name': 'bw_video'
+    'save_name': 'bw_video234'
 })
 
 result = response.json()
