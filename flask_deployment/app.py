@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from gcs_video_editor import GCSVideoEditor, TRENDING_SONGS
 import tempfile
 import logging
+import gc
 
 # ----------------------------
 # Flask App & Logging Setup
@@ -123,6 +124,11 @@ def upload_video():
 @app.route('/edit', methods=['POST'])
 def edit_video():
     """Apply edits to a video"""
+    video_stream = None
+    edited_stream = None
+    updated_info = None
+    saved_url = None
+
     try:
         data = request.get_json()
         logging.info("Received /edit request, JSON present=%s", bool(data))
@@ -157,35 +163,43 @@ def edit_video():
         logging.info("Edited video info retrieved")
 
         # Save to GCS if requested
-        saved_url = None
         if save_name:
-            try:
-                blob_name = f"edited_videos/{topic}/{save_name}"
-                if not blob_name.endswith(".mp4"):
-                    blob_name += ".mp4"
-                saved_url = video_editor.upload_video_from_memory(blob_name, edited_stream)
-                logging.info("Uploaded edited video to GCS: %s", saved_url)
-            except Exception as e:
-                logging.exception("Failed to save edited video to GCS")
-                return jsonify({"error": f"Failed to save video: {str(e)}"}), 500
+            blob_name = f"edited_videos/{topic}/{save_name}"
+            if not blob_name.endswith(".mp4"):
+                blob_name += ".mp4"
+            saved_url = video_editor.upload_video_from_memory(blob_name, edited_stream)
+            logging.info("Uploaded edited video to GCS: %s", saved_url)
 
         # Return edited video as base64
         edited_stream.seek(0)
-        import base64
         edited_base64 = base64.b64encode(edited_stream.read()).decode("utf-8")
         logging.info("Returning edited video base64, length=%d", len(edited_base64))
 
         return jsonify({
             "success": True,
-            "edited_video": edited_base64,
             "video_info": updated_info,
             "saved_url": saved_url,
+            "edited_video": edited_base64,
             "message": "Edit applied successfully"
         })
 
     except Exception as e:
         logging.exception("Unhandled error in /edit")
         return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Cleanup memory
+        try:
+            if video_stream:
+                video_stream.close()
+                del video_stream
+            if edited_stream:
+                edited_stream.close()
+                del edited_stream
+            gc.collect()
+            logging.info("Memory cleared after /edit")
+        except Exception as cleanup_error:
+            logging.warning("Memory cleanup failed: %s", cleanup_error)
 
 
 @app.route('/trending-songs', methods=['GET'])
