@@ -198,9 +198,87 @@ def edit_video():
             "success": True,
             "video_info": updated_info,
             "saved_url": saved_url,
-            "edited_video": edited_base64,
             "message": "Edit applied successfully"
         })
+    
+@app.route('/add-trending-audio', methods=['POST'])
+def add_trending_audio():
+    """Apply edits to a video"""
+    video_stream = None
+    edited_stream = None
+    updated_info = None
+    saved_url = None
+
+    try:
+        data = request.get_json()
+        logging.info("Received /add-trending-audio request, JSON present=%s", bool(data))
+
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        # Validate required fields
+        for field in ['file', 'song_id']:
+            if field not in data:
+                logging.error("Missing required field: %s", field)
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        file_data = data['file']
+        song_id = data['song_id']
+        topic = data.get('topic', 'default')
+        save_name = data.get('save_name')
+
+        # Decode file
+        video_stream = decode_base64_file(file_data)
+
+        # Apply edit
+        logging.info("Applying song id: %s", song_id)
+        edited_stream = video_editor.add_trending_audio(video_stream, song_id)
+        if not edited_stream:
+            logging.error("apply_edit returned None")
+            return jsonify({"error": "Edit operation failed"}), 500
+
+        # Get updated info
+        edited_stream.seek(0)
+        updated_info = video_editor.get_video_info_from_memory(edited_stream)
+        logging.info("Edited video info retrieved")
+
+        # Save to GCS if requested
+        if save_name:
+            blob_name = f"edited_videos/{topic}/{save_name}"
+            if not blob_name.endswith(".mp4"):
+                blob_name += ".mp4"
+            saved_url = video_editor.upload_video_from_memory(blob_name, edited_stream)
+            logging.info("Uploaded edited (added trending audio) video to GCS: %s", saved_url)
+
+        # Return edited video as base64
+        edited_stream.seek(0)
+        edited_base64 = base64.b64encode(edited_stream.read()).decode("utf-8")
+        logging.info("Returning edited (added trending audio) video base64, length=%d", len(edited_base64))
+
+        return jsonify({
+            "success": True,
+            "video_info": updated_info,
+            "saved_url": saved_url,
+            "message": "Edit applied successfully"
+        })
+
+    except Exception as e:
+        logging.exception("Unhandled error in /edit")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        try:
+            if 'video_stream' in locals() and video_stream:
+                video_stream.close()
+                del video_stream
+            if 'edited_stream' in locals() and edited_stream:
+                edited_stream.close()
+                del edited_stream
+            import gc
+            gc.collect()
+            logging.info("Memory cleared after edit")
+        except Exception as e:
+            logging.warning("Memory cleanup failed: %s", e)
     
 
 @app.route('/trending-songs', methods=['GET'])

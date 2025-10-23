@@ -1200,6 +1200,24 @@ Only return valid JSON. Do not include any markdown formatting or extra text.
         
         print("\n👋 Thank you for using GCS Video Editor!")
 
+    def add_trending_audio(self, video_stream: io.BytesIO, song_index: int) -> io.BytesIO:
+        """Add a trending song to the video"""
+        if song_index < 0 or song_index >= len(TRENDING_SONGS):
+            print("❌ Invalid song index.")
+            return None
+
+        # Download the selected song
+        selected_song = TRENDING_SONGS[song_index]
+        print(f"🎵 Adding trending song: {selected_song['title']} by {selected_song['artist']}")
+        audio_file = self.download_song(selected_song)
+
+        if not audio_file:
+            print("❌ Failed to download the selected song.")
+            return None
+
+        # Process the video with the audio file
+        return self.process_video_in_memory(video_stream, audio_file=audio_file)
+
 
 if __name__ == "__main__":
     try:
