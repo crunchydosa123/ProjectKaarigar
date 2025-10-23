@@ -15,7 +15,7 @@ except Exception:
 conv_bp = Blueprint("converse", __name__)
 
 # Environment variables expected:
-GEMINI_API_KEY = "AIzaSyAVSGUozgbc7AQs4xEhP_-xaTGtN78HBFU"
+GEMINI_API_KEY = "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4"
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 ELEVENLABS_API_KEY = 'sk_119a741c6b322f526f7e712be124a4007a04b3294734b78d'
