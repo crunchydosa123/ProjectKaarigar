@@ -2,16 +2,17 @@
 """
 Interactive terminal conversational CLI with persistent storage + Imagen logo generation.
 
-How it works (brief):
-- Runs the same interview loop as before and saves user responses into uploads/user_responses_*.txt
-- After collecting >=5 user replies it generates a profile (JSON + TXT) as before
-- NEW: it will now also try to create a brand/logo image using Vertex AI / Imagen (google.genai)
-  by reading the same user_responses_*.txt file and heuristically extracting a brand name
-  and descriptive words from the transcript.
+Modifications requested:
+- Ask up to 6 short questions (do NOT hardcode the question texts).
+- Ensure one of the questions asks the user's brand name and asks for logo specifications (this is enforced
+  by the system prompt used to drive the assistant).
+- After collecting responses, send the transcript to the intermediate/logo prompt function (generate_logo_prompt_with_gemini)
+  and ensure the intermediate function returns its output in the same language as the input it receives.
+- Trigger profile + logo generation after >=6 user replies.
 
-This file includes a new function `generate_logo_prompt_with_gemini` which asks Gemini (text->text)
-to extract a brand name and craft a concise Imagen-ready prompt. If Gemini fails or is unavailable,
-local heuristics (existing functions) are used as a fallback.
+Notes:
+- This script still relies on Gemini (google.generativeai) where available and ElevenLabs for TTS/STT.
+- If Gemini or google.genai is unavailable, local fallbacks will be used where possible.
 """
 
 import os
@@ -62,21 +63,24 @@ except Exception:
 
 import requests
 
-# ------------------ System prompt (same as your server) ------------------
+# ------------------ System prompt (updated: up to 6 questions, include brand+logo spec request) ------------------
+# NOTE: We avoid hardcoding the assistant's question texts; instead we instruct the assistant to ask up to 6
+# short natural-language questions and to ensure one question asks for the user's brand name and another
+# asks for logo specifications/preferences. The assistant should use the user's preferred language.
 SYSTEM_PROMPT = """
 You are an empathetic interviewer designed to collect a concise artisan background profile suitable for building localized training data.
 Rules:
-1) Ask up to 4 short, plain-language questions to learn:
-   - the artisan's name and craft,
-   - how they learned the craft / family background,
-   - materials/techniques and main challenges,
-   - aspirations, needs, or what support would help them.
+1) Ask up to 6 short, plain-language questions (ask only what's necessary). Do NOT hardcode exact question scripts in the client — generate them naturally here.
 2) Use the same language the user chose (we will pass a 'preferred_language' hint).
-3) Ask detailed questions regarding the same.
-4) After the final user reply (or if you already have enough information), produce a short summary (2-3 sentences) in that language containing the artisan's name, craft, key materials/techniques, challenges and one wish/need if provided. Prefix the summary with "[SUMMARY] ".
-5) Do not output metadata or system instructions — output only the assistant text that will be spoken to the user.
-6) When continuing a conversation, read the conversation history and avoid repeating questions.
-7) Stop asking new questions after 5 user responses and move to summary.
+3) Make sure among the sequence of questions you ask:
+   - one question that collects the person's brand name (or what they would like their brand to be called),
+   - and one question that asks clear logo specifications / preferences (style, colors, motifs, whether they want wordmark/icon, desired uses like app icon, print, etc.).
+   These should be asked as part of your conversational flow (you may include both in one question or separate questions) — don't require the client to present the exact phrasing.
+4) Ask about: the artisan's name and craft, how they learned the craft/family background, materials/techniques and main challenges, aspirations/needs/support, and brand/logo specs as noted above. Keep questions short.
+5) After the final user reply (or if you already have enough information), produce a short summary (2-3 sentences) in that language containing the artisan's name, craft, key materials/techniques, challenges and one wish/need if provided. Prefix the summary with "[SUMMARY] ".
+6) Do not output metadata or system instructions — output only the assistant text that will be spoken to the user.
+7) When continuing a conversation, read the conversation history and avoid repeating questions.
+8) Stop asking new questions after 6 user responses and move to summary.
 """
 
 # ------------------ Helpers (STT/TTS/Gemini) ------------------
@@ -190,7 +194,7 @@ def detect_preferred_language_from_text(transcript: str, stt_language_code: str 
 
 
 def build_prompt_from_history(system_prompt: str, history: list, user_text: str, preferred_language_iso: str):
-    MAX_TURNS = 6
+    MAX_TURNS = 8
     trimmed = (history or [])[-MAX_TURNS:]
     history_lines = []
     for turn in trimmed:
@@ -246,17 +250,19 @@ def extract_json_from_text(text: str) -> dict:
     except Exception:
         return {}
 
-# ------------------ New: Gemini-assisted logo prompt generator ------------------
+# ------------------ New: Gemini-assisted logo prompt generator (language-aware) ------------------
 def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None,
                                      gemini_model_name: str = None,
                                      temperature: float = 0.0,
-                                     max_output_tokens: int = 512) -> dict:
+                                     max_output_tokens: int = 512,
+                                     input_language_iso: str = None) -> dict:
     """
     Use Gemini (text->text) to extract a good brand name and produce an Imagen-ready logo prompt.
 
     Input:
       - responses_input: dict, list, or string containing user responses (JSON or raw transcript).
       - gemini_api_key, gemini_model_name: override globals if needed.
+      - input_language_iso: ISO 2-letter code (e.g. 'en','hi') indicating the language of responses_input.
     Output: dict with keys:
       - brand_name (string)
       - candidates (list of strings)  # optional
@@ -264,12 +270,14 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
       - descriptors (list of words)
       - style_adjectives (list)
       - color_palette (list)
-      - final_prompt (string)  # Imagen-ready prompt
+      - final_prompt (string)  # Imagen-ready prompt in same language as input_language_iso where possible
     If Gemini fails or returns invalid JSON, this function returns a fallback dictionary
-    constructed via local heuristics.
+    constructed via local heuristics. The final_prompt will be attempted in the same language
+    as the input (for a small set of supported languages; otherwise English).
     """
     gemini_api_key = gemini_api_key or GEMINI_API_KEY
     gemini_model_name = gemini_model_name or GEMINI_MODEL_NAME
+    language_iso = (input_language_iso or "en").lower()
 
     # Normalize input to string for prompt context
     if isinstance(responses_input, (dict, list)):
@@ -280,32 +288,31 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
     else:
         input_text = str(responses_input or "")
 
-    # A strict instruction asking Gemini to return ONLY JSON
+    # A strict instruction asking Gemini to return ONLY JSON, and to produce output in the same language as input
     instruction = (
         "You are a prompt-engineer for image-generation. "
         "Input: a user interview transcript or JSON of user responses. "
         "Task: extract a single clear brand name (or propose a short ranked list) "
-        "and produce a short, polished image-generation prompt optimized for a "
-        "logo (vector, wordmark + icon, square aspect ratio).\n\n"
+        "and produce a short, polished image-generation prompt optimized for a logo (vector, wordmark + icon, square aspect ratio).\n\n"
         "REQUIREMENTS:\n"
         " - Output ONLY a single valid JSON object and nothing else (no explanation).\n"
         " - Keys required where possible: brand_name, final_prompt.\n"
         " - Also include if available: candidates (list), short_description (one sentence), "
         "descriptors (list of short nouns/words), style_adjectives (list), color_palette (list).\n"
-        " - The final_prompt must be concise (preferably <= 70 words), in English, and suitable for "
-        "a vector-style, minimal logo: mention 'square', 'vector', 'wordmark' if appropriate and include "
+        " - The final_prompt must be concise (preferably <= 70 words) and suitable for a vector-style, minimal logo: mention 'square', 'vector', 'wordmark' if appropriate and include "
         "visual motifs derived from the descriptors (do not include long paragraphs or system commentary).\n"
-        " - If the input is not in English, produce the JSON and final_prompt in English.\n"
+        f" - IMPORTANT: Produce the JSON and the 'final_prompt' in the same language as the INPUT. "
+        f"Input language ISO: {language_iso} (if you cannot produce a perfect translation, prefer the input language where possible).\n"
         " - If the transcript contains multiple possible brand names, pick the single most likely one for brand_name "
         "and return other options in candidates.\n\n"
         "Now parse the following interview content and return the requested JSON (only JSON):\n\n"
-        f"INPUT:\n{input_text}\n\n"
+        f"INPUT (language ISO {language_iso}):\n{input_text}\n\n"
         "End of input."
     )
 
-    # Try to call Gemini
     gemini_out = None
     parsed = {}
+    # Try to call Gemini
     try:
         if not gemini_api_key:
             raise RuntimeError("Gemini API key not set; skipping Gemini step.")
@@ -317,7 +324,7 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
     except Exception:
         parsed = {}
 
-    # If parsed JSON is usable and has final_prompt and brand_name, normalize and return it
+    # Normalize lists if strings
     if isinstance(parsed, dict) and parsed.get("final_prompt") and parsed.get("brand_name"):
         for k in ("candidates", "descriptors", "style_adjectives", "color_palette"):
             if k in parsed and isinstance(parsed[k], str):
@@ -326,7 +333,7 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
 
     # --- Fallback: Use local heuristics if Gemini failed or returned invalid JSON ---
     heur_brand = guess_brand_name_from_text(input_text)
-    heur_prompt = build_logo_prompt(heur_brand, input_text)
+    heur_prompt = build_logo_prompt(heur_brand, input_text, language=language_iso)
 
     fallback = {
         "brand_name": heur_brand,
@@ -357,8 +364,7 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
 
     return fallback
 
-# ------------------ Imagen / logo helpers ------------------
-
+# ------------------ Imagen / logo helpers (language-aware fallback prompt builder) ------------------
 def guess_brand_name_from_text(text: str) -> str:
     """Heuristically find a brand name in the transcript. Falls back to first significant token."""
     if not text:
@@ -387,8 +393,9 @@ def guess_brand_name_from_text(text: str) -> str:
     return "brand"
 
 
-def build_logo_prompt(brand_name: str, transcript: str) -> str:
-    """Create a compact, descriptive prompt for Imagen based on transcript and brand name."""
+def build_logo_prompt(brand_name: str, transcript: str, language: str = "en") -> str:
+    """Create a compact, descriptive prompt for Imagen based on transcript and brand name.
+       Attempts to produce the prompt in the requested language (supports a few languages)."""
     # Extract adjectives / descriptors: short heuristic - common words excluding stopwords
     stopwords = set(["the","and","or","a","an","is","are","to","of","in","for","with","on","my","i","we","our"])
     words = re.findall(r"\b[\w']{3,20}\b", transcript)
@@ -403,22 +410,60 @@ def build_logo_prompt(brand_name: str, transcript: str) -> str:
             descriptors.append(lw)
         if len(descriptors) >= 12:
             break
-    desc_sample = ", ".join(descriptors[:8]) if descriptors else "handmade, artisanal"
+    desc_sample = ", ".join(descriptors[:8]) if descriptors else None
+    desc_sample = desc_sample or {
+        "en": "handmade, artisanal",
+        "hi": "हाथ से बना, शिल्पकार",
+        "bn": "হাতের, কারুশিল্প",
+        "ta": "கையால் செய்யப்பட்ட, கலைஞர்"
+    }.get(language, "handmade, artisanal")
 
-    prompt = (
-        f"Logo design for a brand named '{brand_name}'. "
-        f"Use a clean, scalable, vector-style logo suitable for printing and digital use. "
-        f"Visual style: minimal, modern, flat colors, simple icon that reflects: {desc_sample}. "
-        "Include the brand name as a wordmark (prefer a readable sans-serif style). "
-        "Produce a square image for use as an app icon and favicon. Provide multiple variations if possible."
-    )
+    language = (language or "en").lower()
+
+    # A small set of templates for some languages; default to English.
+    if language == "hi":
+        prompt = (
+            f"ब्रांड '{brand_name}' के लिए लोगो डिज़ाइन। "
+            f"साफ़, स्केलेबल, वेक्टर-स्टाइल लोगो बनाएं जो प्रिंट और डिजिटल दोनों के लिए उपयुक्त हो। "
+            f"दृश्य शैली: न्यूनतम, आधुनिक, सपाट रंग; सरल आइकन जो दर्शाता है: {desc_sample}। "
+            "ब्रांड नाम वर्डमार्क के रूप में शामिल करें (पठनीय sans-serif स्टाइल)। "
+            "एक चौकोर छवि तैयार करें जो ऐप आइकन और फेविकॉन के रूप में उपयोग के लिए उपयुक्त हो।"
+        )
+    elif language == "bn":
+        prompt = (
+            f"ব্র্যান্ড '{brand_name}'-এর জন্য লোগো ডিজাইন। "
+            f"পরিষ্কার, স্কেলেবল, ভেক্টর-স্টাইল লোগো যা প্রিন্ট এবং ডিজিটালে ব্যবহারযোগ্য। "
+            f"ভিজ্যুয়াল স্টাইল: মিনিমাল, আধুনিক, ফ্ল্যাট রঙ; সহজ আইকন যা দেখায়: {desc_sample}। "
+            "ব্র্যান্ড নামটি ওয়ার্ডমার্ক হিসেবে অন্তর্ভুক্ত করুন (পাঠযোগ্য sans-serif)। "
+            "স্কোয়ার ইমেজ তৈরি করুন অ্যাপ আইকন/ফেভিকন হিসেবে ব্যবহারের জন্য।"
+        )
+    elif language == "ta":
+        prompt = (
+            f"'{brand_name}' என்ற பிராண்டிற்கான லோகோ வடிவமைப்பு. "
+            f"சென்ன, அளவிடக்கூடிய, வெக்டர்-பாணி லோகோ; அச்சு மற்றும் டிஜிட்டலுக்கு பொருத்தமானது. "
+            f"பார்வை பாணி: குறைந்தபடி, நவீன, படத்தொகை நிறங்கள்; எளிய ஐகான் மற்றும் {desc_sample} போன்ற கூறுகளை பிரதிபலிக்கும். "
+            "பேயர்ட்மார்க் (wordmark) உடன் பிராண்டு பெயரைக் காட்டவும்; படத்தை சதுர (square) வண்ணமாக வழங்கவும்."
+        )
+    else:
+        # default English
+        prompt = (
+            f"Logo design for a brand named '{brand_name}'. "
+            f"Use a clean, scalable, vector-style logo suitable for printing and digital use. "
+            f"Visual style: minimal, modern, flat colors, simple icon that reflects: {desc_sample}. "
+            "Include the brand name as a wordmark (prefer a readable sans-serif style). "
+            "Produce a square image for use as an app icon and favicon. Provide multiple variations if possible."
+        )
+
     return prompt
 
-
+# ------------------ Imagen creation (language-aware) ------------------
 def create_logo_from_responses(response_file: str, output_dir: str = "uploads", image_basename: str = None,
-                               model: str = None, aspect_ratio: str = "1:1", n_images: int = 1):
-    """Reads the user responses text file, constructs an imagen prompt, and attempts to generate and save an image.
-    Returns path to generated image or None on failure."""
+                               model: str = None, aspect_ratio: str = "1:1", n_images: int = 1,
+                               input_language_iso: str = None):
+    """Reads the user responses text file, constructs an imagen prompt (using Gemini if available),
+    and attempts to generate and save an image.
+    Returns path to generated image or None on failure.
+    """
     response_path = Path(response_file)
     if not response_path.exists():
         print("Logo generation skipped — responses file not found:", response_file)
@@ -426,11 +471,14 @@ def create_logo_from_responses(response_file: str, output_dir: str = "uploads", 
 
     text = response_path.read_text(encoding="utf-8")
 
-    # Prefer Gemini-generated prompt/spec if possible
+    # Prefer Gemini-generated prompt/spec if possible (and request output in the same language)
     logo_spec = None
     try:
         if GEMINI_API_KEY:
-            logo_spec = generate_logo_prompt_with_gemini(text, gemini_api_key=GEMINI_API_KEY, gemini_model_name=GEMINI_MODEL_NAME)
+            logo_spec = generate_logo_prompt_with_gemini(text,
+                                                        gemini_api_key=GEMINI_API_KEY,
+                                                        gemini_model_name=GEMINI_MODEL_NAME,
+                                                        input_language_iso=input_language_iso)
     except Exception as exc:
         print("⚠️  Gemini logo prompt generation failed:", exc)
         logo_spec = None
@@ -445,9 +493,9 @@ def create_logo_from_responses(response_file: str, output_dir: str = "uploads", 
         if logo_spec.get("descriptors"):
             print("Descriptors:", logo_spec.get("descriptors")[:8])
     else:
-        # fallback to existing local heuristics
+        # fallback to existing local heuristics (language-aware)
         brand_name = guess_brand_name_from_text(text)
-        prompt = build_logo_prompt(brand_name, text)
+        prompt = build_logo_prompt(brand_name, text, language=(input_language_iso or "en"))
         print("ℹ️  Using heuristic logo prompt (Gemini unavailable or returned invalid JSON).")
 
     out_dir = Path(output_dir)
@@ -508,8 +556,8 @@ def create_logo_from_responses(response_file: str, output_dir: str = "uploads", 
         print("Prompt used:\n", prompt)
         return None
 
-# ------------------ Existing profile generation logic ------------------
-def generate_profile_from_responses(file_path: str, gemini_api_key: str = None, gemini_model_name: str = None) -> str:
+# ------------------ Existing profile generation logic (unchanged except language hint) ------------------
+def generate_profile_from_responses(file_path: str, gemini_api_key: str = None, gemini_model_name: str = None, input_language_iso: str = None) -> str:
     gemini_api_key = gemini_api_key or GEMINI_API_KEY
     gemini_model_name = gemini_model_name or GEMINI_MODEL_NAME
 
@@ -517,14 +565,16 @@ def generate_profile_from_responses(file_path: str, gemini_api_key: str = None, 
         with open(file_path, "r", encoding="utf-8") as f:
             convo_text = f.read()
         prompt = (
-            "You are a helpful assistant. The following is an interview transcript (may be in Hindi). "
+            "You are a helpful assistant. The following is an interview transcript (may be in any language). "
             "Extract the artisan's facts and output valid JSON ONLY. The JSON should include any of these keys if available:\n"
             "full_name, name, location, brief_bio, bio, craft, tagline, materials_and_techniques, materials, "
             "aspirations_needs, aspiration, suggested_support, short_summary\n\n"
             "We will map those into this final profile schema (English):\n"
             "- Full Name\n- Location\n- Bio\n- Tagline\n- Materials Used\n- Aspiration\n\n"
             "If a piece of information is not present, set the value to an empty string. Make sure your output is STRICT JSON.\n\n"
-            "Interview:\n" + convo_text + "\n\nOutput strictly a single JSON object and nothing else. Even if the input is in Hindi, respond in English.Your entire output should be purely in English and no use of Hindi in your output json strictly"
+            "Interview:\n" + convo_text + "\n\n"
+            f"NOTE: The interview input language ISO: {input_language_iso or 'unknown'}. Prefer to extract the data using the input language's terms, but output JSON keys/values in English where possible.\n\n"
+            "Output strictly a single JSON object and nothing else."
         )
         try:
             gemini_out = call_gemini_raw(prompt=prompt, api_key=gemini_api_key, model_name=gemini_model_name, max_output_tokens=512, temperature=0.0)
@@ -593,7 +643,6 @@ def generate_profile_from_responses(file_path: str, gemini_api_key: str = None, 
     return str(out_json)
 
 # ------------------ Recording utilities (unchanged) ------------------
-
 def record_with_sounddevice(out_path: Path):
     if not SOUNDDEVICE_AVAILABLE:
         raise RuntimeError("sounddevice/soundfile not available")
@@ -635,12 +684,11 @@ def record_with_ffmpeg(out_path: Path):
     return out_path
 
 # ------------------ CLI / interactive loop (main) ------------------
-
 def parse_args():
     p = argparse.ArgumentParser(description="Interactive conversational CLI with storage")
     p.add_argument("--text-mode", action="store_true", help="Type your replies instead of speaking")
     p.add_argument("--no-tts-play", action="store_true", help="Do not attempt to play TTS audio (only save)")
-    p.add_argument("--save-profile", action="store_true", help="Save generated profile after collecting 5 user replies (auto-saves by default at session end)")
+    p.add_argument("--save-profile", action="store_true", help="Save generated profile after collecting 6 user replies (auto-saves by default at session end)")
     p.add_argument("--output-dir", "-o", default="uploads", help="Where to save transcripts, audio, profiles")
     return p.parse_args()
 
@@ -660,6 +708,7 @@ def main():
 
     history = []
 
+    # Initial language choice prompt (TTS if available)
     language_prompt = "Which language do you prefer? Say English or Hindi."
     try:
         tts_bytes = eleven_tts_bytes(language_prompt)
@@ -678,6 +727,7 @@ def main():
 
     user_responses = []
     turn = 0
+    last_detected_language = "en"
     while True:
         turn += 1
         print("\n--- TURN", turn, "---")
@@ -723,6 +773,8 @@ def main():
         user_responses = [turn["text"] for turn in history if turn.get("role","").lower().startswith("user")]
 
         preferred_lang = detect_preferred_language_from_text(transcript, stt_lang_code)
+        last_detected_language = preferred_lang or last_detected_language
+
         prompt = build_prompt_from_history(SYSTEM_PROMPT, history, transcript, preferred_lang)
         if not GEMINI_API_KEY:
             print("❌ GEMINI_API_KEY not set. Set GEMINI_API_KEY env var or edit script.")
@@ -758,15 +810,19 @@ def main():
         except Exception as e:
             print("⚠️  TTS generation failed:", e)
 
-        if len(user_responses) >= 5:
-            print("\n✅ Collected >=5 user responses — preparing profile.")
+        # Trigger after >=6 user responses (as requested)
+        if len(user_responses) >= 6:
+            print("\n✅ Collected >=6 user responses — preparing profile and logo.")
             user_file = out_dir / f"user_responses_{int(time.time())}.txt"
             with open(user_file, "w", encoding="utf-8") as f:
                 for i, resp in enumerate(user_responses):
                     f.write(f"User Response {i+1}: {resp}\n")
 
             try:
-                profile_json_path = generate_profile_from_responses(str(user_file), gemini_api_key=GEMINI_API_KEY, gemini_model_name=GEMINI_MODEL_NAME)
+                profile_json_path = generate_profile_from_responses(str(user_file),
+                                                                   gemini_api_key=GEMINI_API_KEY,
+                                                                   gemini_model_name=GEMINI_MODEL_NAME,
+                                                                   input_language_iso=last_detected_language)
                 if profile_json_path:
                     print("✅ Profile JSON created at:", profile_json_path)
                 else:
@@ -774,9 +830,11 @@ def main():
             except Exception as e:
                 print("⚠️  Profile generation failed:", e)
 
-            # NEW: try to create a logo from the responses file (no extra user input)
+            # NEW: try to create a logo from the responses file (explicitly pass the detected language so the intermediate function returns same-language output)
             try:
-                logo_path = create_logo_from_responses(str(user_file), output_dir=str(out_dir))
+                logo_path = create_logo_from_responses(str(user_file),
+                                                       output_dir=str(out_dir),
+                                                       input_language_iso=last_detected_language)
                 if logo_path:
                     print("✅ Logo created at:", logo_path)
                 else:
