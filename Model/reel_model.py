@@ -1,340 +1,294 @@
 #!/usr/bin/env python3
 """
-reel_pipeline_fixed.py
+Image(s) to Veo Reel Converter (interactive fallback)
 
-Full pipeline for:
- - suggesting ideas (Gemini text model)
- - generating a 3-part script
- - generating 3 short 9:16 video segments via Vertex Veo with optional reference images
- - downloading segments from GCS
- - stitching segments with ffmpeg into final_reel.mp4
-
-Fixes included:
- - Upload reference images to GCS and pass Image(gcs_uri=...) to generate_videos
- - Poll long-running operations correctly via operation.name
- - Exponential backoff and overall timeout for polling
- - Robust error handling and debug prints
+- Accepts multiple images (paths, glob or directory)
+- If images or prompt are omitted on the command line, asks interactively
+- Uses ffmpeg only to stitch clips (no moviepy anywhere)
 """
 
 import os
+import sys
 import time
-import pathlib
+import glob
+import argparse
+import tempfile
+import shutil
+from pathlib import Path
+from typing import List
 import subprocess
-from urllib.parse import urlparse
-from io import BytesIO
 
-from PIL import Image as PilImage
-from google.cloud import storage
+# Google GenAI imports (same as your original)
 from google import genai
-from google.genai.types import GenerateVideosConfig, Image, Part
+from google.genai import types
 
-# ------------------------
-# CONFIGURE VERTEX AI
-# ------------------------
-# Ensure your env var GOOGLE_APPLICATION_CREDENTIALS points to a service account JSON
+# Configuration
+PROJECT_ID = "useful-figure-475210-g7"
+LOCATION = "us-central1"
+
+# Initialize client
 client = genai.Client(
     vertexai=True,
-    project="useful-figure-475210-g7",  # replace with your project
-    location="us-central1"
+    project=PROJECT_ID,
+    location=LOCATION
 )
 
-# ------------------------
-# CONFIG
-# ------------------------
-VIDEO_BUCKET = "gs://all_in_one_bucket/reels"  # must be a gs:// URI; replace with your bucket/prefix
-LOCAL_DIR = "./segments"
-os.makedirs(LOCAL_DIR, exist_ok=True)
-
-# ------------------------
-# Helper: Download from GCS
-# ------------------------
-def download_from_gcs(gcs_uri, local_path):
-    parsed = urlparse(gcs_uri)
-    bucket_name = parsed.netloc
-    blob_name = parsed.path.lstrip("/")
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.download_to_filename(local_path)
-    print(f"Downloaded {gcs_uri} -> {local_path}")
-
-# ------------------------
-# Helper: Upload local file to GCS and return gs:// URI
-# ------------------------
-def upload_file_to_gcs(local_path, dest_bucket_gs_uri_prefix):
-    """
-    Upload local file to GCS and return gs://... URI.
-    dest_bucket_gs_uri_prefix example: 'gs://my-bucket/prefix'
-    """
-    assert dest_bucket_gs_uri_prefix.startswith("gs://"), "VIDEO_BUCKET must start with gs://"
-    parts = dest_bucket_gs_uri_prefix[5:].split("/", 1)
-    bucket_name = parts[0]
-    prefix = parts[1] if len(parts) > 1 else ""
-    blob_name = f"{prefix.rstrip('/')}/{pathlib.Path(local_path).name}".lstrip("/")
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.upload_from_filename(local_path)
-    gs_uri = f"gs://{bucket_name}/{blob_name}"
-    print(f"Uploaded {local_path} -> {gs_uri}")
-    return gs_uri
-
-# ------------------------
-# STEP 1: Suggest content ideas (simple wrapper around Gemini)
-# ------------------------
-import re
-def suggest_content_ideas(prompt, num_ideas=3):
-    """
-    Ask the Gemini text model for numbered short-form video ideas.
-    Returns list of up to num_ideas strings.
-    """
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=(f"Give me {num_ideas} creative short-form video ideas for: {prompt}\n\n"
-                  "Number them explicitly as:\n"
-                  "1. Idea One\n"
-                  "2. Idea Two\n"
-                  "3. Idea Three\n"
-                  "Do not include extra headers or text outside the numbering.")
-    )
-    text = response.candidates[0].content.parts[0].text
-    idea_blocks = []
-    for line in text.splitlines():
-        match = re.match(r"^\s*(\d+)\.\s*(.+)", line)
-        if match:
-            idea_blocks.append(match.group(2).strip())
-    if not idea_blocks:
-        idea_blocks = [text.strip()]
-    return idea_blocks[:num_ideas]
-
-# ------------------------
-# STEP 2: Generate 3-part script
-# ------------------------
-def generate_script(idea):
-    """
-    Return a list of 3 segment strings (each ~8s)
-    """
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"Create a 3-part script for a 24-second short video (8s each) based on this idea: {idea}"
-    )
-    seg_parsed = response.candidates[0].content.parts[0].text
-    segments = [seg.strip() for seg in seg_parsed.split("\n\n") if seg.strip()]
-    if len(segments) < 3:
-        # crude fallback: split evenly
-        text = seg_parsed.strip()
-        seg_length = max(1, len(text) // 3)
-        segments = [text[i:i+seg_length].strip() for i in range(0, len(text), seg_length)]
-    # normalize to exactly 3
-    while len(segments) > 3:
-        # merge smallest adjacent blocks
-        min_idx = min(range(len(segments)-1), key=lambda i: len(segments[i])+len(segments[i+1]))
-        segments[min_idx] = segments[min_idx] + "\n\n" + segments[min_idx+1]
-        del segments[min_idx+1]
-    return segments[:3]
-
-# ------------------------
-# STEP 3: Generate 8-second video for a segment (fixed)
-# ------------------------
-def generate_video_with_image(segment_prompt, segment_index, reference_image=None, model_name="veo-3.1-generate-preview", timeout_seconds=8*60):
-    """
-    Generate a video segment using Veo. If reference_image is provided:
-      - if reference_image starts with 'gs://', use it directly
-      - else upload the local file to VIDEO_BUCKET and reference the uploaded GS URI
-    Returns local file path to downloaded mp4, or None on error.
-    """
-    print(f"\n⏳ Generating video segment {segment_index+1} (model={model_name})...")
+def optimize_prompt_with_gemini(user_prompt: str, image_path: str) -> str:
     try:
-        output_gcs_uri = f"{VIDEO_BUCKET}/segment_{segment_index+1}.mp4"
-        config = GenerateVideosConfig(
-            aspect_ratio="9:16",
-            output_gcs_uri=output_gcs_uri
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        file_ext = Path(image_path).suffix.lower()
+        mime_type = "image/jpeg" if file_ext in ['.jpg', '.jpeg'] else "image/png"
+        gemini_prompt = f"""
+        You are an expert video prompt engineer for Google's Veo 3.1 model.
+
+        The user wants to create a vertical reel clip from this image and prompt: "{user_prompt}"
+
+        Analyze the provided image and produce a single-line optimized prompt suitable for a 9:16 cinematic short:
+        * Include camera movements (zoom, dolly, pan), temporal elements (slow-mo, speed ramp), atmosphere (lighting, weather),
+          subject animation, and a clear cinematic mood.
+        * Keep it compact and focused (one sentence).
+        Output ONLY the optimized prompt.
+        """
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[gemini_prompt, types.Part.from_bytes(data=image_bytes, mime_type=mime_type)],
         )
-
-        kwargs = {
-            "model": model_name,
-            "prompt": f"{segment_prompt}. Aspect ratio 9:16.",
-            "config": config
-        }
-
-        if reference_image:
-            # If it's already a GCS URI, use directly; otherwise upload it to the VIDEO_BUCKET
-            if reference_image.startswith("gs://"):
-                image_gs_uri = reference_image
-            else:
-                print(f"Uploading reference image {reference_image} to {VIDEO_BUCKET} ...")
-                image_gs_uri = upload_file_to_gcs(reference_image, VIDEO_BUCKET)
-
-            # Use Image(gcs_uri=...) as the documented pattern for Veo image guidance
-            kwargs["image"] = Image(gcs_uri=image_gs_uri, mime_type="image/jpeg")
-
-        operation = client.models.generate_videos(**kwargs)
-        # Poll using operation.name with exponential backoff + overall timeout
-        start = time.time()
-        attempt = 0
-        while True:
-            attempt += 1
-            operation = client.operations.get(operation.name)  # refresh via name
-            if getattr(operation, "done", False):
-                break
-            elapsed = time.time() - start
-            if elapsed > timeout_seconds:
-                print(f"⏱ Timeout waiting for segment {segment_index+1} after {int(elapsed)}s.")
-                return None
-            sleep_for = min(30, 2 ** min(attempt, 6))
-            print(f"Segment {segment_index+1} still generating (elapsed {int(elapsed)}s). Sleeping {sleep_for}s...")
-            time.sleep(sleep_for)
-
-        # Check for errors
-        if getattr(operation, "error", None):
-            print(f"❌ Error generating segment {segment_index+1}: {operation.error}")
-            return None
-
-        result = getattr(operation, "result", None)
-        if not result or not getattr(result, "generated_videos", None):
-            print("❌ Unexpected operation result structure; printing operation for debugging:")
-            print(operation)
-            return None
-
-        video_uri = result.generated_videos[0].video.uri
-        print(f"✅ Segment {segment_index+1} done: {video_uri}")
-
-        # Download locally
-        local_path = os.path.join(LOCAL_DIR, f"segment_{segment_index+1}.mp4")
-        download_from_gcs(video_uri, local_path)
-        return local_path
-
+        optimized_prompt = response.text.strip()
+        if not optimized_prompt:
+            raise RuntimeError("Gemini returned empty prompt")
+        print(f"🤖 Gemini optimized prompt: {optimized_prompt}")
+        return optimized_prompt
     except Exception as e:
-        print(f"❌ Exception during video generation: {e}")
-        return None
+        print(f"⚠️  Gemini optimization failed for {image_path!r}: {e}")
+        fallback_prompt = f"{user_prompt}. Add cinematic motion, camera movement, atmospheric effects, and adapt for 9:16 vertical."
+        print(f"🔄 Using fallback prompt: {fallback_prompt}")
+        return fallback_prompt
 
-# ------------------------
-# STEP 4: Stitch videos together using FFmpeg
-# ------------------------
-def stitch_videos_ffmpeg(video_paths, output_file="final_reel.mp4"):
-    print("\n🔗 Stitching video segments with FFmpeg...")
-    file_list_path = os.path.join(LOCAL_DIR, "file_list.txt")
-    with open(file_list_path, "w") as f:
-        for path in video_paths:
-            f.write(f"file '{os.path.abspath(path)}'\n")
-
+def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_seconds: int, tmp_dir: str, idx: int) -> str:
     try:
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", file_list_path, "-c", "copy", output_file
-        ], check=True)
-        print(f"🎉 Final video saved as {output_file}")
-    except subprocess.CalledProcessError as e:
-        print("❌ ffmpeg failed:", e)
-
-# ------------------------
-# Optional: analyze product images with Gemini Vision (best-effort)
-# ------------------------
-def analyze_product_images(image_paths):
-    """
-    Try to analyze product images using the Gemini Vision model.
-    If the SDK accepts inline parts, we send Part.from_bytes.
-    Returns a text analysis or None.
-    """
-    try:
-        print("\n🔍 Analyzing product images (Gemini Vision)...")
-        parts = []
-        parts.append({"text": "Analyze these product images and provide:\n1. Key visual features\n2. Unique selling points\n3. Target audience\n4. Suggested video showcase style\n\nPlease be concise and numbered."})
-        for p in image_paths:
-            with open(p, "rb") as f:
-                image_bytes = f.read()
-            # Use inline_data dict format for safety (the older sample pattern),
-            # many SDKs accept either Part.from_bytes or inline_data dict. If your SDK requires Part.from_bytes, swap accordingly.
-            parts.append({
-                "inline_data": {
-                    "mime_type": "image/jpeg",
-                    "data": base64.b64encode(image_bytes).decode('utf-8')
-                }
-            })
-        response = client.models.generate_content(model="gemini-2.5-pro", contents=parts)
-        analysis = response.candidates[0].content.parts[0].text
-        return analysis
+        image_name = Path(image_path).stem
+        out_name = Path(tmp_dir) / f"{idx:03d}_{image_name}_veo.mp4"
+        print(f"\n🎬 Starting generation for {image_path} -> {out_name.name}")
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+        print(f"📥 Image size: {len(img_bytes)/1024:.1f} KB")
+        operation = client.models.generate_videos(
+            model="veo-3.1-generate-preview",
+            prompt=optimized_prompt,
+            image=types.Image.from_file(location=image_path),
+            config=types.GenerateVideosConfig(
+                aspect_ratio="9:16",
+                number_of_videos=1,
+                duration_seconds=duration_seconds,
+                resolution="1080p",
+                person_generation="allow_adult",
+                enhance_prompt=True,
+                generate_audio=True,
+            ),
+        )
+        print("⏳ Video generation started (this can take some time)...")
+        while not operation.done:
+            time.sleep(10)
+            operation = client.operations.get(operation)
+            print("⏳ still generating...")
+        if not operation.response:
+            raise RuntimeError("No response from video generation operation")
+        result = operation.result
+        generated = result.generated_videos[0]
+        video_bytes = generated.video.video_bytes
+        with open(out_name, "wb") as f:
+            f.write(video_bytes)
+        print(f"✅ Clip ready: {out_name} ({len(video_bytes)/(1024*1024):.1f} MB)")
+        return str(out_name)
     except Exception as e:
-        print("⚠️ Image analysis failed:", e)
-        return None
+        raise RuntimeError(f"Failed to generate clip for {image_path}: {e}")
 
-# ------------------------
-# Full pipeline function
-# ------------------------
-def create_reel(user_prompt, product_images=None):
-    """
-    High-level pipeline to:
-     - suggest ideas
-     - pick an idea (interactive)
-     - generate script
-     - confirm and create 3 segments (image-guided if images supplied)
-    """
-    print("\n💡 Suggesting content ideas...")
-    ideas = suggest_content_ideas(user_prompt, num_ideas=3)
-
-    print("\nSuggested ideas:")
-    for i, it in enumerate(ideas, start=1):
-        print(f"{i}. {it}")
-
-    # Interactive selection
+def _check_ffmpeg_available() -> bool:
     try:
-        choice = int(input("Select an idea (1-3): ").strip())
-        if choice < 1 or choice > len(ideas):
-            print("Invalid choice; defaulting to 1")
-            choice = 1
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        return True
     except Exception:
-        choice = 1
+        return False
 
-    selected_idea = ideas[choice - 1]
-    print(f"\nSelected idea: {selected_idea}")
+def stitch_clips(clips: List[str], final_output: str, keep_temp: bool = False) -> bool:
+    """
+    Concatenate a list of mp4 clips into final_output using ffmpeg.
+    Re-encodes to consistent 1080x1920 (9:16) and ensures audio is included.
+    """
+    if not clips:
+        print("❌ No clips to stitch.")
+        return False
 
-    # Generate full script
-    print("\n📝 Generating full script...")
-    segments = generate_script(selected_idea)
-    print("\n📝 Final 3 segments for video generation:")
-    for idx, seg in enumerate(segments):
-        print(f"\n--- Segment {idx+1} ---\n{seg}")
+    if not _check_ffmpeg_available():
+        print("❌ ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.")
+        return False
 
-    proceed = input("\nDo you want to split into segments and generate the reel? (y/n): ").strip().lower()
-    if proceed != "y":
-        print("❌ Reel creation cancelled.")
-        return
+    print(f"\n🔗 Stitching {len(clips)} clips into {final_output} using ffmpeg")
 
-    # Generate videos for each segment, optionally using product_images per segment
-    video_paths = []
-    for idx, seg in enumerate(segments):
-        reference_image = None
-        if product_images and idx < len(product_images):
-            reference_image = product_images[idx]
-        local_video = generate_video_with_image(seg, idx, reference_image)
-        if local_video:
-            video_paths.append(local_video)
+    # Create a temporary concat list file
+    tmp_dir = tempfile.mkdtemp(prefix="veo_ffmpeg_concat_")
+    list_file_path = Path(tmp_dir) / "concat_list.txt"
+    try:
+        with open(list_file_path, "w", encoding="utf-8") as lf:
+            for c in clips:
+                lf.write(f"file '{os.path.abspath(c)}'\n")
+
+        # ffmpeg concat demuxer with re-encoding and scaling/padding to 1080x1920
+        # We force aspect ratio preserve then pad to 1080x1920, so output is exactly vertical.
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(list_file_path),
+            "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "20",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "+faststart",
+            str(final_output)
+        ]
+
+        print("🔁 Running ffmpeg...")
+        completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if completed.returncode != 0:
+            print("❌ ffmpeg failed. stderr:")
+            print(completed.stderr.decode(errors="ignore"))
+            return False
+
+        print(f"✅ Reel created with ffmpeg: {final_output}")
+        return True
+    except Exception as e:
+        print(f"❌ ffmpeg concatenation failed: {e}")
+        return False
+    finally:
+        if not keep_temp:
+            try:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
         else:
-            print(f"⚠ Skipping failed segment {idx+1}")
+            print(f"ℹ️ ffmpeg concat temp files kept at: {tmp_dir}")
 
-    if len(video_paths) == len(segments):
-        stitch_videos_ffmpeg(video_paths)
+def collect_image_paths(inputs: List[str]) -> List[str]:
+    paths = []
+    for item in inputs:
+        item = os.path.expanduser(item)
+        if os.path.isdir(item):
+            for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"):
+                paths.extend(sorted(glob.glob(os.path.join(item, ext))))
+        else:
+            if any(ch in item for ch in "*?[]"):
+                matched = sorted(glob.glob(item))
+                paths.extend(matched)
+            else:
+                if os.path.exists(item):
+                    paths.append(item)
+                else:
+                    print(f"⚠️  Path not found: {item}")
+    seen = set()
+    ordered = []
+    for p in paths:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    return ordered
+
+def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_name: str = None,
+                           clip_duration: int = 4, keep_temp: bool = False) -> bool:
+    image_paths = collect_image_paths(image_inputs)
+    if not image_paths:
+        print("❌ No valid images provided.")
+        return False
+    if not output_name:
+        output_name = f"reel_{int(time.time())}.mp4"
+    tmp_dir = tempfile.mkdtemp(prefix="veo_reel_")
+    print(f"🗂️  Temporary working directory: {tmp_dir}")
+    generated_clips = []
+    try:
+        for idx, img in enumerate(image_paths, start=1):
+            print(f"\n=== Processing [{idx}/{len(image_paths)}] {img} ===")
+            optimized_prompt = optimize_prompt_with_gemini(user_prompt, img)
+            try:
+                clip_path = generate_clip_for_image(img, optimized_prompt, duration_seconds=clip_duration, tmp_dir=tmp_dir, idx=idx)
+                generated_clips.append(clip_path)
+            except Exception as e:
+                print(f"❌ Skipped image due to error: {e}")
+        if not generated_clips:
+            print("❌ No clips were generated. Aborting.")
+            return False
+        success = stitch_clips(generated_clips, output_name, keep_temp=keep_temp)
+        if success:
+            print(f"\n🎉 Reel assembled: {output_name}")
+            if not keep_temp:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            else:
+                print(f"ℹ️ Temporary files kept at: {tmp_dir}")
+            return True
+        else:
+            print("❌ Failed to stitch clips.")
+            return False
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return False
+    finally:
+        if not keep_temp and os.path.exists(tmp_dir):
+            try:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+# ----------------- Argument parsing with interactive fallback -----------------
+def parse_args_with_fallback():
+    p = argparse.ArgumentParser(description="Convert multiple images into a Veo-generated 9:16 reel. Interactive fallback if args missing.")
+    p.add_argument("images", nargs="*", help="Image files, directories, or glob patterns. Example: ./img1.jpg ./img2.png /path/to/dir '*.jpg'")
+    p.add_argument("-p", "--prompt", required=False, help="Text prompt describing the desired reel/video style.")
+    p.add_argument("-o", "--output", default=None, help="Output filename for the final reel (mp4).")
+    p.add_argument("-d", "--duration", type=int, default=4, help="Duration in seconds for each generated clip (default: 4).")
+    p.add_argument("--keep-temp", action="store_true", help="Keep temporary generated clips for debugging.")
+    args = p.parse_args()
+
+    # Interactive fallback for images
+    if not args.images:
+        try:
+            user_in = input("Enter image paths/glob/directory (comma separated) or press Enter to cancel: ").strip()
+        except EOFError:
+            user_in = ""
+        if not user_in:
+            print("❌ No images provided. Exiting.")
+            sys.exit(1)
+        provided = [s.strip() for s in user_in.split(",") if s.strip()]
+        args.images = provided
+
+    # Interactive fallback for prompt
+    if not args.prompt:
+        try:
+            prompt_in = input("Enter text prompt describing the desired reel/video style: ").strip()
+        except EOFError:
+            prompt_in = ""
+        if not prompt_in:
+            print("❌ No prompt provided. Exiting.")
+            sys.exit(1)
+        args.prompt = prompt_in
+
+    return args
+
+def main():
+    args = parse_args_with_fallback()
+    success = convert_images_to_reel(
+        image_inputs=args.images,
+        user_prompt=args.prompt,
+        output_name=args.output,
+        clip_duration=args.duration,
+        keep_temp=args.keep_temp
+    )
+    if success:
+        print("✅ Done.")
     else:
-        print("❌ Not all segments generated successfully. Cannot stitch final video.")
+        print("❌ Conversion failed.")
 
-# ------------------------
-# CLI entrypoint
-# ------------------------
 if __name__ == "__main__":
-    import base64
-
-    user_prompt = input("Enter a prompt for your reel: ").strip()
-
-    product_images = []
-    while True:
-        image_path = input("Enter path to product image (or press Enter to continue): ").strip()
-        if not image_path:
-            break
-        if image_path.startswith("gs://") or os.path.exists(image_path):
-            product_images.append(image_path)
-        else:
-            print("⚠️ Invalid image path. Please provide a local path or a gs:// URI.")
-
-    create_reel(user_prompt, product_images if product_images else None)
+    main()
