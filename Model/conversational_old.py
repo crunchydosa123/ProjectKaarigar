@@ -31,7 +31,7 @@ from pathlib import Path
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_119a741c6b322f526f7e712be124a4007a04b3294734b78d")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_9762526c74e8278229361f3cd5d3eef580ff7fd0ca7341a2")
 ELEVEN_VOICE_ID = os.environ.get("ELEVEN_VOICE_ID", "KaCAGkAghyX8sFEYByRC")
 ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
 ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
