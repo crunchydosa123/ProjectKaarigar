@@ -1,4 +1,3 @@
-import PhoneLayout from './layout'
 import { Store } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
@@ -44,14 +43,14 @@ const Homepage = () => {
           <div className='text-xs font-bold m-2 text-left'>List Product on Marketplace</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left'>
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('create-content')}>
           <div className='ml-2 mt-2 bg-[#00AF58] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Camera />
           </div>
           <div className='text-xs font-bold m-2 text-left'>Create Content with AI</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left'>
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('onboarding')}>
           <div className='ml-2 mt-2 bg-[#EAC11D] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Megaphone />
           </div>
