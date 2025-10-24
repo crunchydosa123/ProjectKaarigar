@@ -321,6 +321,7 @@ def generate_logo_prompt_with_gemini(responses_input, gemini_api_key: str = None
                               max_output_tokens=max_output_tokens, temperature=temperature)
         gemini_out = raw or ""
         parsed = extract_json_from_text(gemini_out)
+        print(parsed)
     except Exception:
         parsed = {}
 
@@ -394,11 +395,18 @@ def guess_brand_name_from_text(text: str) -> str:
 
 
 def build_logo_prompt(brand_name: str, transcript: str, language: str = "en") -> str:
-    """Create a compact, descriptive prompt for Imagen based on transcript and brand name.
-       Attempts to produce the prompt in the requested language (supports a few languages)."""
+    """Create a compact, descriptive prompt for an image generator based on a transcript and brand name.
+
+    This version produces prompts aimed at a brand logo (NOT an app icon or favicon).
+    The function tries to return the prompt in the requested language (supports a few languages).
+    """
     # Extract adjectives / descriptors: short heuristic - common words excluding stopwords
-    stopwords = set(["the","and","or","a","an","is","are","to","of","in","for","with","on","my","i","we","our"])
-    words = re.findall(r"\b[\w']{3,20}\b", transcript)
+    stopwords = set([
+        "the", "and", "or", "a", "an", "is", "are", "to", "of", "in", "for",
+        "with", "on", "my", "i", "we", "our", "this", "that", "it", "by"
+    ])
+
+    words = re.findall(r"\b[\w']{3,20}\b", transcript or "")
     descriptors = []
     for w in words:
         lw = w.lower()
@@ -410,24 +418,25 @@ def build_logo_prompt(brand_name: str, transcript: str, language: str = "en") ->
             descriptors.append(lw)
         if len(descriptors) >= 12:
             break
+
     desc_sample = ", ".join(descriptors[:8]) if descriptors else None
     desc_sample = desc_sample or {
         "en": "handmade, artisanal",
         "hi": "हाथ से बना, शिल्पकार",
         "bn": "হাতের, কারুশিল্প",
         "ta": "கையால் செய்யப்பட்ட, கலைஞர்"
-    }.get(language, "handmade, artisanal")
+    }.get((language or "en").lower(), "handmade, artisanal")
 
     language = (language or "en").lower()
 
-    # A small set of templates for some languages; default to English.
+    # Templates for a few languages; default to English.
     if language == "hi":
         prompt = (
             f"ब्रांड '{brand_name}' के लिए लोगो डिज़ाइन। "
             f"साफ़, स्केलेबल, वेक्टर-स्टाइल लोगो बनाएं जो प्रिंट और डिजिटल दोनों के लिए उपयुक्त हो। "
             f"दृश्य शैली: न्यूनतम, आधुनिक, सपाट रंग; सरल आइकन जो दर्शाता है: {desc_sample}। "
             "ब्रांड नाम वर्डमार्क के रूप में शामिल करें (पठनीय sans-serif स्टाइल)। "
-            "एक चौकोर छवि तैयार करें जो ऐप आइकन और फेविकॉन के रूप में उपयोग के लिए उपयुक्त हो।"
+            "ब्रांड पहचान में उपयोग के लिए कई वैरिएंट प्रदान करें।"
         )
     elif language == "bn":
         prompt = (
@@ -435,26 +444,29 @@ def build_logo_prompt(brand_name: str, transcript: str, language: str = "en") ->
             f"পরিষ্কার, স্কেলেবল, ভেক্টর-স্টাইল লোগো যা প্রিন্ট এবং ডিজিটালে ব্যবহারযোগ্য। "
             f"ভিজ্যুয়াল স্টাইল: মিনিমাল, আধুনিক, ফ্ল্যাট রঙ; সহজ আইকন যা দেখায়: {desc_sample}। "
             "ব্র্যান্ড নামটি ওয়ার্ডমার্ক হিসেবে অন্তর্ভুক্ত করুন (পাঠযোগ্য sans-serif)। "
-            "স্কোয়ার ইমেজ তৈরি করুন অ্যাপ আইকন/ফেভিকন হিসেবে ব্যবহারের জন্য।"
+            "ব্র্যান্ড আইডেন্টিটির জন্য একাধিক ভিন্ন ভেরিয়েন্ট প্রদান করুন।"
         )
     elif language == "ta":
         prompt = (
             f"'{brand_name}' என்ற பிராண்டிற்கான லோகோ வடிவமைப்பு. "
-            f"சென்ன, அளவிடக்கூடிய, வெக்டர்-பாணி லோகோ; அச்சு மற்றும் டிஜிட்டலுக்கு பொருத்தமானது. "
-            f"பார்வை பாணி: குறைந்தபடி, நவீன, படத்தொகை நிறங்கள்; எளிய ஐகான் மற்றும் {desc_sample} போன்ற கூறுகளை பிரதிபலிக்கும். "
-            "பேயர்ட்மார்க் (wordmark) உடன் பிராண்டு பெயரைக் காட்டவும்; படத்தை சதுர (square) வண்ணமாக வழங்கவும்."
+            f"தெளிவான, அளவிற்கு பொருந்தக்கூடிய, வெக்டர்-பாணி லோகோ; அச்சு மற்றும் டிஜிட்டலுக்கு பொருத்தமானது. "
+            f"காட்சி பாணி: மினிமல், நவீன, பிளாட் நிறங்கள்; எளிய ஐகான் மற்றும் {desc_sample} போன்ற கூறுகளை பிரதிபலிக்கட்டும். "
+            "பிராண்டு பெயரை ஒரு வாசிக்கக்கூடிய sans-serif வார்ட்மார்க்காக சேர்க்கவும். "
+            "பிராண்டு அடையாளத்தில் பயன்படுத்தக்கூடிய பல வேறுபட்ட மாற்றங்களை வழங்கவும்."
         )
     else:
         # default English
         prompt = (
             f"Logo design for a brand named '{brand_name}'. "
-            f"Use a clean, scalable, vector-style logo suitable for printing and digital use. "
+            f"Use a clean, scalable, vector-style logo suitable for print and digital use. "
             f"Visual style: minimal, modern, flat colors, simple icon that reflects: {desc_sample}. "
             "Include the brand name as a wordmark (prefer a readable sans-serif style). "
-            "Produce a square image for use as an app icon and favicon. Provide multiple variations if possible."
+            "Deliver several distinct variations suitable for brand identity applications."
         )
 
     return prompt
+
+
 
 # ------------------ Imagen creation (language-aware) ------------------
 def create_logo_from_responses(response_file: str, output_dir: str = "uploads", image_basename: str = None,
@@ -860,6 +872,18 @@ def main():
     print(" - Profiles folder:", profiles_dir)
     print(" - History:", hpath)
     print("Goodbye 👋")
+
+    # user_file = "uploads/user_responses_1761285709.txt"
+    # out_dir = Path("uploads")
+    # last_detected_language = "hi"
+
+    # logo_path = create_logo_from_responses(str(user_file),
+    #                                                    output_dir=str(out_dir),
+    #                                                    input_language_iso=last_detected_language)
+    # if logo_path:
+    #                 print("✅ Logo created at:", logo_path)
+    # else:
+    #                 print("⚠️  Logo creation skipped or failed. See messages above.")
 
 if __name__ == "__main__":
     main()
