@@ -9,6 +9,7 @@ import os
 import sys
 import re
 import tempfile
+import requests
 
 # Add the parent directory to the path to import Database_Setup modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -30,7 +31,7 @@ conversational_bp = Blueprint('conversational_bp', __name__)
 # Configuration
 PROJECT_ID = "useful-figure-475210-g7"
 BUCKET_NAME = "all_in_one_bucket"
-COLLECTION_NAME = "kaarigar"
+COLLECTION_NAME = "kaarigars"  # Changed to match user requirement
 
 # Initialize clients
 if FIRESTORE_AVAILABLE:
@@ -53,6 +54,12 @@ if STORAGE_AVAILABLE:
 # Gemini API configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+
+# ElevenLabs API configuration for STT and TTS
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_9762526c74e8278229361f3cd5d3eef580ff7fd0ca7341a2")
+ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
+ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
+ELEVEN_VOICE_ID = os.environ.get("ELEVEN_VOICE_ID", "KaCAGkAghyX8sFEYByRC")
 
 # System prompt for conversational onboarding
 SYSTEM_PROMPT = """
@@ -118,6 +125,55 @@ def build_prompt_from_history(system_prompt: str, history: list, user_text: str,
     )
     return prompt
 
+def eleven_stt_transcribe(audio_bytes: bytes, filename: str = "audio.wav", model_id: str = "scribe_v1", language_code: str = None):
+    """Transcribe audio using ElevenLabs STT"""
+    if not ELEVENLABS_API_KEY:
+        raise RuntimeError("ELEVENLABS_API_KEY not set.")
+    
+    print(f"🎤 STT Request - File: {filename}, Size: {len(audio_bytes)} bytes, Model: {model_id}")
+    
+    headers = {"xi-api-key": ELEVENLABS_API_KEY}
+    files = {"file": (filename, audio_bytes, "application/octet-stream")}
+    data = {"model_id": model_id}
+    if language_code:
+        data["language_code"] = language_code
+    
+    try:
+        resp = requests.post(ELEVEN_STT_URL, headers=headers, files=files, data=data, timeout=60)
+        print(f"📡 STT Response Status: {resp.status_code}")
+        
+        if resp.status_code == 200:
+            result = resp.json()
+            print(f"📝 STT Result: {result}")
+            return result
+        else:
+            print(f"❌ STT API Error: {resp.status_code} - {resp.text}")
+            return {"text": "", "error": f"STT API returned {resp.status_code}"}
+            
+    except requests.exceptions.Timeout:
+        print("❌ STT request timed out")
+        return {"text": "", "error": "STT request timed out"}
+    except Exception as e:
+        print(f"❌ STT transcription failed: {e}")
+        return {"text": "", "error": str(e)}
+
+def eleven_tts_generate(text: str, voice_id: str = ELEVEN_VOICE_ID) -> bytes:
+    """Generate speech using ElevenLabs TTS"""
+    if not ELEVENLABS_API_KEY:
+        raise RuntimeError("ELEVENLABS_API_KEY not set.")
+    
+    url = f"{ELEVEN_TTS_URL}/{voice_id}"
+    headers = {"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"}
+    body = {"text": text}
+    
+    try:
+        resp = requests.post(url, json=body, headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        print(f"❌ TTS generation failed: {e}")
+        raise RuntimeError(f"TTS generation failed: {e}")
+
 def call_gemini_raw(prompt: str, api_key: str, model_name: str = "gemini-2.0-flash",
                     max_output_tokens: int = 1024, temperature: float = 0.0) -> str:
     """Call Gemini API"""
@@ -148,28 +204,49 @@ def upload_to_cloud_storage(data: str, path: str, content_type: str = "text/plai
         print(f"❌ Cloud Storage upload failed: {e}")
         return None
 
-def save_conversation_to_storage(conversation_data: dict, kaarigar_id: str) -> str:
-    """Save conversation data to Cloud Storage"""
+def save_conversation_summary_to_storage(conversation_summary: str, kaarigar_id: str) -> str:
+    """Save conversation summary to Cloud Storage"""
     try:
-        # Save conversation history
-        conversation_path = f"kaarigar/{kaarigar_id}/conversation/history.json"
-        conversation_json = json.dumps(conversation_data, ensure_ascii=False, indent=2)
-        upload_to_cloud_storage(conversation_json, conversation_path, "application/json")
-        
-        # Save user responses as text
-        user_responses = [turn["text"] for turn in conversation_data.get("history", []) if turn.get("role") == "user"]
-        responses_text = "\n".join([f"User Response {i+1}: {resp}" for i, resp in enumerate(user_responses)])
-        responses_path = f"kaarigar/{kaarigar_id}/conversation/user_responses.txt"
-        upload_to_cloud_storage(responses_text, responses_path, "text/plain")
-        
-        return conversation_path
+        # Save conversation summary as single text file
+        summary_path = f"kaarigar/{kaarigar_id}/conversation_summary.txt"
+        upload_to_cloud_storage(conversation_summary, summary_path, "text/plain")
+        print(f"✅ Conversation summary saved to: {summary_path}")
+        return f"gs://{BUCKET_NAME}/{summary_path}"
     except Exception as e:
-        print(f"❌ Failed to save conversation to storage: {e}")
+        print(f"❌ Failed to save conversation summary to storage: {e}")
         return None
 
-def generate_profile_from_responses(user_responses: list, gemini_api_key: str = None, 
-                                  gemini_model_name: str = None, input_language_iso: str = None) -> dict:
-    """Generate profile from user responses using Gemini"""
+def cleanup_old_conversations(user_id, keep_kaarigar_id):
+    """Delete old kaarigar profiles for a user, keeping only the latest successful one"""
+    try:
+        from Database_Setup.firestore_nosql_storage import delete_document
+        
+        # Get all kaarigar profiles for the user
+        all_kaarigars = query_documents("user_id", "==", user_id)
+        
+        if len(all_kaarigars) <= 1:
+            print(f"📝 No old conversations to clean up (only {len(all_kaarigars)} profile)")
+            return
+        
+        deleted_count = 0
+        for kaarigar in all_kaarigars:
+            kaarigar_id = kaarigar.get("kaarigar_id")
+            if kaarigar_id != keep_kaarigar_id:
+                try:
+                    delete_document(kaarigar_id)
+                    deleted_count += 1
+                    print(f"🗑️ Deleted old conversation: {kaarigar_id}")
+                except Exception as e:
+                    print(f"⚠️ Failed to delete {kaarigar_id}: {e}")
+        
+        print(f"✅ Cleaned up {deleted_count} old conversations, kept: {keep_kaarigar_id}")
+        
+    except Exception as e:
+        print(f"❌ Error during cleanup: {e}")
+
+def generate_comprehensive_profile_and_summary(user_responses: list, gemini_api_key: str = None, 
+                                              gemini_model_name: str = None, input_language_iso: str = None) -> dict:
+    """Generate comprehensive profile and conversation summary using Gemini"""
     gemini_api_key = gemini_api_key or GEMINI_API_KEY
     gemini_model_name = gemini_model_name or GEMINI_MODEL_NAME
 
@@ -180,7 +257,8 @@ def generate_profile_from_responses(user_responses: list, gemini_api_key: str = 
     # Create conversation text
     convo_text = "\n".join([f"User Response {i+1}: {resp}" for i, resp in enumerate(user_responses)])
     
-    prompt = (
+    # Generate profile
+    profile_prompt = (
         "You are a helpful assistant. The following is an interview transcript (may be in any language). "
         "Extract the artisan's facts and output valid JSON ONLY. The JSON should include any of these keys if available:\n"
         "full_name, name, location, brief_bio, bio, craft, tagline, materials_and_techniques, materials, "
@@ -193,23 +271,39 @@ def generate_profile_from_responses(user_responses: list, gemini_api_key: str = 
         "Output strictly a single JSON object and nothing else."
     )
     
+    # Generate conversation summary
+    summary_prompt = (
+        "You are a helpful assistant. Create a comprehensive summary of the following artisan interview conversation. "
+        "The summary should be in paragraph form, capturing all the key information about the artisan including their name, craft, background, materials, challenges, and aspirations. "
+        "Make it engaging and informative, suitable for a profile description. "
+        "Keep it in the same language as the conversation if possible, otherwise use English.\n\n"
+        "Conversation:\n" + convo_text + "\n\n"
+        "Output only the summary text, no additional formatting or explanations."
+    )
+    
     try:
-        gemini_out = call_gemini_raw(prompt=prompt, api_key=gemini_api_key, model_name=gemini_model_name, max_output_tokens=512, temperature=0.0)
+        # Generate profile
+        profile_out = call_gemini_raw(prompt=profile_prompt, api_key=gemini_api_key, model_name=gemini_model_name, max_output_tokens=512, temperature=0.0)
         
-        # Extract JSON from response
+        # Generate summary
+        summary_out = call_gemini_raw(prompt=summary_prompt, api_key=gemini_api_key, model_name=gemini_model_name, max_output_tokens=1024, temperature=0.3)
+        
+        # Extract JSON from profile response
         try:
-            start = gemini_out.find("{")
-            end = gemini_out.rfind("}")
+            start = profile_out.find("{")
+            end = profile_out.rfind("}")
             if start != -1 and end != -1 and end > start:
-                candidate = gemini_out[start:end+1]
+                candidate = profile_out[start:end+1]
                 parsed = json.loads(candidate)
             else:
-                parsed = json.loads(gemini_out)
+                parsed = json.loads(profile_out)
         except Exception:
             parsed = {}
+            
     except Exception as e:
-        print(f"❌ Profile generation failed: {e}")
+        print(f"❌ Profile/summary generation failed: {e}")
         parsed = {}
+        summary_out = ""
 
     def get_any(d, keys, fallback=""):
         for k in keys:
@@ -241,7 +335,8 @@ def generate_profile_from_responses(user_responses: list, gemini_api_key: str = 
         "Bio": bio or "",
         "Tagline": tagline or "",
         "Materials Used": materials or "",
-        "Aspiration": aspiration or ""
+        "Aspiration": aspiration or "",
+        "Conversation Summary": summary_out.strip() or bio
     }
 
     return final_profile
@@ -255,55 +350,100 @@ def start_conversation():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = session.get('user_id')
-        kaarigar_id = generate_kaarigar_id()
-        brand_id = generate_brand_id()
         
-        # Create initial conversation data
-        conversation_data = {
-            "kaarigar_id": kaarigar_id,
-            "brand_id": brand_id,
-            "user_id": user_id,
-            "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-            "history": [],
-            "user_responses": [],
-            "preferred_language": "en"
-        }
-        
-        # Save to Firestore
+        # Check if user already has a kaarigar profile
         if FIRESTORE_AVAILABLE:
             try:
-                create_document(conversation_data, kaarigar_id)
-                print(f"✅ Conversation started: {kaarigar_id}")
+                existing_kaarigars = query_documents("user_id", "==", user_id)
+                if existing_kaarigars:
+                    # Use the most recent kaarigar profile (last one in the list)
+                    kaarigar_data = existing_kaarigars[-1]  # Get the latest one
+                    kaarigar_id = kaarigar_data.get("kaarigar_id")
+                    brand_id = kaarigar_data.get("brand_id")
+                    print(f"✅ Using existing kaarigar profile: {kaarigar_id} (Total profiles: {len(existing_kaarigars)})")
+                    
+                    # Clear conversation history to start fresh (prevent duplicate greetings)
+                    kaarigar_data["conversation_history"] = []
+                    print(f"🧹 Cleared conversation history for fresh start")
+                    
+                    # Show only the most recent 2 profiles instead of all
+                    recent_profiles = existing_kaarigars[-2:] if len(existing_kaarigars) > 2 else existing_kaarigars
+                    for i, profile in enumerate(recent_profiles):
+                        status = profile.get("status", "active")
+                        created = profile.get("created_at", "unknown")[:10]  # Just the date
+                        print(f"   Profile {i+1}: {profile.get('kaarigar_id', 'unknown')} - {status} ({created})")
+                else:
+                    # Create new kaarigar profile
+                    kaarigar_id = generate_kaarigar_id()
+                    brand_id = generate_brand_id()
+                    
+                    # Create kaarigar profile
+                    kaarigar_data = {
+                        "kaarigar_id": kaarigar_id,
+                        "brand_id": brand_id,
+                        "user_id": user_id,
+                        "status": "active",
+                        "created_at": datetime.utcnow().isoformat(),
+                        "conversation_count": 0,
+                        "cloud_storage_urls": {},
+                        "profile": {},
+                        "preferred_language": "en",
+                        "conversation_history": []
+                    }
+                    
+                    create_document(kaarigar_data, kaarigar_id)
+                    print(f"✅ New kaarigar profile created: {kaarigar_id}")
             except Exception as e:
-                print(f"❌ Failed to save conversation to Firestore: {e}")
+                print(f"❌ Failed to get/create kaarigar profile: {e}")
                 return jsonify({"error": "Failed to start conversation"}), 500
+        else:
+            return jsonify({"error": "Database not available"}), 500
         
         # Generate initial AI message
         initial_prompt = f"{SYSTEM_PROMPT}\n\nPreferred_language: en\n\nNew user message:\nHello\n\nAs the assistant, provide the first greeting in English. Keep it short and welcoming."
+        print(f"🎤 GENERATING INITIAL GREETING - Prompt: {initial_prompt[:100]}...")
         ai_response = call_gemini_raw(initial_prompt, GEMINI_API_KEY, GEMINI_MODEL_NAME, temperature=0.6)
+        print(f"🎤 INITIAL GREETING GENERATED: {ai_response[:100]}...")
         
-        # Add initial AI message to history
-        conversation_data["history"].append({
-            "role": "assistant",
-            "text": ai_response,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        # Skip TTS audio for initial greeting to prevent multiple greetings
+        ai_audio_base64 = None
+        print("🔇 Skipping initial greeting audio to prevent duplicates")
         
-        # Update Firestore
+        # Update kaarigar profile with conversation start (no greeting stored)
         if FIRESTORE_AVAILABLE:
             try:
                 from Database_Setup.firestore_nosql_storage import update_document
-                update_document(kaarigar_id, conversation_data)
+                
+                # Get current kaarigar data
+                current_data = get_document(kaarigar_id)
+                if current_data:
+                    # Initialize conversation history if not exists
+                    if "conversation_history" not in current_data:
+                        current_data["conversation_history"] = []
+                        print(f"📝 INITIALIZED EMPTY CONVERSATION HISTORY")
+                    else:
+                        print(f"📝 EXISTING CONVERSATION HISTORY FOUND: {len(current_data['conversation_history'])} messages")
+                        for i, msg in enumerate(current_data['conversation_history']):
+                            print(f"   Message {i+1}: {msg.get('role', 'unknown')} - {msg.get('text', '')[:50]}...")
+                    
+                    # Update with conversation start data (no greeting stored in history)
+                    current_data.update({
+                        "last_conversation_start": datetime.utcnow().isoformat(),
+                        "current_conversation_active": True,
+                        "conversation_history": []  # Ensure history is cleared
+                    })
+                    
+                    update_document(kaarigar_id, current_data)
+                    print(f"✅ Conversation started (greeting NOT stored in history) - History length: {len(current_data['conversation_history'])}")
             except Exception as e:
-                print(f"⚠️ Failed to update conversation: {e}")
+                print(f"⚠️ Failed to update kaarigar profile: {e}")
         
         return jsonify({
             "success": True,
             "kaarigar_id": kaarigar_id,
             "brand_id": brand_id,
             "ai_message": ai_response,
-            "conversation_data": conversation_data
+            "ai_audio": ai_audio_base64
         }), 200
         
     except Exception as e:
@@ -327,33 +467,49 @@ def send_message():
         if not kaarigar_id or not user_message:
             return jsonify({"error": "kaarigar_id and message are required"}), 400
         
-        # Get conversation from Firestore
+        # Get kaarigar profile from Firestore
         if FIRESTORE_AVAILABLE:
             try:
-                conversation = get_document(kaarigar_id)
-                if not conversation:
-                    return jsonify({"error": "Conversation not found"}), 404
+                kaarigar_data = get_document(kaarigar_id)
+                if not kaarigar_data:
+                    return jsonify({"error": "Kaarigar profile not found"}), 404
             except Exception as e:
-                print(f"❌ Failed to get conversation: {e}")
+                print(f"❌ Failed to get kaarigar profile: {e}")
                 return jsonify({"error": "Database error"}), 500
         else:
             return jsonify({"error": "Database not available"}), 500
         
+        # Initialize conversation history if not exists
+        if "conversation_history" not in kaarigar_data:
+            kaarigar_data["conversation_history"] = []
+        
         # Add user message to history
-        conversation["history"].append({
+        user_message_data = {
             "role": "user",
             "text": user_message,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+            "timestamp": datetime.utcnow().isoformat(),
+            "input_type": "text"
+        }
+        kaarigar_data["conversation_history"].append(user_message_data)
+        print(f"📝 ADDED USER MESSAGE TO HISTORY: {user_message[:50]}... (Total messages: {len(kaarigar_data['conversation_history'])})")
         
         # Detect language
         preferred_language = detect_preferred_language_from_text(user_message)
-        conversation["preferred_language"] = preferred_language
+        kaarigar_data["preferred_language"] = preferred_language
+        
+        # Update kaarigar profile with user message first
+        if FIRESTORE_AVAILABLE:
+            try:
+                from Database_Setup.firestore_nosql_storage import update_document
+                update_document(kaarigar_id, kaarigar_data)
+                print(f"✅ User message stored: {user_message[:50]}...")
+            except Exception as e:
+                print(f"❌ Failed to update kaarigar profile with user message: {e}")
         
         # Generate AI response
         prompt = build_prompt_from_history(
             SYSTEM_PROMPT, 
-            conversation["history"], 
+            kaarigar_data["conversation_history"], 
             user_message, 
             preferred_language
         )
@@ -361,63 +517,89 @@ def send_message():
         ai_response = call_gemini_raw(prompt, GEMINI_API_KEY, GEMINI_MODEL_NAME, temperature=0.6)
         
         # Add AI response to history
-        conversation["history"].append({
+        ai_message_data = {
             "role": "assistant",
             "text": ai_response,
             "timestamp": datetime.utcnow().isoformat()
-        })
+        }
+        kaarigar_data["conversation_history"].append(ai_message_data)
+        print(f"📝 ADDED AI RESPONSE TO HISTORY: {ai_response[:50]}... (Total messages: {len(kaarigar_data['conversation_history'])})")
         
-        # Update conversation in Firestore
+        # Update kaarigar profile with AI response
         if FIRESTORE_AVAILABLE:
             try:
                 from Database_Setup.firestore_nosql_storage import update_document
-                update_document(kaarigar_id, conversation)
+                update_document(kaarigar_id, kaarigar_data)
+                print(f"✅ AI response stored: {ai_response[:50]}...")
             except Exception as e:
-                print(f"❌ Failed to update conversation: {e}")
+                print(f"❌ Failed to update kaarigar profile with AI response: {e}")
         
         # Check if conversation is complete (6+ user responses)
-        user_responses = [turn["text"] for turn in conversation["history"] if turn.get("role") == "user"]
+        user_responses = [turn["text"] for turn in kaarigar_data["conversation_history"] if turn.get("role") == "user"]
         is_complete = len(user_responses) >= 6
         
+        # Generate TTS audio for AI response
+        ai_audio_base64 = None
+        try:
+            print("🔊 Generating TTS audio for AI response...")
+            ai_audio_bytes = eleven_tts_generate(ai_response)
+            ai_audio_base64 = base64.b64encode(ai_audio_bytes).decode('utf-8')
+            print("✅ TTS audio generated successfully")
+        except Exception as e:
+            print(f"⚠️ TTS generation failed: {e}")
+            # Continue without audio - not critical
+
         response_data = {
             "success": True,
             "ai_message": ai_response,
+            "ai_audio": ai_audio_base64,
             "is_complete": is_complete,
             "user_response_count": len(user_responses)
         }
         
-        # If conversation is complete, generate profile
+        # If conversation is complete, generate profile and summary
         if is_complete:
-            print("✅ Conversation complete - generating profile")
+            print("✅ Conversation complete - generating profile and summary")
             try:
-                profile = generate_profile_from_responses(user_responses, GEMINI_API_KEY, GEMINI_MODEL_NAME, preferred_language)
+                # Generate comprehensive profile and summary
+                profile_data = generate_comprehensive_profile_and_summary(user_responses, GEMINI_API_KEY, GEMINI_MODEL_NAME, preferred_language)
                 
-                # Save profile to Cloud Storage
+                # Save conversation summary to Cloud Storage
+                summary_url = None
                 if STORAGE_AVAILABLE:
-                    profile_path = f"kaarigar/{kaarigar_id}/profile/profile.json"
-                    profile_json = json.dumps(profile, ensure_ascii=False, indent=2)
-                    upload_to_cloud_storage(profile_json, profile_path, "application/json")
-                    
-                    # Save conversation to storage
-                    save_conversation_to_storage(conversation, kaarigar_id)
+                    summary_url = save_conversation_summary_to_storage(profile_data.get("Conversation Summary", ""), kaarigar_id)
                 
-                # Update conversation status
-                conversation["status"] = "completed"
-                conversation["profile"] = profile
-                conversation["completed_at"] = datetime.utcnow().isoformat()
+                # Update kaarigar profile with final data
+                kaarigar_data["status"] = "completed"
+                kaarigar_data["profile"] = profile_data
+                kaarigar_data["completed_at"] = datetime.utcnow().isoformat()
+                kaarigar_data["conversation_count"] = kaarigar_data.get("conversation_count", 0) + 1
+                kaarigar_data["current_conversation_active"] = False
+                
+                # Store Cloud Storage URLs
+                if summary_url:
+                    # Initialize cloud_storage_urls if it doesn't exist
+                    if "cloud_storage_urls" not in kaarigar_data:
+                        kaarigar_data["cloud_storage_urls"] = {}
+                    kaarigar_data["cloud_storage_urls"]["conversation_summary"] = summary_url
                 
                 if FIRESTORE_AVAILABLE:
                     try:
-                        update_document(kaarigar_id, conversation)
+                        update_document(kaarigar_id, kaarigar_data)
+                        print(f"✅ Kaarigar profile updated with completion data")
+                        
+                        # Clean up old conversations only after successful profile generation
+                        cleanup_old_conversations(session.get('user_id'), kaarigar_id)
                     except Exception as e:
-                        print(f"⚠️ Failed to update completed conversation: {e}")
+                        print(f"⚠️ Failed to update completed kaarigar profile: {e}")
                 
-                response_data["profile"] = profile
+                response_data["profile"] = profile_data
                 response_data["profile_saved"] = True
+                response_data["summary_url"] = summary_url
                 
             except Exception as e:
-                print(f"❌ Profile generation failed: {e}")
-                response_data["profile_error"] = str(e)
+                print(f"❌ Profile/summary generation failed")
+                response_data["profile_error"] = "Profile generation failed"
         
         return jsonify(response_data), 200
         
@@ -427,32 +609,221 @@ def send_message():
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
 
+@conversational_bp.route('/audio-message', methods=['POST'])
+def send_audio_message():
+    """Send an audio message in the conversation"""
+    print("🚀 CONVERSATIONAL AUDIO MESSAGE REQUEST")
+    try:
+        if not session.get('is_authenticated'):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        data = request.get_json()
+        kaarigar_id = data.get('kaarigar_id')
+        audio_base64 = data.get('audio')
+        language_code = data.get('language_code', 'en')
+        
+        if not kaarigar_id or not audio_base64:
+            return jsonify({"error": "kaarigar_id and audio are required"}), 400
+        
+        # Decode base64 audio
+        try:
+            audio_bytes = base64.b64decode(audio_base64)
+        except Exception as e:
+            print(f"❌ Failed to decode audio: {e}")
+            return jsonify({"error": "Invalid audio data"}), 400
+        
+        # Transcribe audio using ElevenLabs STT
+        print("🎤 Transcribing audio...")
+        print(f"📊 Audio size: {len(audio_bytes)} bytes")
+        stt_result = eleven_stt_transcribe(audio_bytes, "audio.webm", "scribe_v1", language_code)
+        
+        if stt_result.get("error"):
+            print(f"❌ STT failed: {stt_result['error']}")
+            return jsonify({"error": "Speech recognition failed"}), 500
+        
+        user_message = stt_result.get("text", "").strip()
+        if not user_message:
+            return jsonify({"error": "No speech detected in audio"}), 400
+        
+        print(f"📝 Transcribed text: {user_message}")
+        
+        # Get kaarigar profile from Firestore
+        if FIRESTORE_AVAILABLE:
+            try:
+                kaarigar_data = get_document(kaarigar_id)
+                if not kaarigar_data:
+                    return jsonify({"error": "Kaarigar profile not found"}), 404
+            except Exception as e:
+                print(f"❌ Failed to get kaarigar profile: {e}")
+                return jsonify({"error": "Database error"}), 500
+        else:
+            return jsonify({"error": "Database not available"}), 500
+        
+        # Initialize conversation history if not exists
+        if "conversation_history" not in kaarigar_data:
+            kaarigar_data["conversation_history"] = []
+        
+        # Add user message to history
+        user_message_data = {
+            "role": "user",
+            "text": user_message,
+            "timestamp": datetime.utcnow().isoformat(),
+            "input_type": "audio"
+        }
+        kaarigar_data["conversation_history"].append(user_message_data)
+        
+        # Detect language
+        preferred_language = detect_preferred_language_from_text(user_message)
+        kaarigar_data["preferred_language"] = preferred_language
+        
+        # Update kaarigar profile with user message first
+        if FIRESTORE_AVAILABLE:
+            try:
+                from Database_Setup.firestore_nosql_storage import update_document
+                update_document(kaarigar_id, kaarigar_data)
+                print(f"✅ User audio message stored: {user_message[:50]}...")
+            except Exception as e:
+                print(f"❌ Failed to update kaarigar profile with user audio message: {e}")
+        
+        # Generate AI response
+        prompt = build_prompt_from_history(
+            SYSTEM_PROMPT, 
+            kaarigar_data["conversation_history"], 
+            user_message, 
+            preferred_language
+        )
+        
+        ai_response = call_gemini_raw(prompt, GEMINI_API_KEY, GEMINI_MODEL_NAME, temperature=0.6)
+        
+        # Add AI response to history
+        ai_message_data = {
+            "role": "assistant",
+            "text": ai_response,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        kaarigar_data["conversation_history"].append(ai_message_data)
+        print(f"📝 ADDED AI RESPONSE TO HISTORY: {ai_response[:50]}... (Total messages: {len(kaarigar_data['conversation_history'])})")
+        
+        # Update kaarigar profile with AI response
+        if FIRESTORE_AVAILABLE:
+            try:
+                from Database_Setup.firestore_nosql_storage import update_document
+                update_document(kaarigar_id, kaarigar_data)
+                print(f"✅ AI response stored: {ai_response[:50]}...")
+            except Exception as e:
+                print(f"❌ Failed to update kaarigar profile with AI response: {e}")
+        
+        # Check if conversation is complete (6+ user responses)
+        user_responses = [turn["text"] for turn in kaarigar_data["conversation_history"] if turn.get("role") == "user"]
+        is_complete = len(user_responses) >= 6
+        
+        # Generate TTS audio for AI response
+        ai_audio_base64 = None
+        try:
+            print("🔊 Generating TTS audio for AI response...")
+            ai_audio_bytes = eleven_tts_generate(ai_response)
+            ai_audio_base64 = base64.b64encode(ai_audio_bytes).decode('utf-8')
+            print("✅ TTS audio generated successfully")
+        except Exception as e:
+            print(f"⚠️ TTS generation failed: {e}")
+            # Continue without audio - not critical
+
+        response_data = {
+            "success": True,
+            "transcribed_text": user_message,
+            "ai_message": ai_response,
+            "ai_audio": ai_audio_base64,
+            "is_complete": is_complete,
+            "user_response_count": len(user_responses)
+        }
+        
+        # If conversation is complete, generate profile and summary
+        if is_complete:
+            print("✅ Conversation complete - generating profile and summary")
+            try:
+                # Generate comprehensive profile and summary
+                profile_data = generate_comprehensive_profile_and_summary(user_responses, GEMINI_API_KEY, GEMINI_MODEL_NAME, preferred_language)
+                
+                # Save conversation summary to Cloud Storage
+                summary_url = None
+                if STORAGE_AVAILABLE:
+                    summary_url = save_conversation_summary_to_storage(profile_data.get("Conversation Summary", ""), kaarigar_id)
+                
+                # Update kaarigar profile with final data
+                kaarigar_data["status"] = "completed"
+                kaarigar_data["profile"] = profile_data
+                kaarigar_data["completed_at"] = datetime.utcnow().isoformat()
+                kaarigar_data["conversation_count"] = kaarigar_data.get("conversation_count", 0) + 1
+                kaarigar_data["current_conversation_active"] = False
+                
+                # Store Cloud Storage URLs
+                if summary_url:
+                    # Initialize cloud_storage_urls if it doesn't exist
+                    if "cloud_storage_urls" not in kaarigar_data:
+                        kaarigar_data["cloud_storage_urls"] = {}
+                    kaarigar_data["cloud_storage_urls"]["conversation_summary"] = summary_url
+                
+                if FIRESTORE_AVAILABLE:
+                    try:
+                        update_document(kaarigar_id, kaarigar_data)
+                        print(f"✅ Kaarigar profile updated with completion data")
+                        
+                        # Clean up old conversations only after successful profile generation
+                        cleanup_old_conversations(session.get('user_id'), kaarigar_id)
+                    except Exception as e:
+                        print(f"⚠️ Failed to update completed kaarigar profile: {e}")
+                
+                response_data["profile"] = profile_data
+                response_data["profile_saved"] = True
+                response_data["summary_url"] = summary_url
+                
+            except Exception as e:
+                print(f"❌ Profile/summary generation failed")
+                response_data["profile_error"] = "Profile generation failed"
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        print(f"❌ Send audio message error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+
 @conversational_bp.route('/status/<kaarigar_id>', methods=['GET'])
 def get_conversation_status(kaarigar_id):
-    """Get conversation status and data"""
-    print(f"🔍 GET CONVERSATION STATUS: {kaarigar_id}")
+    """Get kaarigar profile status and data"""
+    print(f"🔍 GET KAARIGAR STATUS: {kaarigar_id}")
     try:
         if not session.get('is_authenticated'):
             return jsonify({"error": "Not authenticated"}), 401
         
         if FIRESTORE_AVAILABLE:
             try:
-                conversation = get_document(kaarigar_id)
-                if not conversation:
-                    return jsonify({"error": "Conversation not found"}), 404
+                kaarigar_data = get_document(kaarigar_id)
+                if not kaarigar_data:
+                    return jsonify({"error": "Kaarigar profile not found"}), 404
                 
-                user_responses = [turn["text"] for turn in conversation.get("history", []) if turn.get("role") == "user"]
+                # Get user responses from conversation history
+                user_responses = []
+                if "conversation_history" in kaarigar_data:
+                    user_responses = [turn["text"] for turn in kaarigar_data["conversation_history"] if turn.get("role") == "user"]
                 
                 return jsonify({
                     "success": True,
                     "kaarigar_id": kaarigar_id,
-                    "status": conversation.get("status", "active"),
+                    "brand_id": kaarigar_data.get("brand_id"),
+                    "user_id": kaarigar_data.get("user_id"),
+                    "status": kaarigar_data.get("status", "active"),
                     "user_response_count": len(user_responses),
                     "is_complete": len(user_responses) >= 6,
-                    "preferred_language": conversation.get("preferred_language", "en"),
-                    "created_at": conversation.get("created_at"),
-                    "completed_at": conversation.get("completed_at"),
-                    "profile": conversation.get("profile")
+                    "preferred_language": kaarigar_data.get("preferred_language", "en"),
+                    "profile": kaarigar_data.get("profile", {}),
+                    "cloud_storage_urls": kaarigar_data.get("cloud_storage_urls", {}),
+                    "conversation_count": kaarigar_data.get("conversation_count", 0),
+                    "current_conversation_active": kaarigar_data.get("current_conversation_active", False),
+                    "created_at": kaarigar_data.get("created_at"),
+                    "completed_at": kaarigar_data.get("completed_at"),
+                    "conversation_history": kaarigar_data.get("conversation_history", [])
                 }), 200
                 
             except Exception as e:
@@ -467,8 +838,8 @@ def get_conversation_status(kaarigar_id):
 
 @conversational_bp.route('/list', methods=['GET'])
 def list_conversations():
-    """List all conversations for the current user"""
-    print("📋 LIST CONVERSATIONS REQUEST")
+    """List all kaarigar profiles for the current user"""
+    print("📋 LIST KAARIGAR PROFILES REQUEST")
     try:
         if not session.get('is_authenticated'):
             return jsonify({"error": "Not authenticated"}), 401
@@ -477,24 +848,32 @@ def list_conversations():
         
         if FIRESTORE_AVAILABLE:
             try:
-                conversations = query_documents("user_id", "==", user_id)
+                kaarigar_profiles = query_documents("user_id", "==", user_id)
                 
-                conversation_list = []
-                for conv in conversations:
-                    user_responses = [turn["text"] for turn in conv.get("history", []) if turn.get("role") == "user"]
-                    conversation_list.append({
-                        "kaarigar_id": conv.get("kaarigar_id"),
-                        "brand_id": conv.get("brand_id"),
-                        "status": conv.get("status", "active"),
+                profile_list = []
+                for profile in kaarigar_profiles:
+                    # Get user responses from conversation history
+                    user_responses = []
+                    if "conversation_history" in profile:
+                        user_responses = [turn["text"] for turn in profile["conversation_history"] if turn.get("role") == "user"]
+                    
+                    profile_list.append({
+                        "kaarigar_id": profile.get("kaarigar_id"),
+                        "brand_id": profile.get("brand_id"),
+                        "status": profile.get("status", "active"),
                         "user_response_count": len(user_responses),
                         "is_complete": len(user_responses) >= 6,
-                        "created_at": conv.get("created_at"),
-                        "completed_at": conv.get("completed_at")
+                        "conversation_count": profile.get("conversation_count", 0),
+                        "current_conversation_active": profile.get("current_conversation_active", False),
+                        "profile": profile.get("profile", {}),
+                        "cloud_storage_urls": profile.get("cloud_storage_urls", {}),
+                        "created_at": profile.get("created_at"),
+                        "completed_at": profile.get("completed_at")
                     })
                 
                 return jsonify({
                     "success": True,
-                    "conversations": conversation_list
+                    "kaarigar_profiles": profile_list
                 }), 200
                 
             except Exception as e:

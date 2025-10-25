@@ -35,7 +35,8 @@ def home():
             },
             "conversational": {
                 "POST /api/conversational/start": "Start conversational onboarding",
-                "POST /api/conversational/message": "Send message in conversation",
+                "POST /api/conversational/message": "Send text message in conversation",
+                "POST /api/conversational/audio-message": "Send audio message in conversation",
                 "GET /api/conversational/status/<kaarigar_id>": "Get conversation status",
                 "GET /api/conversational/list": "List user conversations",
                 "GET /api/conversational/health": "Conversational service health check"
