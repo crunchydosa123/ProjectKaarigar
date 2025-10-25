@@ -2,6 +2,7 @@ from flask import Flask, session
 from flask_cors import CORS
 from routes.testing import testing_bp
 from routes.auth import auth_bp
+from routes.conversational import conversational_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'], supports_credentials=True)
@@ -16,6 +17,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 # Register blueprints
 app.register_blueprint(testing_bp, url_prefix="/testing")
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(conversational_bp, url_prefix="/api/conversational")
 
 @app.route('/')
 def home():
