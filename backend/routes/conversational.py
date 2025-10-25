@@ -56,7 +56,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 # ElevenLabs API configuration for STT and TTS
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_9762526c74e8278229361f3cd5d3eef580ff7fd0ca7341a2")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_b346f8c1a3001388c671ebbea7f54c349f953cf827dd4dec")
 ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
 ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
 ELEVEN_VOICE_ID = os.environ.get("ELEVEN_VOICE_ID", "KaCAGkAghyX8sFEYByRC")
@@ -132,8 +132,19 @@ def eleven_stt_transcribe(audio_bytes: bytes, filename: str = "audio.wav", model
     
     print(f"🎤 STT Request - File: {filename}, Size: {len(audio_bytes)} bytes, Model: {model_id}")
     
+    # Try different content types based on filename
+    content_type = "application/octet-stream"
+    if filename.endswith('.webm'):
+        content_type = "audio/webm"
+    elif filename.endswith('.wav'):
+        content_type = "audio/wav"
+    elif filename.endswith('.mp3'):
+        content_type = "audio/mpeg"
+    elif filename.endswith('.ogg'):
+        content_type = "audio/ogg"
+    
     headers = {"xi-api-key": ELEVENLABS_API_KEY}
-    files = {"file": (filename, audio_bytes, "application/octet-stream")}
+    files = {"file": (filename, audio_bytes, content_type)}
     data = {"model_id": model_id}
     if language_code:
         data["language_code"] = language_code
@@ -190,7 +201,7 @@ def call_gemini_raw(prompt: str, api_key: str, model_name: str = "gemini-2.0-fla
         return "I'm sorry, I'm having trouble processing your request right now. Please try again."
 
 def upload_to_cloud_storage(data: str, path: str, content_type: str = "text/plain") -> str:
-    """Upload data to Cloud Storage"""
+    """Upload data to Cloud Storage and return public URL"""
     if not STORAGE_AVAILABLE:
         print("⚠️ Cloud Storage not available")
         return None
@@ -198,8 +209,15 @@ def upload_to_cloud_storage(data: str, path: str, content_type: str = "text/plai
     try:
         blob = bucket.blob(path)
         blob.upload_from_string(data, content_type=content_type)
+        
+        # Make the blob publicly accessible
+        blob.make_public()
+        
+        # Generate public URL
+        public_url = f"https://storage.googleapis.com/{BUCKET_NAME}/{path}"
         print(f"✅ Uploaded to Cloud Storage: {path}")
-        return f"gs://{BUCKET_NAME}/{path}"
+        print(f"🌐 Public URL: {public_url}")
+        return public_url
     except Exception as e:
         print(f"❌ Cloud Storage upload failed: {e}")
         return None
@@ -209,11 +227,24 @@ def save_conversation_summary_to_storage(conversation_summary: str, kaarigar_id:
     try:
         # Save conversation summary as single text file
         summary_path = f"kaarigar/{kaarigar_id}/conversation_summary.txt"
-        upload_to_cloud_storage(conversation_summary, summary_path, "text/plain")
+        public_url = upload_to_cloud_storage(conversation_summary, summary_path, "text/plain")
         print(f"✅ Conversation summary saved to: {summary_path}")
-        return f"gs://{BUCKET_NAME}/{summary_path}"
+        return public_url
     except Exception as e:
         print(f"❌ Failed to save conversation summary to storage: {e}")
+        return None
+
+def save_profile_to_storage(profile_data: dict, kaarigar_id: str) -> str:
+    """Save profile data as JSON to Cloud Storage"""
+    try:
+        # Save profile as JSON file
+        profile_path = f"kaarigar/{kaarigar_id}/profile/profile.json"
+        profile_json = json.dumps(profile_data, indent=2, ensure_ascii=False)
+        public_url = upload_to_cloud_storage(profile_json, profile_path, "application/json")
+        print(f"✅ Profile JSON saved to: {profile_path}")
+        return public_url
+    except Exception as e:
+        print(f"❌ Failed to save profile to storage: {e}")
         return None
 
 def cleanup_old_conversations(user_id, keep_kaarigar_id):
@@ -564,10 +595,12 @@ def send_message():
                 # Generate comprehensive profile and summary
                 profile_data = generate_comprehensive_profile_and_summary(user_responses, GEMINI_API_KEY, GEMINI_MODEL_NAME, preferred_language)
                 
-                # Save conversation summary to Cloud Storage
+                # Save conversation summary and profile to Cloud Storage
                 summary_url = None
+                profile_url = None
                 if STORAGE_AVAILABLE:
                     summary_url = save_conversation_summary_to_storage(profile_data.get("Conversation Summary", ""), kaarigar_id)
+                    profile_url = save_profile_to_storage(profile_data, kaarigar_id)
                 
                 # Update kaarigar profile with final data
                 kaarigar_data["status"] = "completed"
@@ -577,11 +610,14 @@ def send_message():
                 kaarigar_data["current_conversation_active"] = False
                 
                 # Store Cloud Storage URLs
+                if "cloud_storage_urls" not in kaarigar_data:
+                    kaarigar_data["cloud_storage_urls"] = {}
+                
                 if summary_url:
-                    # Initialize cloud_storage_urls if it doesn't exist
-                    if "cloud_storage_urls" not in kaarigar_data:
-                        kaarigar_data["cloud_storage_urls"] = {}
                     kaarigar_data["cloud_storage_urls"]["conversation_summary"] = summary_url
+                
+                if profile_url:
+                    kaarigar_data["cloud_storage_urls"]["profile"] = profile_url
                 
                 if FIRESTORE_AVAILABLE:
                     try:
@@ -596,6 +632,7 @@ def send_message():
                 response_data["profile"] = profile_data
                 response_data["profile_saved"] = True
                 response_data["summary_url"] = summary_url
+                response_data["profile_url"] = profile_url
                 
             except Exception as e:
                 print(f"❌ Profile/summary generation failed")
@@ -635,15 +672,30 @@ def send_audio_message():
         # Transcribe audio using ElevenLabs STT
         print("🎤 Transcribing audio...")
         print(f"📊 Audio size: {len(audio_bytes)} bytes")
-        stt_result = eleven_stt_transcribe(audio_bytes, "audio.webm", "scribe_v1", language_code)
         
-        if stt_result.get("error"):
-            print(f"❌ STT failed: {stt_result['error']}")
-            return jsonify({"error": "Speech recognition failed"}), 500
+        # Try different audio formats for better compatibility
+        stt_result = None
+        audio_formats = [
+            ("audio.webm", "audio/webm"),
+            ("audio.wav", "audio/wav"), 
+            ("audio.ogg", "audio/ogg")
+        ]
+        
+        for filename, content_type in audio_formats:
+            print(f"🔄 Trying format: {filename}")
+            stt_result = eleven_stt_transcribe(audio_bytes, filename, "scribe_v1", language_code)
+            
+            if not stt_result.get("error") and stt_result.get("text", "").strip():
+                print(f"✅ STT successful with format: {filename}")
+                break
+            else:
+                print(f"❌ STT failed with format: {filename} - {stt_result.get('error', 'No text')}")
+        
+        if stt_result.get("error") or not stt_result.get("text", "").strip():
+            print(f"❌ All STT attempts failed")
+            return jsonify({"error": "Speech recognition failed. Please try speaking more clearly or use text input."}), 500
         
         user_message = stt_result.get("text", "").strip()
-        if not user_message:
-            return jsonify({"error": "No speech detected in audio"}), 400
         
         print(f"📝 Transcribed text: {user_message}")
         
@@ -744,10 +796,12 @@ def send_audio_message():
                 # Generate comprehensive profile and summary
                 profile_data = generate_comprehensive_profile_and_summary(user_responses, GEMINI_API_KEY, GEMINI_MODEL_NAME, preferred_language)
                 
-                # Save conversation summary to Cloud Storage
+                # Save conversation summary and profile to Cloud Storage
                 summary_url = None
+                profile_url = None
                 if STORAGE_AVAILABLE:
                     summary_url = save_conversation_summary_to_storage(profile_data.get("Conversation Summary", ""), kaarigar_id)
+                    profile_url = save_profile_to_storage(profile_data, kaarigar_id)
                 
                 # Update kaarigar profile with final data
                 kaarigar_data["status"] = "completed"
@@ -757,11 +811,14 @@ def send_audio_message():
                 kaarigar_data["current_conversation_active"] = False
                 
                 # Store Cloud Storage URLs
+                if "cloud_storage_urls" not in kaarigar_data:
+                    kaarigar_data["cloud_storage_urls"] = {}
+                
                 if summary_url:
-                    # Initialize cloud_storage_urls if it doesn't exist
-                    if "cloud_storage_urls" not in kaarigar_data:
-                        kaarigar_data["cloud_storage_urls"] = {}
                     kaarigar_data["cloud_storage_urls"]["conversation_summary"] = summary_url
+                
+                if profile_url:
+                    kaarigar_data["cloud_storage_urls"]["profile"] = profile_url
                 
                 if FIRESTORE_AVAILABLE:
                     try:
@@ -776,6 +833,7 @@ def send_audio_message():
                 response_data["profile"] = profile_data
                 response_data["profile_saved"] = True
                 response_data["summary_url"] = summary_url
+                response_data["profile_url"] = profile_url
                 
             except Exception as e:
                 print(f"❌ Profile/summary generation failed")
