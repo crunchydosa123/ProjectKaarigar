@@ -11,6 +11,7 @@ import Signup from './Signup';
 import Loading from './Loading';
 import AddProduct from './AddProduct';
 import AICameraman from './AICameraman';
+import Onboarding2 from './Onboarding2';
 
 
 const PhoneDemo = () => {
@@ -34,7 +35,9 @@ const PhoneDemo = () => {
       
       {/* Main App Routes */}
       {currentPage === "home" && <Homepage />}
+
       {currentPage === "onboarding" && <Onboarding />}
+      {currentPage === "onboarding/details" && <Onboarding2 />}
 
       {/*Create Content Routes*/}
       {currentPage === "create-content" && <CreateContent />}

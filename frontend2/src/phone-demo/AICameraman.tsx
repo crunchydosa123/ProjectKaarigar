@@ -179,18 +179,11 @@ const AICameraman = () => {
           {/* Upload & Next Buttons */}
           <div className="flex gap-4 mt-6">
             <Button
-              onClick={uploadPhotos}
-              variant="default"
-              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white"
-            >
-              <Upload className="h-5 w-5" /> Upload
-            </Button>
-            <Button
               onClick={goNext}
               variant="default"
               className="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white"
             >
-              Next <ArrowRight className="h-5 w-5" />
+              Upload  and Next <ArrowRight className="h-5 w-5" />
             </Button>
           </div>
         </div>

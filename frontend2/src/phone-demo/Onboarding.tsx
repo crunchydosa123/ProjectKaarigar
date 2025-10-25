@@ -51,6 +51,7 @@ const Onboarding = ({}: Props) => {
       });
 
       if (!response.ok) {
+        console.log(response);
         throw new Error('Failed to start conversation');
       }
 
@@ -524,10 +525,13 @@ const Onboarding = ({}: Props) => {
             {userResponseCount}/6 responses completed
           </p>
           {isComplete && (
+            <>
             <p className="text-sm text-green-600 font-medium">
               ✅ Profile generated successfully!
             </p>
-          )}
+            <button className="p-1 bg-blue-600 w-1/3 rounded-md text-white my-1" onClick={()=> setCurrentPage('onboarding/details')}>Next</button>
+            </>
+          )}<button className="p-1 bg-blue-600 w-1/3 rounded-md text-white my-1" onClick={()=> setCurrentPage('onboarding/details')}>Next</button>'
         </div>
 
         {/* Error Display */}
@@ -576,7 +580,7 @@ const Onboarding = ({}: Props) => {
             {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
-          <Popover>
+          {/*<Popover>
             <PopoverTrigger>
               <Button variant="outline" className="w-15 h-15">
                 <ClosedCaption className="w-10 h-10" />
@@ -622,7 +626,7 @@ const Onboarding = ({}: Props) => {
                 </CardContent>
               </Card>
             </PopoverContent>
-          </Popover>
+          </Popover>*/}
         </div>
 
         {/* Text Input */}
