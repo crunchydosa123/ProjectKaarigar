@@ -13,7 +13,7 @@ type PageProviderProps = {
 };
 
 export const PageProvider: React.FC<PageProviderProps> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState<string>("home");
+  const [currentPage, setCurrentPage] = useState<string>("login");
 
   return (
     <PageContext.Provider value={{ currentPage, setCurrentPage }}>

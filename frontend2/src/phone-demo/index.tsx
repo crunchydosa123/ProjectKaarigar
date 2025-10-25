@@ -6,6 +6,8 @@ import CreateContent from './CreateContent';
 import CreateLogo from './CreateLogo';
 import CreateVideo from './CreateVideo';
 import CreateVideo2 from './CreateVideo2';
+import Login from './Login';
+import Signup from './Signup';
 
 
 const PhoneDemo = () => {
@@ -14,8 +16,12 @@ const PhoneDemo = () => {
 
   return (
     <PhoneLayout>
+      {/* Authentication Routes */}
+      {currentPage === "login" && <Login />}
+      {currentPage === "signup" && <Signup />}
       
-      {currentPage === "home" && <Homepage /> }
+      {/* Main App Routes */}
+      {currentPage === "home" && <Homepage />}
       {currentPage === "onboarding" && <Onboarding />}
 
       {/*Create Content Routes*/}
