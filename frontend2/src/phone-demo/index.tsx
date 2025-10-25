@@ -12,6 +12,7 @@ import Loading from './Loading';
 import AddProduct from './AddProduct';
 import AICameraman from './AICameraman';
 import Onboarding2 from './Onboarding2';
+import ProfilePage from './ProfilePage';
 
 
 const PhoneDemo = () => {
@@ -38,6 +39,7 @@ const PhoneDemo = () => {
 
       {currentPage === "onboarding" && <Onboarding />}
       {currentPage === "onboarding/details" && <Onboarding2 />}
+      {currentPage === "onboarding/profile" && <ProfilePage />}
 
       {/*Create Content Routes*/}
       {currentPage === "create-content" && <CreateContent />}

@@ -1,4 +1,4 @@
-import { PackagePlusIcon, Store } from 'lucide-react';
+import { Lightbulb, Store } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
 import { LogOut } from 'lucide-react';
@@ -71,14 +71,19 @@ const Homepage = () => {
 
         <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('add-product')}>
           <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
-            <PackagePlusIcon />
+            <Lightbulb />
           </div>
-          <div className='text-xs font-bold m-2 text-left'>Add Product</div>
+          <div className='text-xs font-bold m-2 text-left'>AI Insights</div>
         </button>
       </div>
 
       <div className='mt-4 flex flex-col w-full'>
-        <div className='text-sm font-bold mb-2'>Your Products</div>
+
+        <div className='flex justify-between items-center'>
+          <div className='text-sm font-bold '>Your Products</div>
+          <button className='py-1 px-2 my-1 text-xs font-semibold bg-white rounded-md' onClick={()=> setCurrentPage('add-product')}>+ Add Product</button>
+        </div>
+        
 
         <div className='flex space-x-3 overflow-x-auto pb-2 hide-scrollbar'>
           {products.map((product, index) => (
