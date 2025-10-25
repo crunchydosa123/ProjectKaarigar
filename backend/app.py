@@ -33,6 +33,13 @@ def home():
                 "GET /api/auth/session": "Check session status",
                 "GET /api/auth/health": "Auth service health check"
             },
+            "conversational": {
+                "POST /api/conversational/start": "Start conversational onboarding",
+                "POST /api/conversational/message": "Send message in conversation",
+                "GET /api/conversational/status/<kaarigar_id>": "Get conversation status",
+                "GET /api/conversational/list": "List user conversations",
+                "GET /api/conversational/health": "Conversational service health check"
+            },
             "testing": {
                 "GET /testing/": "Testing route",
                 "POST /testing/data": "Testing data endpoint"
@@ -52,6 +59,7 @@ if __name__ == '__main__':
     print("🚀 Starting Project Kaarigar Backend...")
     print("📋 Available endpoints:")
     print("  🔐 Authentication: /api/auth/*")
+    print("  💬 Conversational: /api/conversational/*")
     print("  🧪 Testing: /testing/*")
     print("  📊 Health: /health")
     app.run(debug=True, host='0.0.0.0', port=5000)
