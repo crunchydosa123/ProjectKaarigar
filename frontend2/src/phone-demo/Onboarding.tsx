@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
-import { Mic, MicOff, House } from "lucide-react";
+import { Mic, MicOff, House, ClosedCaption } from "lucide-react";
 import CircularProgressBar from "@/components/ui/CircularProgressBar";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@radix-ui/react-popover";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePage } from "@/contexts/PageContext";
 
 type Message = {
   sender: "user" | "ai";
@@ -12,6 +16,7 @@ type Props = {
 };
 
 const Onboarding = ({ progress = 20 }: Props) => {
+  const {setCurrentPage} = usePage();
   const [animatedProgress, setAnimatedProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -56,44 +61,65 @@ const Onboarding = ({ progress = 20 }: Props) => {
     >
       {/* Header */}
       <div className="w-full mt-10 flex justify-start items-center p-3">
-        <div className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"><House /></div>
+        <button className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white" onClick={()=>setCurrentPage('home')}><House /></button>
         <div className="text-md font-bold ml-3">Conversational Onboarding</div>
       </div>
 
       {/* Progress Section */}
       <div className="w-full flex flex-col justify-start">
-      <CircularProgressBar />
+        <CircularProgressBar />
 
-      {/* Mic Button */}
-      <div className="w-full flex justify-center">
-        <button
-          onClick={() => setIsMuted(!isMuted)}
-          className={`flex items-center gap-2 p-5 rounded-md transition text-white
+        {/* Mic Button */}
+        <div className="w-full flex justify-center gap-2">
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className={`flex items-center gap-2 p-5 rounded-md transition text-white
               ${isMuted ? "bg-green-500 hover:bg-green-400" : "bg-red-500 hover:bg-red-400"}`}
-        >
-          {isMuted ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-        </button>
-      </div>
-
-      {/* Conversation Section */}
-      <div className="flex flex-col flex-grow px-4 py-4 overflow-y-auto space-y-3">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
           >
-            <div
-              className={`px-4 py-2 rounded-2xl max-w-[70%] text-sm ${
-                msg.sender === "user"
-                  ? "bg-blue-500 text-white rounded-br-none"
-                  : "bg-gray-200 text-gray-800 rounded-bl-none"
-              }`}
+            {isMuted ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          </button>
+
+
+          <Popover>
+            <PopoverTrigger>
+              <Button variant="outline" className="w-15 h-15">
+                <ClosedCaption className="w-10 h-10" />
+              </Button>
+            </PopoverTrigger>
+
+            <PopoverContent
+              align="center"
+              side="top"
+              className="fixed left-1/2 top-1/2 -translate-x-3/4 -translate-y-1/2 w-60 h-80 border-none bg-transparent shadow-none"
             >
-              {msg.text}
-            </div>
-          </div>
-        ))}
-      </div>
+              <Card className="w-full h-full flex flex-col">
+                <CardHeader>
+                  <CardTitle>Conversation Transcript</CardTitle>
+                </CardHeader>
+
+                <CardContent className="text-sm flex-1 overflow-y-auto space-y-3 p-2">
+                  {messages.map((msg, index) => (
+                    <div
+                      key={index}
+                      className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"
+                        }`}
+                    >
+                      <div
+                        className={`px-3 py-2 rounded-2xl max-w-[75%] ${msg.sender === "user"
+                            ? "bg-blue-600 text-white rounded-br-none"
+                            : "bg-gray-200 text-gray-900 rounded-bl-none"
+                          }`}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </PopoverContent>
+          </Popover>
+
+        </div>
       </div>
     </div>
   );
