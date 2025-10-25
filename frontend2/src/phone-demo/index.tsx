@@ -13,6 +13,9 @@ import AddProduct from './AddProduct';
 import AICameraman from './AICameraman';
 import Onboarding2 from './Onboarding2';
 import ProfilePage from './ProfilePage';
+import AIInsights from './AIInsights';
+import AIInsights2 from './AIInsights2';
+import ChatWithInsight from './ChatWithInsight';
 
 
 const PhoneDemo = () => {
@@ -40,6 +43,10 @@ const PhoneDemo = () => {
       {currentPage === "onboarding" && <Onboarding />}
       {currentPage === "onboarding/details" && <Onboarding2 />}
       {currentPage === "onboarding/profile" && <ProfilePage />}
+
+      {currentPage === "ai-insights" && <AIInsights />}
+      {currentPage === "ai-insights/engagement" && <AIInsights2 />}
+      {currentPage === "ai-insights/chat-with-insight" && <ChatWithInsight startMessage='' />}
 
       {/*Create Content Routes*/}
       {currentPage === "create-content" && <CreateContent />}

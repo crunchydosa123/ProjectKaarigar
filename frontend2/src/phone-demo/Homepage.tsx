@@ -69,7 +69,7 @@ const Homepage = () => {
           <div className='text-xs font-bold m-2 text-left'>Create Content with AI</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('add-product')}>
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('ai-insights')}>
           <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Lightbulb />
           </div>
