@@ -7,7 +7,7 @@ type Props = {
 const PhoneLayout = ({ children }: Props) => {
   return (
     <div className="flex justify-center items-center p-6">
-      <div className="relative rounded-[2.5rem] border-[12px] border-neutral-800 dark:border-neutral-200 w-[320px] h-[640px] bg-black shadow-2xl overflow-hidden">
+      <div className="relative rounded-[2.5rem] border-[12px] border-neutral-800 dark:border-neutral-200 w-[350px] h-[700px] bg-black shadow-2xl overflow-hidden">
         {/* Camera notch */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-neutral-800 dark:bg-neutral-100 rounded-b-3xl z-10" />
 

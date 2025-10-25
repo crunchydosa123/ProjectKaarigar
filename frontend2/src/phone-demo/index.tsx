@@ -9,6 +9,8 @@ import CreateVideo2 from './CreateVideo2';
 import Login from './Login';
 import Signup from './Signup';
 import Loading from './Loading';
+import AddProduct from './AddProduct';
+import AICameraman from './AICameraman';
 
 
 const PhoneDemo = () => {
@@ -39,6 +41,10 @@ const PhoneDemo = () => {
       {currentPage === "create-content/logos" && <CreateLogo />}
       {currentPage === "create-content/videos" && <CreateVideo />}
       {currentPage === "create-content/videos2" && <CreateVideo2 />}
+
+      {/*Add Product Routes*/}
+      {currentPage === "add-product" && <AddProduct />}
+      {currentPage === "add-product/ai-cameraman" && <AICameraman />}
     </PhoneLayout>
   )
 }

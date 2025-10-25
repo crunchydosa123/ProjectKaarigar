@@ -1,7 +1,6 @@
-import { Store } from 'lucide-react';
+import { PackagePlusIcon, Store } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
-import { Package } from 'lucide-react';
 import { LogOut } from 'lucide-react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,23 +30,24 @@ const Homepage = () => {
         </div>
         
         <div className='flex items-center gap-2'>
-          {user && (
-            <div className='text-xs text-white'>
-              Welcome, {user.name}
-            </div>
-          )}
           <Button
             onClick={logout}
             size="sm"
             variant="outline"
-            className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+            className="bg-white/20 border-white/30 text-black hover:bg-white/30"
           >
             <LogOut className="w-3 h-3" />
           </Button>
         </div>
       </div>
 
-      <div className='mt-5 w-full grid grid-cols-2 grid-row-2 gap-2'>
+      {user && (
+            <div className='mt-4 text-xs text-black'>
+              Welcome, <b>{user.name}</b>
+            </div>
+          )}
+
+      <div className='mt-2 w-full grid grid-cols-2 grid-row-2 gap-2'>
         <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('onboarding')}>
           <div className='ml-2 mt-2 bg-[#EAC11D] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Megaphone />
@@ -69,9 +69,9 @@ const Homepage = () => {
           <div className='text-xs font-bold m-2 text-left'>Create Content with AI</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('onboarding')}>
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('add-product')}>
           <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
-            <Package />
+            <PackagePlusIcon />
           </div>
           <div className='text-xs font-bold m-2 text-left'>Add Product</div>
         </button>
