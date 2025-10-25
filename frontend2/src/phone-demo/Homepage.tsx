@@ -2,11 +2,13 @@ import { Store } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
 import { Package } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { usePage } from '@/contexts/PageContext';
 
 const Homepage = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, user, logout } = usePage();
   const products = [
     { name: "Product 1", image: "/product1.png" },
     { name: "Product 2", image: "/product2.png" },
@@ -19,22 +21,39 @@ const Homepage = () => {
       style={{ backgroundImage: "url('/homepage_bg.png')" }}
     >
 
-      <div className='h-8 w-full mt-10 flex justify-start items-center'>
-        <div className="w-8 h-8 bg-cover bg-center" style={{ backgroundImage: "url('/logo.png')" }} ></div>
-        <div className='flex flex-col justify-start mx-2'>
-          <div className='text-sm font-bold'>Project Kaarigar</div>
-          <div className='text-xs'>CyberWardens for GenAI Hackathon25</div>
+      <div className='h-8 w-full mt-10 flex justify-between items-center'>
+        <div className='flex items-center'>
+          <div className="w-8 h-8 bg-cover bg-center" style={{ backgroundImage: "url('/logo.png')" }} ></div>
+          <div className='flex flex-col justify-start mx-2'>
+            <div className='text-sm font-bold'>Project Kaarigar</div>
+            <div className='text-xs'>CyberWardens for GenAI Hackathon25</div>
+          </div>
+        </div>
+        
+        <div className='flex items-center gap-2'>
+          {user && (
+            <div className='text-xs text-white'>
+              Welcome, {user.name}
+            </div>
+          )}
+          <Button
+            onClick={logout}
+            size="sm"
+            variant="outline"
+            className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+          >
+            <LogOut className="w-3 h-3" />
+          </Button>
         </div>
       </div>
 
       <div className='mt-5 w-full grid grid-cols-2 grid-row-2 gap-2'>
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('onboarding')}>
-          <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
-            <Package />
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('onboarding')}>
+          <div className='ml-2 mt-2 bg-[#EAC11D] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
+            <Megaphone />
           </div>
-          <div className='text-xs font-bold m-2 text-left'>Add Product</div>
+          <div className='text-xs font-bold m-2 text-left'>Build Your Brand Story</div>
         </button>
-
 
         <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left'>
           <div className='ml-2 mt-2 bg-[#185FBC] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
@@ -50,11 +69,11 @@ const Homepage = () => {
           <div className='text-xs font-bold m-2 text-left'>Create Content with AI</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('onboarding')}>
-          <div className='ml-2 mt-2 bg-[#EAC11D] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
-            <Megaphone />
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={() => setCurrentPage('onboarding')}>
+          <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
+            <Package />
           </div>
-          <div className='text-xs font-bold m-2 text-left'>Build Your Brand Story</div>
+          <div className='text-xs font-bold m-2 text-left'>Add Product</div>
         </button>
       </div>
 

@@ -6,13 +6,33 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 
 const Login = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, login } = usePage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = () => {
-    // No validation needed - just navigate to home
-    setCurrentPage('home');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const success = await login(email, password);
+      
+      if (!success) {
+        setError('Login failed. Please check your credentials.');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignupClick = () => {
@@ -65,11 +85,18 @@ const Login = () => {
               />
             </div>
 
+            {error && (
+              <div className="text-red-600 text-sm text-center mt-2">
+                {error}
+              </div>
+            )}
+
             <Button 
               onClick={handleLogin}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 mt-6"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 mt-6 disabled:opacity-50"
             >
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
 
             <div className="text-center mt-4">

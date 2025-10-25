@@ -8,11 +8,21 @@ import CreateVideo from './CreateVideo';
 import CreateVideo2 from './CreateVideo2';
 import Login from './Login';
 import Signup from './Signup';
+import Loading from './Loading';
 
 
 const PhoneDemo = () => {
-  const { currentPage } = usePage();
-  console.log(currentPage)
+  const { currentPage, loading } = usePage();
+  console.log('Current page:', currentPage, 'Loading:', loading);
+
+  // Show loading screen while checking authentication
+  if (loading) {
+    return (
+      <PhoneLayout>
+        <Loading />
+      </PhoneLayout>
+    );
+  }
 
   return (
     <PhoneLayout>

@@ -6,13 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 
 const Signup = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, signup } = usePage();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -21,9 +23,42 @@ const Signup = () => {
     }));
   };
 
-  const handleSignup = () => {
-    // No validation needed - just navigate to home
-    setCurrentPage('home');
+  const handleSignup = async () => {
+    // Basic validation
+    if (!formData.name || !formData.email || !formData.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const success = await signup(
+        formData.email,
+        formData.password,
+        formData.name
+      );
+      
+      if (!success) {
+        setError('Signup failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      setError('Signup failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLoginClick = () => {
@@ -100,11 +135,18 @@ const Signup = () => {
               />
             </div>
 
+            {error && (
+              <div className="text-red-600 text-sm text-center mt-2">
+                {error}
+              </div>
+            )}
+
             <Button 
               onClick={handleSignup}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 mt-4"
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 mt-4 disabled:opacity-50"
             >
-              Create Account
+              {loading ? 'Creating Account...' : 'Create Account'}
             </Button>
 
             <div className="text-center mt-4">
