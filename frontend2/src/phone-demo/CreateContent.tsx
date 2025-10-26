@@ -50,7 +50,7 @@ const CreateContent = () => {
     case 'create-content/videos2':
       return <CreateVideo2 />;
     default:
-      return <div>Page not found</div>;
+      return <CreateContentMain />
   }
 };
 
@@ -74,7 +74,6 @@ const CreateContentMain = () => {
   const handleNext = () => {
     if (!subAction) return alert('Please select an option first!');
     console.log('User selected:', subAction);
-    // Example: move to the next module based on user selection
     switch (subAction) {
       case 'createVideo':
         setCurrentPage('create-content/videos');

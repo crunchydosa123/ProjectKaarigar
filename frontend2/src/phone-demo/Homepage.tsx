@@ -1,4 +1,4 @@
-import { Lightbulb, Store, User } from 'lucide-react';
+import { Lightbulb, Store, Upload, User } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
 import { LogOut } from 'lucide-react';
@@ -33,17 +33,6 @@ const Homepage = () => {
         <div className='flex items-center gap-2'>
           <Button
             onClick={() => {
-              setCurrentPage('profile');
-            }}
-            size="sm"
-            className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 font-bold flex items-center gap-2 shadow-lg border-2 border-purple-800"
-            style={{ minWidth: '80px', minHeight: '32px' }}
-          >
-            <User className="w-4 h-4" />
-            Profile
-          </Button>
-          <Button
-            onClick={() => {
               logout();
             }}
             size="sm"
@@ -55,11 +44,26 @@ const Homepage = () => {
         </div>
       </div>
 
+      <div className='flex justify-between items-center mt-2'>
+          
       {user && (
-            <div className='mt-4 text-xs text-black'>
+            <div className=' text-xs text-black'>
               Welcome, <b>{user.name}</b>
             </div>
           )}
+          <Button
+            onClick={() => {
+              setCurrentPage('profile');
+            }}
+            size="sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 font-bold flex items-center gap-2 shadow-lg border-2 border-purple-800"
+            style={{ minWidth: '80px', minHeight: '32px' }}
+          >
+            <User className="w-4 h-4" />
+            Profile
+          </Button>
+          
+      </div>    
 
 
       <div className='mt-2 w-full grid grid-cols-2 grid-row-2 gap-2'>
@@ -121,7 +125,20 @@ const Homepage = () => {
       </div>
 
       <div className='mt-4 flex flex-col w-full gap-1'>
+        <div className='flex justify-between items-center my-1'>
         <div className='text-sm font-bold mb-1'>Post Content</div>
+        <Button
+            onClick={() => {
+              setCurrentPage('profile');
+            }}
+            size="sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 font-bold flex items-center gap-2 shadow-lg border-2 border-purple-800"
+            style={{ minWidth: '80px', minHeight: '32px' }}
+          >
+            <Upload className="w-4 h-4" />
+            Upload
+          </Button>
+        </div>
         <button className='bg-white rounded-sm h-10 flex justify-start p-2'>
           <div className="w-6 h-6 bg-cover bg-center mr-2" style={{ backgroundImage: "url('/youtube.png')" }} ></div>
           <div className='flex flex-col items-start justify-center'>

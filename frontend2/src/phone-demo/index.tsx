@@ -3,9 +3,6 @@ import Homepage from './Homepage';
 import Onboarding from './Onboarding';
 import PhoneLayout from './layout';
 import CreateContent from './CreateContent';
-import CreateLogo from './CreateLogo';
-import CreateVideo from './CreateVideo';
-import CreateVideo2 from './CreateVideo2';
 import Login from './Login';
 import Signup from './Signup';
 import Loading from './Loading';
@@ -15,9 +12,8 @@ import Onboarding2 from './Onboarding2';
 import ProfilePage from './ProfilePage';
 import ViewProfile from './ViewProfile';
 import AIInsights from './AIInsights';
-import AIInsights2 from './AIInsights2';
-import ChatWithInsight from './ChatWithInsight';
 import EditVideo from './EditVideo';
+import EditContent from './EditContent';
 
 
 const PhoneDemo = () => {
@@ -47,17 +43,13 @@ const PhoneDemo = () => {
       {currentPage === "onboarding/details" && <Onboarding2 />}
       {currentPage === "onboarding/profile" && <ProfilePage />}
 
-      {currentPage === "ai-insights" && <AIInsights />}
-      {currentPage === "ai-insights/engagement" && <AIInsights2 />}
-      {currentPage === "ai-insights/chat-with-insight" && <ChatWithInsight startMessage='' />}
+      {/*AI Insights Routes*/}
+      {currentPage.startsWith("ai-insights") ? <AIInsights /> : null}
 
       {/*Create Content Routes*/}
-      {currentPage === "create-content" && <CreateContent />}
-      {currentPage === "create-content/logos" && <CreateLogo />}
-      {currentPage === "create-content/videos" && <CreateVideo />}
-      {currentPage === "create-content/videos2" && <CreateVideo2 />}
+      {currentPage.startsWith("create-content") ? <CreateContent /> : null}
 
-      {currentPage === "edit-content/videos" && <EditVideo />}
+      {currentPage.startsWith("edit-content") ? <EditContent /> : null}
 
       {/*Add Product Routes*/}
       {currentPage === "add-product" && <AddProduct />}
