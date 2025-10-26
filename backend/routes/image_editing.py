@@ -405,18 +405,22 @@ def analyze_image():
         print(f"🔍 Analyzing image for user: {user_id}")
         print(f"🖼️ Image URL: {image_url}")
         
-        # Create temporary directory for processing
-        temp_dir = tempfile.mkdtemp(prefix="image_analysis_")
-        print(f"🗂️ Temporary working directory: {temp_dir}")
-        
+        # Process in memory - no temp folders
         try:
-            # Download image
-            image_path = os.path.join(temp_dir, "image_to_analyze.jpg")
-            if not download_image_from_url(image_url, image_path):
-                return jsonify({"error": "Failed to download image"}), 500
+            # Download image content
+            response = requests.get(image_url, stream=True)
+            response.raise_for_status()
+            
+            # Create temporary file for processing (required by Gemini)
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            temp_file.write(response.content)
+            temp_file.close()
+            local_image_path = temp_file.name
+            
+            print(f"✅ Downloaded image to temp file: {local_image_path}")
             
             # Analyze image for suggestions
-            analysis_result = analyze_image_for_suggestions(image_path)
+            analysis_result = analyze_image_for_suggestions(local_image_path)
             
             if not analysis_result["success"]:
                 return jsonify({"error": f"Image analysis failed: {analysis_result['error']}"}), 500
@@ -431,12 +435,13 @@ def analyze_image():
             })
             
         finally:
-            # Clean up temporary directory
+            # Clean up temp file immediately
             try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                print(f"🧹 Cleaned up temporary directory: {temp_dir}")
+                if 'local_image_path' in locals() and os.path.exists(local_image_path):
+                    os.unlink(local_image_path)
+                    print(f"🧹 Cleaned up temp image file: {local_image_path}")
             except Exception as e:
-                print(f"⚠️ Failed to clean up temporary directory: {e}")
+                print(f"⚠️ Failed to clean up temp image file: {e}")
         
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
@@ -480,18 +485,22 @@ def edit_image():
         print(f"📝 Prompt: {prompt}")
         print(f"📝 Title: {title}")
         
-        # Create temporary directory for processing
-        temp_dir = tempfile.mkdtemp(prefix="image_editing_")
-        print(f"🗂️ Temporary working directory: {temp_dir}")
-        
+        # Process in memory - no temp folders
         try:
-            # Download image
-            image_path = os.path.join(temp_dir, "image_to_edit.jpg")
-            if not download_image_from_url(image_url, image_path):
-                return jsonify({"error": "Failed to download image"}), 500
+            # Download image content
+            response = requests.get(image_url, stream=True)
+            response.raise_for_status()
+            
+            # Create temporary file for processing (required by Gemini)
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            temp_file.write(response.content)
+            temp_file.close()
+            local_image_path = temp_file.name
+            
+            print(f"✅ Downloaded image to temp file: {local_image_path}")
             
             # Edit image using prompt
-            edited_image_bytes = edit_image_with_prompt(image_path, prompt)
+            edited_image_bytes = edit_image_with_prompt(local_image_path, prompt)
             
             if not edited_image_bytes:
                 return jsonify({"error": "Failed to edit image"}), 500
@@ -538,12 +547,13 @@ def edit_image():
             })
             
         finally:
-            # Clean up temporary directory
+            # Clean up temp file immediately
             try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                print(f"🧹 Cleaned up temporary directory: {temp_dir}")
+                if 'local_image_path' in locals() and os.path.exists(local_image_path):
+                    os.unlink(local_image_path)
+                    print(f"🧹 Cleaned up temp image file: {local_image_path}")
             except Exception as e:
-                print(f"⚠️ Failed to clean up temporary directory: {e}")
+                print(f"⚠️ Failed to clean up temp image file: {e}")
         
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
