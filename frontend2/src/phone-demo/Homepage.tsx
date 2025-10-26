@@ -128,16 +128,14 @@ const Homepage = () => {
         <div className='flex justify-between items-center my-1'>
         <div className='text-sm font-bold mb-1'>Post Content</div>
         <Button
-            onClick={() => {
-              setCurrentPage('profile');
-            }}
+            onClick={()=> setCurrentPage('upload-media')}
             size="sm"
             className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 font-bold flex items-center gap-2 shadow-lg border-2 border-purple-800"
             style={{ minWidth: '80px', minHeight: '32px' }}
           >
             <Upload className="w-4 h-4" />
-            Upload
-          </Button>
+            Upload 
+          </Button> 
         </div>
         <button className='bg-white rounded-sm h-10 flex justify-start p-2'>
           <div className="w-6 h-6 bg-cover bg-center mr-2" style={{ backgroundImage: "url('/youtube.png')" }} ></div>

@@ -31,7 +31,7 @@ import { Input } from '@/components/ui/input';
 
 const EditImage = () => {
   const { setCurrentPage } = usePage();
-  const [image, setImage] = useState("/placeholder.png"); // your current image
+  const [image] = useState("/placeholder.png"); // your current image
   const [prompt, setPrompt] = useState("");
 
   const suggestions = ["Brighten", "Contrast", "Blur", "Add Filter", "Remove Background"];

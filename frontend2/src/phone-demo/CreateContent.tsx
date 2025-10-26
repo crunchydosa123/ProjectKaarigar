@@ -57,7 +57,7 @@ const CreateContent = () => {
 export default CreateContent;
 
 const CreateContentMain = () => {
-  const { currentPage, setCurrentPage } = usePage();
+  const { setCurrentPage } = usePage();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [subAction, setSubAction] = useState<string | null>(null);
   const [attachedImages, setAttachedImages] = useState<File[]>([]);

@@ -14,6 +14,7 @@ import ViewProfile from './ViewProfile';
 import AIInsights from './AIInsights';
 import EditVideo from './EditVideo';
 import EditContent from './EditContent';
+import UploadMedia from './UploadMedia';
 
 
 const PhoneDemo = () => {
@@ -54,6 +55,8 @@ const PhoneDemo = () => {
       {/*Add Product Routes*/}
       {currentPage === "add-product" && <AddProduct />}
       {currentPage === "add-product/ai-cameraman" && <AICameraman />}
+
+      {currentPage === "upload-media" && <UploadMedia />}
     </PhoneLayout>
   )
 }
