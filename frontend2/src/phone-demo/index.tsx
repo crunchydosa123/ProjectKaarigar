@@ -16,6 +16,7 @@ import ProfilePage from './ProfilePage';
 import AIInsights from './AIInsights';
 import AIInsights2 from './AIInsights2';
 import ChatWithInsight from './ChatWithInsight';
+import EditVideo from './EditVideo';
 
 
 const PhoneDemo = () => {
@@ -26,6 +27,7 @@ const PhoneDemo = () => {
   if (loading) {
     return (
       <PhoneLayout>
+       
         <Loading />
       </PhoneLayout>
     );
@@ -33,6 +35,7 @@ const PhoneDemo = () => {
 
   return (
     <PhoneLayout>
+       {currentPage}
       {/* Authentication Routes */}
       {currentPage === "login" && <Login />}
       {currentPage === "signup" && <Signup />}
@@ -53,6 +56,11 @@ const PhoneDemo = () => {
       {currentPage === "create-content/logos" && <CreateLogo />}
       {currentPage === "create-content/videos" && <CreateVideo />}
       {currentPage === "create-content/videos2" && <CreateVideo2 />}
+
+      {currentPage.startsWith("create-content") ? <CreateContent /> : null}
+
+
+      {currentPage === "edit-content/videos" && <EditVideo />}
 
       {/*Add Product Routes*/}
       {currentPage === "add-product" && <AddProduct />}
