@@ -33,12 +33,9 @@ import {
 } from "@/components/ui/command"
 import VideoEditorPreview from '@/components/custom/VideoEditorPreview';
 import { Input } from '@/components/ui/input';
-import { logoAPI, profileAPI } from "@/lib/api";
+import { logoAPI, profileAPI, mediaAPI } from "@/lib/api";
+import GenerateVideo from './GenerateVideo';
 
-type Message = {
-  sender: "user" | "ai";
-  text: string;
-};
 
 const CreateContent = () => {
   const { currentPage } = usePage();
@@ -53,6 +50,8 @@ const CreateContent = () => {
       return <CreateVideo />;
     case 'create-content/videos2':
       return <CreateVideo2 />;
+    case 'create-content/generate-video':
+      return <GenerateVideo onBack={() => usePage().setCurrentPage('create-content')} />;
     default:
       return <CreateContentMain />
   }
@@ -67,12 +66,45 @@ const CreateContentMain = () => {
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState<string>("");
+  const [databaseImages, setDatabaseImages] = useState<any[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
 
 
   const handleAttachImages = (files: FileList | null) => {
     if (!files) return;
     const fileArray = Array.from(files);
     setAttachedImages((prev) => [...prev, ...fileArray]);
+  };
+
+  const loadDatabaseImages = async () => {
+    try {
+      setLoadingImages(true);
+      console.log('🔧 Starting to load database images...');
+      
+      // First try to get all media to see what's available
+      const allMediaResponse = await mediaAPI.listMedia();
+      console.log('🔧 All media response:', allMediaResponse);
+      
+      // Then get images specifically
+      const response = await mediaAPI.listMediaByType('images');
+      console.log('🔧 Images response:', response);
+      
+      if (response.success) {
+        setDatabaseImages(response.media);
+        console.log(`📁 Loaded ${response.media.length} images from database`);
+        console.log('📁 Images data:', response.media);
+      } else {
+        console.error('Failed to load images:', response.error);
+        // Show error message to user
+        alert(`Failed to load images: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error loading images:', error);
+      // Show error message to user
+      alert(`Error loading images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingImages(false);
+    }
   };
 
   const handleNext = () => {
@@ -204,31 +236,127 @@ const CreateContentMain = () => {
         {subAction === 'createVideo' && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="flex flex-col items-center">
+              <Button 
+                variant="outline" 
+                className="flex flex-col items-center"
+                onClick={loadDatabaseImages}
+              >
                 <Upload />
                 <span className="mt-2">Attach Images</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72">
+            <PopoverContent className="w-80 max-h-96 overflow-y-auto">
               <Card>
                 <CardTitle className="p-3 text-sm">Your Images</CardTitle>
-                <CardContent>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleAttachImages(e.target.files)}
-                  />
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    {attachedImages.map((file, idx) => (
-                      <img
-                        key={idx}
-                        src={URL.createObjectURL(file)}
-                        alt="preview"
-                        className="w-20 h-20 object-cover rounded-md border"
-                      />
-                    ))}
+                <CardContent className="space-y-4">
+                  {/* Upload new images */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-2 block">
+                      Upload New Images
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleAttachImages(e.target.files)}
+                      className="w-full text-xs"
+                    />
                   </div>
+
+                  {/* Database images */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-2 block">
+                      Images from Database ({databaseImages.length})
+                    </label>
+                    {loadingImages ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        <span className="text-xs text-gray-500">Loading images...</span>
+                      </div>
+                    ) : databaseImages.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        <p className="text-xs">No images found in database</p>
+                        <p className="text-xs">Upload images first to see them here</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={loadDatabaseImages}
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            <Loader2 className="w-3 h-3 mr-1" />
+                            Refresh
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              try {
+                                const response = await mediaAPI.healthCheck();
+                                alert(`Media API Health: ${JSON.stringify(response, null, 2)}`);
+                              } catch (error) {
+                                alert(`Health check failed: ${error}`);
+                              }
+                            }}
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            Test API
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {databaseImages.map((image) => (
+                            <div key={image.id} className="relative group">
+                              <img
+                                src={image.public_url}
+                                alt={image.title || image.original_filename}
+                                className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:border-blue-500 transition-colors"
+                                onClick={() => console.log('Selected image:', image.title)}
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-md transition-all flex items-center justify-center">
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button size="sm" className="h-6 w-6 p-0 bg-blue-500 hover:bg-blue-600">
+                                    +
+                                  </Button>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-600 truncate mt-1">
+                                {image.title || image.original_filename}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Uploaded files preview */}
+                  {attachedImages.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-2 block">
+                        New Uploads ({attachedImages.length})
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {attachedImages.map((file, idx) => (
+                          <div key={idx} className="relative">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt="preview"
+                              className="w-20 h-20 object-cover rounded-md border"
+                            />
+                            <button
+                              onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </PopoverContent>
@@ -821,7 +949,13 @@ const CreateVideo = () => {
           </div>
         )}
 
-        <Button variant={'outline'} className='mt-5' onClick={() => setCurrentPage('create-content/videos2')}>Start Creating Video <ArrowRight /></Button>
+        <div className="flex flex-col gap-3 mt-5">
+          <Button variant={'outline'} className='w-full' onClick={() => setCurrentPage('create-content/videos2')}>Start Creating Video <ArrowRight /></Button>
+          <Button variant={'default'} className='w-full bg-purple-600 hover:bg-purple-700 text-white' onClick={() => setCurrentPage('create-content/generate-video')}>
+            <Video className="w-4 h-4 mr-2" />
+            Generate Video with AI
+          </Button>
+        </div>
 
       </div>
     </div>

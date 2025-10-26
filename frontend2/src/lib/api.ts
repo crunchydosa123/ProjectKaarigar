@@ -251,6 +251,255 @@ class LogoAPI {
 
 export const logoAPI = new LogoAPI();
 
+// Media Upload API
+export interface MediaUploadRequest {
+  file: File;
+  media_type: 'image' | 'video';
+  title?: string;
+  description?: string;
+}
+
+export interface MediaUploadResponse {
+  success: boolean;
+  message: string;
+  media_id?: string;
+  public_url?: string;
+  blob_path?: string;
+  error?: string;
+}
+
+export interface MediaItem {
+  id: string;
+  user_id: string;
+  kaarigar_id: string;
+  media_type: 'image' | 'video';
+  filename: string;
+  original_filename: string;
+  blob_path: string;
+  public_url: string;
+  file_size: number;
+  content_type: string;
+  title?: string;
+  description?: string;
+  uploaded_at: string;
+  is_active: boolean;
+}
+
+export interface MediaListResponse {
+  success: boolean;
+  media: MediaItem[];
+  images: MediaItem[];
+  videos: MediaItem[];
+  count: number;
+  images_count: number;
+  videos_count: number;
+  error?: string;
+}
+
+export interface MediaByTypeResponse {
+  success: boolean;
+  media_type: 'images' | 'videos';
+  media: MediaItem[];
+  count: number;
+  error?: string;
+}
+
+class MediaAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/media';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {},
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      if (data instanceof FormData) {
+        // Don't set Content-Type for FormData, let browser set it
+        options.body = data;
+      } else {
+        options.headers = {
+          'Content-Type': 'application/json',
+        };
+        options.body = JSON.stringify(data);
+      }
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Media API Error:', error);
+      throw error;
+    }
+  }
+
+  async uploadMedia(request: MediaUploadRequest): Promise<MediaUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', request.file);
+    formData.append('media_type', request.media_type);
+    if (request.title) formData.append('title', request.title);
+    if (request.description) formData.append('description', request.description);
+
+    return this.request<MediaUploadResponse>('/upload', 'POST', formData);
+  }
+
+  async listMedia(): Promise<MediaListResponse> {
+    return this.request<MediaListResponse>('/list', 'GET');
+  }
+
+  async listMediaByType(mediaType: 'images' | 'videos'): Promise<MediaByTypeResponse> {
+    return this.request<MediaByTypeResponse>(`/list/${mediaType}`, 'GET');
+  }
+
+  async deleteMedia(mediaId: string): Promise<{ success: boolean; message: string; deleted_path?: string; error?: string }> {
+    return this.request(`/delete/${mediaId}`, 'DELETE');
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const mediaAPI = new MediaAPI();
+
+// Video Generation API
+export interface UserImage {
+  id: string;
+  public_url: string;
+  title: string;
+  filename: string;
+  original_filename: string;
+  uploaded_at: string;
+}
+
+export interface UserImagesResponse {
+  success: boolean;
+  images: UserImage[];
+  count: number;
+  error?: string;
+}
+
+export interface GenerateVideoRequest {
+  selected_image_ids: string[];
+  prompt: string;
+  title: string;
+  description?: string;
+  duration_seconds?: number;
+}
+
+export interface GenerateVideoResponse {
+  success: boolean;
+  message: string;
+  video_id?: string;
+  public_url?: string;
+  title?: string;
+  error?: string;
+}
+
+// Video Generation Interfaces - Force reload
+export interface GeneratedVideo {
+  id: string;
+  user_id: string;
+  kaarigar_id: string;
+  video_type: string;
+  title: string;
+  description: string;
+  prompt: string;
+  optimized_prompt: string;
+  selected_images: UserImage[];
+  duration_seconds: number;
+  blob_path: string;
+  public_url: string;
+  file_size: number;
+  generated_at: string;
+  is_active: boolean;
+}
+
+export interface GeneratedVideosResponse {
+  success: boolean;
+  videos: GeneratedVideo[];
+  count: number;
+  error?: string;
+}
+
+class VideoAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/video';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Video API Error:', error);
+      throw error;
+    }
+  }
+
+  async getUserImages(): Promise<UserImagesResponse> {
+    return this.request<UserImagesResponse>('/get-user-images', 'GET');
+  }
+
+  async generateVideo(request: GenerateVideoRequest): Promise<GenerateVideoResponse> {
+    return this.request<GenerateVideoResponse>('/generate-video', 'POST', request);
+  }
+
+  async getGeneratedVideos(): Promise<GeneratedVideosResponse> {
+    return this.request<GeneratedVideosResponse>('/get-generated-videos', 'GET');
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean; genai_available: boolean; ffmpeg_available: boolean }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const videoAPI = new VideoAPI();
+
 // Profile Management API
 export interface ProfileData {
   name: string;
@@ -358,4 +607,4 @@ class ProfileAPI {
 
     export const profileAPI = new ProfileAPI();
 
-// Force reload - Logo Generation API ready
+// Force reload - Video Generation API ready - 2025-01-26
