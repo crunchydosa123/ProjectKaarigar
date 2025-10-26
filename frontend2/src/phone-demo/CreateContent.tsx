@@ -261,7 +261,7 @@ const CreateContentMain = () => {
         )}
 
 
-        {/*{subAction === 'createImage' && (
+        {/*PRATHAM{subAction === 'createImage' && (
           <div className="w-80 flex flex-col items-center gap-5">
             <div className="w-full">
               <Label className="text-sm font-semibold mb-2 block">
