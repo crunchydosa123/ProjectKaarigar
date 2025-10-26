@@ -42,22 +42,45 @@ else:
     print("⚠️ Firestore not available - running in fallback mode")
 
 def generate_user_id():
-    """Generate a simple unique user ID"""
-    return f"user_{uuid.uuid4().hex[:8]}"
+    """Generate a simple sequential user ID (user1, user2, user3, etc.)"""
+    if not FIRESTORE_AVAILABLE:
+        return "user1"  # Fallback for testing
+    
+    try:
+        # Get the current highest user number
+        users_ref = db.collection(COLLECTION_NAME)
+        docs = users_ref.stream()
+        
+        max_user_num = 0
+        for doc in docs:
+            doc_id = doc.id
+            if doc_id.startswith('user') and doc_id[4:].isdigit():
+                user_num = int(doc_id[4:])
+                max_user_num = max(max_user_num, user_num)
+        
+        # Return next user ID
+        next_user_num = max_user_num + 1
+        return f"user{next_user_num}"
+        
+    except Exception as e:
+        print(f"❌ Error generating user ID: {e}")
+        # Fallback to timestamp-based ID
+        return f"user_{int(datetime.utcnow().timestamp())}"
 
-def create_mock_profile(email, name=None):
+def create_mock_profile(user_id, email, name=None):
     """Create mock profile data for new users"""
     if not name:
         name = email.split('@')[0].title()
     
     return {
+        "userId": user_id,
         "name": name,
         "email": email,
         "occupation": "Artisan",
         "languages": ["en", "hi"],
         "bio": f"Welcome to Project Kaarigar! I'm {name}, a passionate artisan.",
         "username": email.split('@')[0].lower(),
-        "brandId": f"BRAND_{uuid.uuid4().hex[:8].upper()}",
+        "brandId": f"BRAND_{user_id.upper()}",
         "profileImage": f"https://ui-avatars.com/api/?name={name}&background=random",
         "createdAt": datetime.utcnow().isoformat(),
         "lastLogin": datetime.utcnow().isoformat(),
@@ -139,8 +162,7 @@ def signup():
         print(f"👤 User data to save: {user_data}")
         
         # Create mock profile
-        profile_data = create_mock_profile(email, name)
-        profile_data["userId"] = user_id
+        profile_data = create_mock_profile(user_id, email, name)
         print(f"📋 Profile data to save: {profile_data}")
         
         # Save to Firestore

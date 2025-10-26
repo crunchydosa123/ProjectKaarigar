@@ -1,4 +1,4 @@
-import { Lightbulb, Store } from 'lucide-react';
+import { Lightbulb, Store, User } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
 import { LogOut } from 'lucide-react';
@@ -8,6 +8,7 @@ import { usePage } from '@/contexts/PageContext';
 
 const Homepage = () => {
   const { setCurrentPage, user, logout } = usePage();
+  
   const products = [
     { name: "Product 1", image: "/product1.png" },
     { name: "Product 2", image: "/product2.png" },
@@ -31,7 +32,20 @@ const Homepage = () => {
         
         <div className='flex items-center gap-2'>
           <Button
-            onClick={logout}
+            onClick={() => {
+              setCurrentPage('profile');
+            }}
+            size="sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 font-bold flex items-center gap-2 shadow-lg border-2 border-purple-800"
+            style={{ minWidth: '80px', minHeight: '32px' }}
+          >
+            <User className="w-4 h-4" />
+            Profile
+          </Button>
+          <Button
+            onClick={() => {
+              logout();
+            }}
             size="sm"
             variant="outline"
             className="bg-white/20 border-white/30 text-black hover:bg-white/30"
@@ -46,6 +60,7 @@ const Homepage = () => {
               Welcome, <b>{user.name}</b>
             </div>
           )}
+
 
       <div className='mt-2 w-full grid grid-cols-2 grid-row-2 gap-2'>
         <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('onboarding')}>

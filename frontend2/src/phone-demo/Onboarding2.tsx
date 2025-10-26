@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { usePage } from '@/contexts/PageContext'
 import { Popover, PopoverContent, PopoverTrigger } from '@radix-ui/react-popover';
 import { House, Sparkle, Upload } from 'lucide-react';
@@ -10,6 +11,7 @@ import { useState } from 'react';
 const Onboarding2 = () => {
   const { setCurrentPage } = usePage();
   const [selectedLogo, setSelectedLogo] = useState<number | null>(null);
+  const [brandName, setBrandName] = useState("");
 
 
   const uploadedLogos = [
@@ -28,6 +30,17 @@ const Onboarding2 = () => {
       <div className="w-full mt-10 flex justify-start items-center p-3">
         <button className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white" onClick={() => setCurrentPage('home')}><House /></button>
         <div className="text-md font-bold ml-3">Conversational Onboarding</div>
+      </div>
+
+      <div className='px-4 mb-4'>
+        <Label className='text-sm font-medium mb-2 block'>Enter your brand name</Label>
+        <Input
+          type="text"
+          placeholder="e.g., Mitti Crafts, Artisan Studio..."
+          value={brandName}
+          onChange={(e) => setBrandName(e.target.value)}
+          className="mb-4"
+        />
       </div>
 
       <div className=''>

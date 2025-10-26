@@ -3,6 +3,8 @@ from flask_cors import CORS
 from routes.testing import testing_bp
 from routes.auth import auth_bp
 from routes.conversational import conversational_bp
+from routes.logo_generation import logo_bp
+from routes.profile_management import profile_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'], supports_credentials=True)
@@ -18,6 +20,8 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 app.register_blueprint(testing_bp, url_prefix="/testing")
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(conversational_bp, url_prefix="/api/conversational")
+app.register_blueprint(logo_bp, url_prefix="/api/logo")
+app.register_blueprint(profile_bp, url_prefix="/api/profile")
 
 @app.route('/')
 def home():
@@ -41,6 +45,17 @@ def home():
                 "GET /api/conversational/list": "List user conversations",
                 "GET /api/conversational/health": "Conversational service health check"
             },
+            "logo_generation": {
+                "POST /api/logo/generate": "Generate logo from conversation data",
+                "GET /api/logo/get-logo": "Get user's current logo",
+                "GET /api/logo/health": "Logo generation service health check"
+            },
+            "profile_management": {
+                "GET /api/profile/get-profile-data": "Get and generate profile data using Gemini",
+                "POST /api/profile/save-profile": "Save profile data to Firestore",
+                "GET /api/profile/get-saved-profile": "Get saved profile data",
+                "GET /api/profile/health": "Profile management service health check"
+            },
             "testing": {
                 "GET /testing/": "Testing route",
                 "POST /testing/data": "Testing data endpoint"
@@ -61,6 +76,8 @@ if __name__ == '__main__':
     print("📋 Available endpoints:")
     print("  🔐 Authentication: /api/auth/*")
     print("  💬 Conversational: /api/conversational/*")
+    print("  🎨 Logo Generation: /api/logo/*")
+    print("  👤 Profile Management: /api/profile/*")
     print("  🧪 Testing: /testing/*")
     print("  📊 Health: /health")
     app.run(debug=True, host='0.0.0.0', port=5000)

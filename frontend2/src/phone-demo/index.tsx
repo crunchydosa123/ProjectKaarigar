@@ -13,10 +13,10 @@ import AddProduct from './AddProduct';
 import AICameraman from './AICameraman';
 import Onboarding2 from './Onboarding2';
 import ProfilePage from './ProfilePage';
+import ViewProfile from './ViewProfile';
 import AIInsights from './AIInsights';
 import AIInsights2 from './AIInsights2';
 import ChatWithInsight from './ChatWithInsight';
-import EditVideo from './EditVideo';
 
 
 const PhoneDemo = () => {
@@ -27,7 +27,6 @@ const PhoneDemo = () => {
   if (loading) {
     return (
       <PhoneLayout>
-       
         <Loading />
       </PhoneLayout>
     );
@@ -35,13 +34,13 @@ const PhoneDemo = () => {
 
   return (
     <PhoneLayout>
-       {currentPage}
       {/* Authentication Routes */}
       {currentPage === "login" && <Login />}
       {currentPage === "signup" && <Signup />}
       
       {/* Main App Routes */}
       {currentPage === "home" && <Homepage />}
+      {currentPage === "profile" && <ViewProfile />}
 
       {currentPage === "onboarding" && <Onboarding />}
       {currentPage === "onboarding/details" && <Onboarding2 />}
@@ -56,11 +55,6 @@ const PhoneDemo = () => {
       {currentPage === "create-content/logos" && <CreateLogo />}
       {currentPage === "create-content/videos" && <CreateVideo />}
       {currentPage === "create-content/videos2" && <CreateVideo2 />}
-
-      {currentPage.startsWith("create-content") ? <CreateContent /> : null}
-
-
-      {currentPage === "edit-content/videos" && <EditVideo />}
 
       {/*Add Product Routes*/}
       {currentPage === "add-product" && <AddProduct />}

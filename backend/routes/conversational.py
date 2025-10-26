@@ -78,13 +78,20 @@ Rules:
 8) Stop asking new questions after 6 user responses and move to summary.
 """
 
-def generate_kaarigar_id():
-    """Generate a unique kaarigar ID"""
-    return f"KR_{uuid.uuid4().hex[:8].upper()}"
+def generate_kaarigar_id(user_id):
+    """Generate a kaarigar ID based on user ID"""
+    return f"KR_{user_id.upper()}"
 
-def generate_brand_id():
-    """Generate a unique brand ID"""
-    return f"BRAND_{uuid.uuid4().hex[:8].upper()}"
+def generate_brand_id(user_id):
+    """Generate a brand ID based on user ID"""
+    return f"BRAND_{user_id.upper()}"
+
+def get_user_from_session():
+    """Get user ID from session"""
+    user_id = session.get('user_id')
+    if not user_id:
+        raise ValueError("No user session found. Please login first.")
+    return user_id
 
 def detect_preferred_language_from_text(transcript: str) -> str:
     """Detect preferred language from text"""
@@ -405,8 +412,8 @@ def start_conversation():
                         print(f"   Profile {i+1}: {profile.get('kaarigar_id', 'unknown')} - {status} ({created})")
                 else:
                     # Create new kaarigar profile
-                    kaarigar_id = generate_kaarigar_id()
-                    brand_id = generate_brand_id()
+                    kaarigar_id = generate_kaarigar_id(user_id)
+                    brand_id = generate_brand_id(user_id)
                     
                     # Create kaarigar profile
                     kaarigar_data = {
