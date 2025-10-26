@@ -5,6 +5,7 @@ from routes.auth import auth_bp
 from routes.conversational import conversational_bp
 from routes.logo_generation import logo_bp
 from routes.profile_management import profile_bp
+from routes.media_upload import media_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'], supports_credentials=True)
@@ -22,6 +23,7 @@ app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(conversational_bp, url_prefix="/api/conversational")
 app.register_blueprint(logo_bp, url_prefix="/api/logo")
 app.register_blueprint(profile_bp, url_prefix="/api/profile")
+app.register_blueprint(media_bp, url_prefix="/api/media")
 
 @app.route('/')
 def home():
@@ -55,6 +57,14 @@ def home():
                 "POST /api/profile/save-profile": "Save profile data to Firestore",
                 "GET /api/profile/get-saved-profile": "Get saved profile data",
                 "GET /api/profile/health": "Profile management service health check"
+            },
+            "media_upload": {
+                "POST /api/media/upload": "Upload media files to Cloud Storage",
+                "GET /api/media/list": "List user's uploaded media (all types)",
+                "GET /api/media/list/images": "List user's uploaded images only",
+                "GET /api/media/list/videos": "List user's uploaded videos only",
+                "DELETE /api/media/delete/<media_id>": "Delete media by ID from both Firestore and Cloud Storage",
+                "GET /api/media/health": "Media upload service health check"
             },
             "testing": {
                 "GET /testing/": "Testing route",

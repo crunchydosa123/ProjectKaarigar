@@ -234,7 +234,7 @@ const UploadMedia = () => {
                 className="mt-1"
                 rows={3}
               />
-            </div>
+      </div>
 
             {/* File Upload */}
             <div>
@@ -263,7 +263,7 @@ const UploadMedia = () => {
                   </div>
                 )}
               </div>
-            </div>
+      </div>
 
             {/* Media Type Selection */}
             <div>
@@ -277,7 +277,7 @@ const UploadMedia = () => {
                 >
                   <LucideImagePlus className="w-4 h-4 mr-2" />
                   Image
-                </Button>
+        </Button>
                 <Button
                   type="button"
                   variant={mediaType === "video" ? "default" : "outline"}
@@ -286,8 +286,8 @@ const UploadMedia = () => {
                 >
                   <LucideVideo className="w-4 h-4 mr-2" />
                   Video
-                </Button>
-              </div>
+        </Button>
+        </div>
             </div>
 
             {/* Upload Button */}
@@ -478,9 +478,9 @@ const UploadMedia = () => {
                           <span className="text-xs text-gray-400">
                             {new Date(media.uploaded_at).toLocaleDateString()}
                           </span>
-                          <Button
+              <Button
                             size="sm"
-                            variant="outline"
+                variant="outline"
                             onClick={() => handleDeleteMedia(media.id, media.title || media.original_filename)}
                             disabled={deletingMedia === media.id}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
@@ -490,7 +490,7 @@ const UploadMedia = () => {
                             ) : (
                               <Trash2 className="w-3 h-3" />
                             )}
-                          </Button>
+              </Button>
                         </div>
                       </div>
                       
@@ -547,8 +547,8 @@ const UploadMedia = () => {
                         <p className="text-sm text-gray-600 mt-2">{media.description}</p>
                       )}
                     </div>
-                  ))}
-                </div>
+                ))}
+              </div>
               )}
 
               {uploadedMedia.length === 0 && (
