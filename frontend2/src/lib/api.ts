@@ -487,4 +487,297 @@ class ProfileAPI {
 
     export const profileAPI = new ProfileAPI();
 
+// Reel Generation API
+export interface ReelGenerationRequest {
+  selected_image_ids: string[];
+  prompt: string;
+  title: string;
+  description?: string;
+  duration_seconds?: number;
+}
+
+export interface ReelGenerationResponse {
+  success: boolean;
+  message: string;
+  reel_id?: string;
+  public_url?: string;
+  title?: string;
+  file_size?: number;
+  error?: string;
+}
+
+export interface GeneratedReel {
+  id: string;
+  user_id: string;
+  kaarigar_id: string;
+  video_type: string;
+  title: string;
+  description: string;
+  prompt: string;
+  optimized_prompt: string;
+  selected_image_ids: string[];
+  duration_seconds: number;
+  filename: string;
+  blob_path: string;
+  public_url: string;
+  file_size: number;
+  generated_at: string;
+  is_active: boolean;
+}
+
+export interface GeneratedReelsResponse {
+  success: boolean;
+  reels: GeneratedReel[];
+  count: number;
+  error?: string;
+}
+
+class ReelAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/reel';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Reel API Error:', error);
+      throw error;
+    }
+  }
+
+  async generateReel(request: ReelGenerationRequest): Promise<ReelGenerationResponse> {
+    return this.request<ReelGenerationResponse>('/generate-reel', 'POST', request);
+  }
+
+  async getGeneratedReels(): Promise<GeneratedReelsResponse> {
+    return this.request<GeneratedReelsResponse>('/get-generated-reels', 'GET');
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const reelAPI = new ReelAPI();
+
+// Image Generation API
+export interface ImageGenerationRequest {
+  prompt: string;
+  title: string;
+  description?: string;
+  aspect_ratio?: string;
+  reference_image_id?: string;
+}
+
+export interface ImageGenerationResponse {
+  success: boolean;
+  message: string;
+  image_id?: string;
+  public_url?: string;
+  title?: string;
+  image_type?: string;
+  file_size?: number;
+  error?: string;
+}
+
+export interface GeneratedImage {
+  id: string;
+  user_id: string;
+  kaarigar_id: string;
+  image_type: string;
+  title: string;
+  description: string;
+  prompt: string;
+  reference_image_id: string;
+  aspect_ratio: string;
+  filename: string;
+  blob_path: string;
+  public_url: string;
+  file_size: number;
+  generated_at: string;
+  is_active: boolean;
+}
+
+export interface GeneratedImagesResponse {
+  success: boolean;
+  images: GeneratedImage[];
+  count: number;
+  error?: string;
+}
+
+class ImageGenAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/image-gen';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Image Gen API Error:', error);
+      throw error;
+    }
+  }
+
+  async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+    return this.request<ImageGenerationResponse>('/generate-image', 'POST', request);
+  }
+
+  async getGeneratedImages(): Promise<GeneratedImagesResponse> {
+    return this.request<GeneratedImagesResponse>('/get-generated-images', 'GET');
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const imageGenAPI = new ImageGenAPI();
+
+// Image Editing API
+export interface ImageAnalysisRequest {
+  image_url: string;
+}
+
+export interface ImageSuggestion {
+  prompt: string;
+  description: string;
+  category: string;
+}
+
+export interface ImageAnalysisResponse {
+  success: boolean;
+  suggestions: ImageSuggestion[];
+  raw_analysis?: string;
+  error?: string;
+}
+
+export interface ImageEditRequest {
+  image_url: string;
+  prompt: string;
+  title: string;
+  original_image_id?: string;
+}
+
+export interface ImageEditResponse {
+  success: boolean;
+  message: string;
+  image_id?: string;
+  public_url?: string;
+  title?: string;
+  file_size?: number;
+  error?: string;
+}
+
+class ImageEditAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/image-edit';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Image Edit API Error:', error);
+      throw error;
+    }
+  }
+
+  async analyzeImage(request: ImageAnalysisRequest): Promise<ImageAnalysisResponse> {
+    return this.request<ImageAnalysisResponse>('/analyze-image', 'POST', request);
+  }
+
+  async editImage(request: ImageEditRequest): Promise<ImageEditResponse> {
+    return this.request<ImageEditResponse>('/edit-image', 'POST', request);
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const imageEditAPI = new ImageEditAPI();
+
 // Force reload - Logo Generation API ready

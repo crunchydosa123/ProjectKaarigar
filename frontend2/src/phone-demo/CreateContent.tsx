@@ -4,13 +4,16 @@ import {
   BookImage,
   House,
   ImagePlus,
-  Video,
   Image,
   FileEdit,
-  Upload,
   ArrowRight, ClosedCaption, Download, Mic, MicOff, Save,
   Loader2,
   Sparkles,
+  CheckCircle,
+  XCircle,
+  Lightbulb,
+  Edit3,
+  Wand2
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,20 +24,13 @@ import {
 } from '@radix-ui/react-popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select, SelectGroup, SelectItem, SelectLabel } from '@/components/ui/select';
-import { SelectContent, SelectTrigger } from '@radix-ui/react-select';
-import { RadioGroup, RadioGroupItem } from '@radix-ui/react-radio-group';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command"
+import { Badge } from '@/components/ui/badge';
 import VideoEditorPreview from '@/components/custom/VideoEditorPreview';
 import { Input } from '@/components/ui/input';
-import { logoAPI, profileAPI, mediaAPI } from "@/lib/api";
+import { logoAPI, profileAPI, mediaAPI, imageGenAPI, imageEditAPI, type MediaItem, type GeneratedImage, type ImageSuggestion } from "@/lib/api";
 import GenerateVideo from './GenerateVideo';
+import ReelMaker from './ReelMaker';
+import ImageGenerator from './ImageGenerator';
 import { Textarea } from '@/components/ui/textarea';
 
 
@@ -52,9 +48,11 @@ const CreateContent = () => {
     case 'create-content/videos2':
       return <CreateVideo2 />;
     case 'create-content/images':
-      return <CreateImage />;
+      return <ImageGenerator onBack={() => usePage().setCurrentPage('create-content')} />;
     case 'create-content/generate-video':
       return <GenerateVideo onBack={() => usePage().setCurrentPage('create-content')} />;
+      case 'create-content/reel-maker':
+        return <ReelMaker onBack={() => usePage().setCurrentPage('create-content')} />;
     default:
       return <CreateContentMain />
   }
@@ -66,65 +64,202 @@ const CreateContentMain = () => {
   const { setCurrentPage } = usePage();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [subAction, setSubAction] = useState<string | null>(null);
-  const [attachedImages, setAttachedImages] = useState<File[]>([]);
-  const [selectedImage, setSelectedImage] = useState<number | null>(null);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<string>("");
-  const [databaseImages, setDatabaseImages] = useState<any[]>([]);
+  
+  // Edit Image Modal State
+  const [selectedImage, setSelectedImage] = useState<MediaItem | GeneratedImage | null>(null);
+  const [suggestions, setSuggestions] = useState<ImageSuggestion[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<ImageSuggestion | null>(null);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [analysisMessage, setAnalysisMessage] = useState('');
+  const [editStatus, setEditStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [editMessage, setEditMessage] = useState('');
+  const [allImages, setAllImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
 
+  // Load all images when edit image is selected
+  useEffect(() => {
+    if (subAction === 'editImage') {
+      loadAllImages();
+    }
+  }, [subAction]);
 
-  const handleAttachImages = (files: FileList | null) => {
-    if (!files) return;
-    const fileArray = Array.from(files);
-    setAttachedImages((prev) => [...prev, ...fileArray]);
-  };
-
-  const loadDatabaseImages = async () => {
+  const loadAllImages = async () => {
     try {
       setLoadingImages(true);
-      console.log('🔧 Starting to load database images...');
       
-      // First try to get all media to see what's available
-      const allMediaResponse = await mediaAPI.listMedia();
-      console.log('🔧 All media response:', allMediaResponse);
+      // Load uploaded images
+      const uploadedResponse = await mediaAPI.listMediaByType('images');
+      const uploadedImages = uploadedResponse.success ? uploadedResponse.media.map(img => ({ ...img, type: 'uploaded' })) : [];
       
-      // Then get images specifically
-      const response = await mediaAPI.listMediaByType('images');
-      console.log('🔧 Images response:', response);
+      // Load generated images
+      const generatedResponse = await imageGenAPI.getGeneratedImages();
+      const generatedImages = generatedResponse.success ? generatedResponse.images.map(img => ({ ...img, type: 'generated' })) : [];
       
-      if (response.success) {
-        setDatabaseImages(response.media);
-        console.log(`📁 Loaded ${response.media.length} images from database`);
-        console.log('📁 Images data:', response.media);
-      } else {
-        console.error('Failed to load images:', response.error);
-        // Show error message to user
-        alert(`Failed to load images: ${response.error}`);
-      }
+      // Combine all images
+      const combinedImages = [...uploadedImages, ...generatedImages];
+      setAllImages(combinedImages);
+      
+      console.log(`🔄 Loaded ${uploadedImages.length} uploaded + ${generatedImages.length} generated = ${combinedImages.length} total images`);
     } catch (error) {
       console.error('Error loading images:', error);
-      // Show error message to user
-      alert(`Error loading images: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoadingImages(false);
+    }
+  };
+
+  const handleImageSelect = (image: any) => {
+    setSelectedImage(image);
+    setSuggestions([]);
+    setSelectedSuggestion(null);
+    setCustomPrompt('');
+    setEditTitle('');
+    setAnalysisStatus('idle');
+    setAnalysisMessage('');
+    setEditStatus('idle');
+    setEditMessage('');
+  };
+
+  const handleAnalyzeImage = async () => {
+    if (!selectedImage) {
+      setAnalysisStatus('error');
+      setAnalysisMessage('Please select an image first');
+      return;
+    }
+
+    try {
+      setAnalyzing(true);
+      setAnalysisStatus('idle');
+      setAnalysisMessage('');
+
+      console.log('🔍 Analyzing image for suggestions...');
+      console.log('Image URL:', selectedImage.public_url);
+
+      const response = await imageEditAPI.analyzeImage({
+        image_url: selectedImage.public_url
+      });
+
+      if (response.success) {
+        setSuggestions(response.suggestions);
+        setAnalysisStatus('success');
+        setAnalysisMessage(`Generated ${response.suggestions.length} creative suggestions!`);
+        console.log('✅ Analysis completed:', response.suggestions);
+      } else {
+        setAnalysisStatus('error');
+        setAnalysisMessage(response.error || 'Failed to analyze image');
+        console.error('❌ Analysis failed:', response.error);
+      }
+    } catch (error) {
+      setAnalysisStatus('error');
+      setAnalysisMessage(error instanceof Error ? error.message : 'Analysis failed');
+      console.error('❌ Analysis error:', error);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: ImageSuggestion) => {
+    setSelectedSuggestion(suggestion);
+    setCustomPrompt(suggestion.prompt);
+    setEditTitle(`${suggestion.category} - ${suggestion.description}`);
+  };
+
+  const handleEditImage = async () => {
+    if (!selectedImage) {
+      setEditStatus('error');
+      setEditMessage('Please select an image first');
+      return;
+    }
+
+    if (!customPrompt.trim()) {
+      setEditStatus('error');
+      setEditMessage('Please enter a prompt or select a suggestion');
+      return;
+    }
+
+    if (!editTitle.trim()) {
+      setEditStatus('error');
+      setEditMessage('Please enter a title for the edited image');
+      return;
+    }
+
+    try {
+      setEditing(true);
+      setEditStatus('idle');
+      setEditMessage('');
+
+      console.log('🎨 Editing image...');
+      console.log('Image URL:', selectedImage.public_url);
+      console.log('Prompt:', customPrompt);
+      console.log('Title:', editTitle);
+
+      const response = await imageEditAPI.editImage({
+        image_url: selectedImage.public_url,
+        prompt: customPrompt.trim(),
+        title: editTitle.trim(),
+        original_image_id: selectedImage.id
+      });
+
+      if (response.success) {
+        setEditStatus('success');
+        setEditMessage(`Image "${response.title}" edited successfully!`);
+        console.log('✅ Image edited successfully:', response);
+        
+        // Refresh the images list to show the new edited image
+        await loadAllImages();
+        
+        // Clear the form
+        setCustomPrompt('');
+        setEditTitle('');
+        setSelectedSuggestion(null);
+        setSuggestions([]);
+        setAnalysisStatus('idle');
+        setAnalysisMessage('');
+      } else {
+        setEditStatus('error');
+        setEditMessage(response.error || 'Image editing failed');
+        console.error('❌ Image editing failed:', response.error);
+      }
+    } catch (error) {
+      setEditStatus('error');
+      setEditMessage(error instanceof Error ? error.message : 'Image editing failed');
+      console.error('❌ Image editing error:', error);
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'branding':
+        return 'bg-blue-100 text-blue-800';
+      case 'artisanal':
+        return 'bg-green-100 text-green-800';
+      case 'creative':
+        return 'bg-purple-100 text-purple-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const handleNext = () => {
     if (!subAction) return alert('Please select an option first!');
     console.log('User selected:', subAction);
-    switch (subAction) {
-      case 'createVideo':
-        setCurrentPage('create-content/videos');
-        break;
-      case 'editVideo':
-        setCurrentPage('edit-content/videos');
-        break;
-      case 'createImage':
-        setCurrentPage('create-content/images');
-        break;
+     switch (subAction) {
+       case 'editVideo':
+         setCurrentPage('edit-content/videos');
+         break;
+       case 'createImage':
+         setCurrentPage('create-content/images');
+         break;
       case 'editImage':
-        setCurrentPage('edit-content/images');
+        // Modal will be shown in Action Section
+        break;
+      case 'createReel':
+        setCurrentPage('create-content/reel-maker');
         break;
       default:
         setCurrentPage('');
@@ -184,23 +319,23 @@ const CreateContentMain = () => {
             exit={{ opacity: 0, y: -10 }}
             className="mt-6 flex justify-center gap-3"
           >
+             <Button
+               className={`w-40 h-24 flex-col ${subAction === 'createImage' ? 'border-blue-500 border-2' : ''
+                 }`}
+               variant="secondary"
+               onClick={() => setSubAction('createImage')}
+             >
+               <Sparkles size={36} />
+               <div className="mt-1">Generate Image</div>
+             </Button>
             <Button
-              className={`w-40 h-24 flex-col ${subAction === 'createVideo' ? 'border-blue-500 border-2' : ''
+              className={`w-40 h-24 flex-col ${subAction === 'createReel' ? 'border-blue-500 border-2' : ''
                 }`}
               variant="secondary"
-              onClick={() => setSubAction('createVideo')}
+              onClick={() => setSubAction('createReel')}
             >
-              <Video size={36} />
-              <div className="mt-1">Create Video</div>
-            </Button>
-            <Button
-              className={`w-40 h-24 flex-col ${subAction === 'createImage' ? 'border-blue-500 border-2' : ''
-                }`}
-              variant="secondary"
-              onClick={() => setSubAction('createImage')}
-            >
-              <Image size={36} />
-              <div className="mt-1">Create Image</div>
+              <ImagePlus size={36} />
+              <div className="mt-1">Create Reel</div>
             </Button>
           </motion.div>
         )}
@@ -260,8 +395,308 @@ const CreateContentMain = () => {
           </div>
         )}
 
+        {subAction === 'editImage' && (
+          <div className="w-full max-w-4xl space-y-4">
+            {/* Image Selection */}
+            <Card className="p-4">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Image className="w-5 h-5 text-purple-600" />
+                  Select Image to Edit
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingImages ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+                    <span className="ml-2 text-gray-600">Loading images...</span>
+                  </div>
+                ) : allImages.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Image className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No images found. Upload or generate some images first.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
+                    {allImages.map((image) => (
+                      <button
+                        key={image.id}
+                        onClick={() => handleImageSelect(image)}
+                        className={`relative border-2 rounded-lg overflow-hidden transition-all ${
+                          selectedImage?.id === image.id
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <img
+                          src={image.public_url}
+                          alt={image.title || (image as any).original_filename || image.filename}
+                          className="w-full h-32 object-cover"
+                          onError={(e) => {
+                            console.error('Image load error:', image.public_url);
+                            e.currentTarget.src = '/placeholder-image.png';
+                          }}
+                        />
+                        <div className="absolute top-2 left-2">
+                          <Badge 
+                            variant={(image as any).type === 'generated' ? 'default' : 'secondary'} 
+                            className="text-xs"
+                          >
+                            {(image as any).type === 'generated' ? 'AI Generated' : 'Uploaded'}
+                          </Badge>
+                        </div>
+                        {selectedImage?.id === image.id && (
+                          <div className="absolute inset-0 bg-purple-500 bg-opacity-20 flex items-center justify-center">
+                            <CheckCircle className="w-8 h-8 text-purple-600" />
+                          </div>
+                        )}
+                        <div className="p-2">
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {image.title || (image as any).original_filename || image.filename}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-        {/*PRATHAM{subAction === 'createImage' && (
+            {/* Selected Image Preview and Analysis */}
+            {selectedImage && (
+              <Card className="p-4">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Edit3 className="w-5 h-5 text-purple-600" />
+                    Selected Image
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={selectedImage.public_url}
+                      alt={selectedImage.title || (selectedImage as any).original_filename || selectedImage.filename}
+                      className="w-24 h-24 object-cover rounded"
+                    />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">
+                        {selectedImage.title || (selectedImage as any).original_filename || selectedImage.filename}
+                      </h3>
+                      <Badge 
+                        variant={(selectedImage as any).type === 'generated' ? 'default' : 'secondary'} 
+                        className="text-xs mt-1"
+                      >
+                        {(selectedImage as any).type === 'generated' ? 'AI Generated' : 'Uploaded'}
+                      </Badge>
+                    </div>
+                    <Button
+                      onClick={handleAnalyzeImage}
+                      disabled={analyzing}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                    >
+                      {analyzing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Lightbulb className="w-4 h-4 mr-2" />
+                          Get AI Suggestions
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Analysis Status */}
+                  {analysisMessage && (
+                    <div className={`mt-3 p-3 rounded-md flex items-center gap-2 ${
+                      analysisStatus === 'success' 
+                        ? 'bg-green-50 text-green-800 border border-green-200' 
+                        : 'bg-red-50 text-red-800 border border-red-200'
+                    }`}>
+                      {analysisStatus === 'success' ? (
+                        <CheckCircle className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      {analysisMessage}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Suggestions */}
+            {suggestions.length > 0 && (
+              <Card className="p-4">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Lightbulb className="w-5 h-5 text-purple-600" />
+                    AI Suggestions ({suggestions.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className={`w-full p-2 text-left border rounded-md transition-all ${
+                          selectedSuggestion === suggestion
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge className={`text-xs ${getCategoryColor(suggestion.category)}`}>
+                                {suggestion.category}
+                              </Badge>
+                              {selectedSuggestion === suggestion && (
+                                <CheckCircle className="w-4 h-4 text-purple-600" />
+                              )}
+                            </div>
+                            <p className="text-sm font-medium text-gray-900 mb-1">
+                              {suggestion.prompt}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {suggestion.description}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Edit Form */}
+            {selectedImage && (
+              <Card className="p-4">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Wand2 className="w-5 h-5 text-purple-600" />
+                    Edit Image
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Title Input */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Edited Image Title *
+                    </Label>
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Enter title for edited image"
+                      disabled={editing}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Prompt Input */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Edit Prompt *
+                    </Label>
+                    <Textarea
+                      value={customPrompt}
+                      onChange={(e) => setCustomPrompt(e.target.value)}
+                      placeholder="Describe how you want to edit the image..."
+                      rows={3}
+                      disabled={editing}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Edit Button */}
+                  <Button
+                    onClick={handleEditImage}
+                    disabled={editing || !customPrompt.trim() || !editTitle.trim()}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    {editing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Editing Image...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-4 h-4 mr-2" />
+                        Edit Image
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Edit Status */}
+                  {editMessage && (
+                    <div className={`p-3 rounded-md flex items-center gap-2 ${
+                      editStatus === 'success' 
+                        ? 'bg-green-50 text-green-800 border border-green-200' 
+                        : 'bg-red-50 text-red-800 border border-red-200'
+                    }`}>
+                      {editStatus === 'success' ? (
+                        <CheckCircle className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      {editMessage}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Edited Images Display */}
+            {allImages.filter(img => (img as any).type === 'generated' && (img as any).image_type === 'edited').length > 0 && (
+              <Card className="p-4">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Wand2 className="w-5 h-5 text-purple-600" />
+                    Recently Edited Images
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
+                    {allImages
+                      .filter(img => (img as any).type === 'generated' && (img as any).image_type === 'edited')
+                      .slice(0, 6) // Show last 6 edited images
+                      .map((image) => (
+                        <div key={image.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+                          <img
+                            src={image.public_url}
+                            alt={image.title || image.filename}
+                            className="w-full h-24 object-cover rounded mb-2"
+                            onError={(e) => {
+                              console.error('Image load error:', image.public_url);
+                              e.currentTarget.src = '/placeholder-image.png';
+                            }}
+                          />
+                          <div className="text-xs">
+                            <p className="font-medium text-gray-900 truncate mb-1">
+                              {image.title || image.filename}
+                            </p>
+                            <p className="text-gray-500 truncate">
+                              {(image as any).prompt || 'AI Edited'}
+                            </p>
+                            <Badge className="text-xs mt-1 bg-purple-100 text-purple-800">
+                              Edited
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+
+        {/*PRATHAM{subAction === 'createImage' && {
           <div className="w-80 flex flex-col items-center gap-5">
             <div className="w-full">
               <Label className="text-sm font-semibold mb-2 block">
@@ -717,9 +1152,7 @@ const CreateLogo = () => {
 }
 
 
-type Props = {};
-
-const CreateVideo = (props: Props) => {
+const CreateVideo = () => {
   const { setCurrentPage } = usePage();
   const [instructions, setInstructions] = useState("");
   const [referenceMedia, setReferenceMedia] = useState<string | null>(null);
@@ -862,126 +1295,6 @@ const CreateVideo = (props: Props) => {
 
 
 
-const CreateImage = () => {
-  const { setCurrentPage } = usePage();
-  const [instructions, setInstructions] = useState("");
-  const [referenceImage, setReferenceImage] = useState<string | null>(null);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [openPopover, setOpenPopover] = useState(false);
-
-  const placeholderImages = [
-    "/placeholder.png",
-    "/placeholder2.png",
-    "/placeholder3.png",
-  ];
-
-  const handleSelectImage = (img: string) => {
-    setReferenceImage(img);
-    setOpenPopover(false);
-  };
-
-  const handleGenerate = () => {
-    // In real case: call image generation API here
-    // For now, just mock it
-    setGeneratedImage("/generated_sample.png");
-  };
-
-  return (
-    <div
-      className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
-      style={{ backgroundImage: "url('/white_bg.png')" }}
-    >
-      {/* Header */}
-      <div className="w-full mt-10 flex justify-start items-center p-3">
-        <button
-          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
-          onClick={() => setCurrentPage("home")}
-        >
-          <House />
-        </button>
-        <div className="text-md font-bold ml-3">Create Image</div>
-      </div>
-
-      {/* Generated Image Preview */}
-        <div className="w-full flex justify-center mt-5">
-          <img
-            src={generatedImage? "": ""}
-            alt="Generated"
-            className="max-w-[80%] max-h-[400px] object-contain border border-gray-300 rounded-md"
-          />
-        </div>
-
-      {/* Instructions */}
-      <div className="px-5 mb-5 mt-6">
-        <Label className="mb-1">Enter Instructions</Label>
-        <Textarea
-          className="text-sm mt-2"
-          placeholder="Describe what you want to generate..."
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-        />
-      </div>
-
-      {/* Image Reference Input */}
-      <div className="px-5 mb-5">
-        <Label className="mb-1">Insert Image for Reference</Label>
-        <Popover open={openPopover} onOpenChange={setOpenPopover}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="mt-2">
-              {referenceImage ? "Change Image" : "Add Image"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-96 p-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Select or Upload Image</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => alert("Import from device (placeholder)")}
-                >
-                  Import from device
-                </Button>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {placeholderImages.map((img) => (
-                    <img
-                      key={img}
-                      src={img}
-                      alt="placeholder"
-                      className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
-                        referenceImage === img ? "ring-2 ring-blue-500" : ""
-                      }`}
-                      onClick={() => handleSelectImage(img)}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </PopoverContent>
-        </Popover>
-
-        {referenceImage && (
-          <div className="mt-3">
-            <img
-              src={referenceImage}
-              alt="Reference"
-              className="w-48 h-32 object-cover border border-gray-300 rounded-md"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Generate Button */}
-      <div className="px-5 mb-10">
-        <Button className="w-full" onClick={handleGenerate}>
-          Generate
-        </Button>
-      </div>
-    </div>
-  );
-};
 
 const CreateVideo2 = () => {
   const { setCurrentPage } = usePage();
