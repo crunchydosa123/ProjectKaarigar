@@ -390,11 +390,11 @@ def main():
         print(f"❌ Camera init failed: {e}")
         return
 
-    messages = [SystemMessage(content="You are a helpful voice-controlled assistant integrated with a camera and recorder. You can chat casually, control the camera and recorder using tools, or stop the script with 'thank you bye' or 'bye'. During recording, do not respond except to stop recording when requested. Keep responses short, natural, and engaging. Always end with a question to continue the conversation unless recording.")]
+    messages = [SystemMessage(content="You are a helpful voice-controlled assistant integrated with a camera and recorder. You can chat casually, control the camera and recorder using tools. During recording, do not respond except to stop recording when requested. Keep responses short, natural, and engaging. Always end with a question to continue the conversation unless recording.")]
     print("Initializing agent...")
 
     # Welcome message
-    welcome = "Hello! I'm your voice-controlled assistant. I can chat, take photos, record videos, or stop with 'thank you bye' or 'bye'. What would you like to do?"
+    welcome = "Hello! I'm your voice-controlled assistant. I can chat, take photos, record videos. What would you like to do?"
     print("\nAssistant:", welcome)
     try:
         tts_bytes = google_tts_bytes(welcome)
