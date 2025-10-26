@@ -35,6 +35,7 @@ import VideoEditorPreview from '@/components/custom/VideoEditorPreview';
 import { Input } from '@/components/ui/input';
 import { logoAPI, profileAPI, mediaAPI } from "@/lib/api";
 import GenerateVideo from './GenerateVideo';
+import { Textarea } from '@/components/ui/textarea';
 
 
 const CreateContent = () => {
@@ -50,6 +51,8 @@ const CreateContent = () => {
       return <CreateVideo />;
     case 'create-content/videos2':
       return <CreateVideo2 />;
+    case 'create-content/images':
+      return <CreateImage />;
     case 'create-content/generate-video':
       return <GenerateVideo onBack={() => usePage().setCurrentPage('create-content')} />;
     default:
@@ -233,135 +236,7 @@ const CreateContentMain = () => {
 
       {/* Action Section */}
       <div className="mt-8 flex flex-col items-center gap-4">
-        {subAction === 'createVideo' && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="flex flex-col items-center"
-                onClick={loadDatabaseImages}
-              >
-                <Upload />
-                <span className="mt-2">Attach Images</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 max-h-96 overflow-y-auto">
-              <Card>
-                <CardTitle className="p-3 text-sm">Your Images</CardTitle>
-                <CardContent className="space-y-4">
-                  {/* Upload new images */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-2 block">
-                      Upload New Images
-                    </label>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleAttachImages(e.target.files)}
-                      className="w-full text-xs"
-                    />
-                  </div>
 
-                  {/* Database images */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-2 block">
-                      Images from Database ({databaseImages.length})
-                    </label>
-                    {loadingImages ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        <span className="text-xs text-gray-500">Loading images...</span>
-                      </div>
-                    ) : databaseImages.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">
-                        <p className="text-xs">No images found in database</p>
-                        <p className="text-xs">Upload images first to see them here</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={loadDatabaseImages}
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            <Loader2 className="w-3 h-3 mr-1" />
-                            Refresh
-                          </Button>
-                          <Button
-                            onClick={async () => {
-                              try {
-                                const response = await mediaAPI.healthCheck();
-                                alert(`Media API Health: ${JSON.stringify(response, null, 2)}`);
-                              } catch (error) {
-                                alert(`Health check failed: ${error}`);
-                              }
-                            }}
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            Test API
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {databaseImages.map((image) => (
-                            <div key={image.id} className="relative group">
-                              <img
-                                src={image.public_url}
-                                alt={image.title || image.original_filename}
-                                className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:border-blue-500 transition-colors"
-                                onClick={() => console.log('Selected image:', image.title)}
-                              />
-                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-md transition-all flex items-center justify-center">
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button size="sm" className="h-6 w-6 p-0 bg-blue-500 hover:bg-blue-600">
-                                    +
-                                  </Button>
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-600 truncate mt-1">
-                                {image.title || image.original_filename}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Uploaded files preview */}
-                  {attachedImages.length > 0 && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 mb-2 block">
-                        New Uploads ({attachedImages.length})
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {attachedImages.map((file, idx) => (
-                          <div key={idx} className="relative">
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt="preview"
-                              className="w-20 h-20 object-cover rounded-md border"
-                            />
-                            <button
-                              onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </PopoverContent>
-          </Popover>
-        )}
 
         {subAction === 'editVideo' && (
           <div className="w-80">
@@ -385,28 +260,8 @@ const CreateContentMain = () => {
           </div>
         )}
 
-        {subAction === 'editImage' && (
-          <div className="grid grid-cols-2 gap-3">
-            {['/sample1.png', '/sample2.png', '/sample3.png', '/sample4.png'].map(
-              (img, i) => (
-                <div
-                  key={i}
-                  onClick={() => setSelectedImage(i)}
-                  className={`border-2 rounded-md overflow-hidden cursor-pointer ${selectedImage === i ? 'border-blue-400' : 'border-gray-300'
-                    }`}
-                >
-                  <img
-                    src={img}
-                    alt="Sample"
-                    className="w-32 h-32 object-cover"
-                  />
-                </div>
-              )
-            )}
-          </div>
-        )}
 
-        {subAction === 'createImage' && (
+        {/*{subAction === 'createImage' && (
           <div className="w-80 flex flex-col items-center gap-5">
             <div className="w-full">
               <Label className="text-sm font-semibold mb-2 block">
@@ -456,14 +311,14 @@ const CreateContentMain = () => {
               />
             </div>
           </div>
-        )}
+        )}*/}
 
       </div>
 
       {/* Final Next Button */}
-      <div className="flex justify-center mt-8 mb-6">
+      <div className="flex justify-center mt-8 mb-6 px-5">
         <Button
-          className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-md"
+          className="bg-blue-600 hover:bg-blue-500 w-full text-white px-8 py-3 rounded-md"
           onClick={handleNext}
         >
           Next
@@ -861,12 +716,32 @@ const CreateLogo = () => {
   )
 }
 
-const CreateVideo = () => {
-  const { setCurrentPage } = usePage();
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
-  const [useProductMedia, setUseProductMedia] = useState(false);
 
-  const products = ["Product 1", "Product 2", "Product 3"];
+type Props = {};
+
+const CreateVideo = (props: Props) => {
+  const { setCurrentPage } = usePage();
+  const [instructions, setInstructions] = useState("");
+  const [referenceMedia, setReferenceMedia] = useState<string | null>(null);
+  const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
+  const [openPopover, setOpenPopover] = useState(false);
+
+  const placeholderVideos = [
+    "/sample_video1.mp4",
+    "/sample_video2.mp4",
+    "/placeholder.png", // could include images as references too
+  ];
+
+  const handleSelectMedia = (media: string) => {
+    setReferenceMedia(media);
+    setOpenPopover(false);
+  };
+
+  const handleGenerate = () => {
+    // Mock generation
+    setGeneratedVideo("/generated_sample.mp4");
+  };
+
   return (
     <div
       className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
@@ -874,94 +749,239 @@ const CreateVideo = () => {
     >
       {/* Header */}
       <div className="w-full mt-10 flex justify-start items-center p-3">
-        <button className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white" onClick={() => setCurrentPage('home')}><House /></button>
-        <div className="text-md font-bold ml-3">Create Video with AI</div>
+        <button
+          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
+          onClick={() => setCurrentPage("home")}
+        >
+          <House />
+        </button>
+        <div className="text-md font-bold ml-3">Create Video</div>
       </div>
 
-      <div className='flex flex-col px-5 mt-1'>
-        <div className='text-sm font-semibold'>Select the type of Video</div>
-        <RadioGroup defaultValue="option-one" className='text-xs flex flex-col gap-1 mt-2'>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="option-one" id="option-one" />
-            <Label htmlFor="option-one">Vertical 16:9 (Reels, Shorts)</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="option-two" id="option-two" />
-            <Label htmlFor="option-two">Horizontal 9:16 (YouTube Ads)</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="option-three" id="option-three" />
-            <Label htmlFor="option-two">Custom (Masti nahi rukni chahiye)</Label>
-          </div>
-        </RadioGroup>
+      {/* Generated Video Preview */}
+      {generatedVideo && (
+        <div className="w-full flex justify-center mt-5">
+          <video
+            controls
+            src={generatedVideo}
+            className="max-w-[80%] max-h-[400px] object-contain border border-gray-300 rounded-md"
+          />
+        </div>
+      )}
+
+      {/* Instructions */}
+      <div className="px-5 mb-5 mt-6">
+        <Label className="mb-1">Enter Instructions</Label>
+        <Textarea
+          className="text-sm mt-2"
+          placeholder="Describe the video you want to generate..."
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+        />
       </div>
 
-      <div className="flex flex-col px-5 mt-5">
-        <div className="text-sm font-semibold mb-2">Select Product (optional)</div>
+      {/* Reference Media */}
+      <div className="px-5 mb-5">
+        <Label className="mb-1">Insert Reference (optional)</Label>
+        <Popover open={openPopover} onOpenChange={setOpenPopover}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="mt-2">
+              {referenceMedia ? "Change Reference" : "Add Reference"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-96 p-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Select or Upload Reference</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => alert("Import from device (placeholder)")}
+                >
+                  Import from device
+                </Button>
 
-        {/* Command box */}
-        <Command className="rounded-lg border shadow-sm w-full max-w-md bg-white">
-          <CommandInput placeholder="Search for a product..." className="text-xs" />
-          <CommandEmpty>No Products Found</CommandEmpty>
+                <div className="grid grid-cols-3 gap-2">
+                  {placeholderVideos.map((media) =>
+                    media.endsWith(".mp4") ? (
+                      <video
+                        key={media}
+                        src={media}
+                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
+                          referenceMedia === media ? "ring-2 ring-blue-500" : ""
+                        }`}
+                        onClick={() => handleSelectMedia(media)}
+                      />
+                    ) : (
+                      <img
+                        key={media}
+                        src={media}
+                        alt="placeholder"
+                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
+                          referenceMedia === media ? "ring-2 ring-blue-500" : ""
+                        }`}
+                        onClick={() => handleSelectMedia(media)}
+                      />
+                    )
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </PopoverContent>
+        </Popover>
 
-          <CommandGroup heading="Products">
-            {products.map((product, idx) => (
-              <CommandItem
-                key={idx}
-                onSelect={() => setSelectedProduct(product)}
-                className={`cursor-pointer text-xs ${selectedProduct === product
-                  ? "bg-blue-100 text-blue-700"
-                  : "hover:bg-gray-100"
-                  }`}
-              >
-                <span>{product}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </Command>
-
-        {/* Show selected product */}
-        {selectedProduct && (
-          <div className="mt-3 flex flex-col items-center gap-2 text-sm w-full">
-            <div className='w-full flex justify-start items-center gap-2'>
-              <span className="text-gray-600">Selected:</span>
-              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md font-medium">
-                {selectedProduct}
-              </span>
-            </div>
-
-
-            <div className="flex items-center gap-2 text-xs">
-              <input
-                id="useProductMedia"
-                type="checkbox"
-                checked={useProductMedia}
-                onChange={(e) => setUseProductMedia(e.target.checked)}
-                className="w-4 h-4 accent-blue-600 cursor-pointer"
+        {referenceMedia && (
+          <div className="mt-3">
+            {referenceMedia.endsWith(".mp4") ? (
+              <video
+                controls
+                src={referenceMedia}
+                className="w-48 h-32 object-cover border border-gray-300 rounded-md"
               />
-              <label
-                htmlFor="useProductMedia"
-                className="text-gray-700 cursor-pointer"
-              >
-                Use {selectedProduct}'s photos and videos to generate video
-              </label>
-            </div>
+            ) : (
+              <img
+                src={referenceMedia}
+                alt="Reference"
+                className="w-48 h-32 object-cover border border-gray-300 rounded-md"
+              />
+            )}
           </div>
         )}
+      </div>
 
-        <div className="flex flex-col gap-3 mt-5">
-          <Button variant={'outline'} className='w-full' onClick={() => setCurrentPage('create-content/videos2')}>Start Creating Video <ArrowRight /></Button>
-          <Button variant={'default'} className='w-full bg-purple-600 hover:bg-purple-700 text-white' onClick={() => setCurrentPage('create-content/generate-video')}>
-            <Video className="w-4 h-4 mr-2" />
-            Generate Video with AI
-          </Button>
-        </div>
-
+      {/* Generate Button */}
+      <div className="px-5 mb-10">
+        <Button className="w-full" onClick={handleGenerate}>
+          Generate
+        </Button>
       </div>
     </div>
+  );
+};
 
-  )
-}
+
+
+const CreateImage = () => {
+  const { setCurrentPage } = usePage();
+  const [instructions, setInstructions] = useState("");
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [openPopover, setOpenPopover] = useState(false);
+
+  const placeholderImages = [
+    "/placeholder.png",
+    "/placeholder2.png",
+    "/placeholder3.png",
+  ];
+
+  const handleSelectImage = (img: string) => {
+    setReferenceImage(img);
+    setOpenPopover(false);
+  };
+
+  const handleGenerate = () => {
+    // In real case: call image generation API here
+    // For now, just mock it
+    setGeneratedImage("/generated_sample.png");
+  };
+
+  return (
+    <div
+      className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
+      style={{ backgroundImage: "url('/white_bg.png')" }}
+    >
+      {/* Header */}
+      <div className="w-full mt-10 flex justify-start items-center p-3">
+        <button
+          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
+          onClick={() => setCurrentPage("home")}
+        >
+          <House />
+        </button>
+        <div className="text-md font-bold ml-3">Create Image</div>
+      </div>
+
+      {/* Generated Image Preview */}
+        <div className="w-full flex justify-center mt-5">
+          <img
+            src={generatedImage? "": ""}
+            alt="Generated"
+            className="max-w-[80%] max-h-[400px] object-contain border border-gray-300 rounded-md"
+          />
+        </div>
+
+      {/* Instructions */}
+      <div className="px-5 mb-5 mt-6">
+        <Label className="mb-1">Enter Instructions</Label>
+        <Textarea
+          className="text-sm mt-2"
+          placeholder="Describe what you want to generate..."
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+        />
+      </div>
+
+      {/* Image Reference Input */}
+      <div className="px-5 mb-5">
+        <Label className="mb-1">Insert Image for Reference</Label>
+        <Popover open={openPopover} onOpenChange={setOpenPopover}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="mt-2">
+              {referenceImage ? "Change Image" : "Add Image"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-96 p-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Select or Upload Image</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => alert("Import from device (placeholder)")}
+                >
+                  Import from device
+                </Button>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {placeholderImages.map((img) => (
+                    <img
+                      key={img}
+                      src={img}
+                      alt="placeholder"
+                      className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
+                        referenceImage === img ? "ring-2 ring-blue-500" : ""
+                      }`}
+                      onClick={() => handleSelectImage(img)}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </PopoverContent>
+        </Popover>
+
+        {referenceImage && (
+          <div className="mt-3">
+            <img
+              src={referenceImage}
+              alt="Reference"
+              className="w-48 h-32 object-cover border border-gray-300 rounded-md"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Generate Button */}
+      <div className="px-5 mb-10">
+        <Button className="w-full" onClick={handleGenerate}>
+          Generate
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 const CreateVideo2 = () => {
   const { setCurrentPage } = usePage();
