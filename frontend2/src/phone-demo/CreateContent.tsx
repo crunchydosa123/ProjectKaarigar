@@ -6,7 +6,7 @@ import {
   ImagePlus,
   Image,
   FileEdit,
-  ArrowRight, ClosedCaption, Download, Mic, MicOff, Save,
+  ArrowRight, ArrowLeft, ClosedCaption, Download, Mic, MicOff, Save,
   Loader2,
   Sparkles,
   CheckCircle,
@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import VideoEditorPreview from '@/components/custom/VideoEditorPreview';
 import { Input } from '@/components/ui/input';
-import { logoAPI, profileAPI, mediaAPI, imageGenAPI, imageEditAPI, type MediaItem, type GeneratedImage, type ImageSuggestion } from "@/lib/api";
+import { logoAPI, profileAPI, mediaAPI, imageGenAPI, imageEditAPI, videoEditAPI, type MediaItem, type GeneratedImage, type ImageSuggestion } from "@/lib/api";
 import GenerateVideo from './GenerateVideo';
 import ReelMaker from './ReelMaker';
 import ImageGenerator from './ImageGenerator';
@@ -61,7 +61,7 @@ const CreateContent = () => {
 export default CreateContent;
 
 const CreateContentMain = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, selectedVideo, setSelectedVideo } = usePage();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [subAction, setSubAction] = useState<string | null>(null);
   
@@ -80,10 +80,21 @@ const CreateContentMain = () => {
   const [allImages, setAllImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
 
+  // Video editing state
+  const [userVideos, setUserVideos] = useState<any[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+
   // Load all images when edit image is selected
   useEffect(() => {
     if (subAction === 'editImage') {
       loadAllImages();
+    }
+  }, [subAction]);
+
+  // Load videos when edit video is selected
+  useEffect(() => {
+    if (subAction === 'editVideo') {
+      loadUserVideos();
     }
   }, [subAction]);
 
@@ -108,6 +119,37 @@ const CreateContentMain = () => {
       console.error('Error loading images:', error);
     } finally {
       setLoadingImages(false);
+    }
+  };
+
+  const loadUserVideos = async () => {
+    try {
+      setLoadingVideos(true);
+      console.log('CreateContentMain: Loading user videos...');
+      
+      const response = await videoEditAPI.getUserVideos();
+      console.log('CreateContentMain: Full response:', response);
+      
+      if (response.success) {
+        setUserVideos(response.videos);
+        console.log('CreateContentMain: Set user videos:', response.videos);
+      } else {
+        console.error('CreateContentMain: Failed to load user videos:', response.error);
+        // If it's an auth error, don't show error message, just return
+        if (response.error && response.error.includes('authenticated')) {
+          console.log('CreateContentMain: User not authenticated, skipping video load');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('CreateContentMain: Failed to load user videos:', error);
+      // If it's an auth error, don't show error message
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('CreateContentMain: Authentication error, skipping video load');
+        return;
+      }
+    } finally {
+      setLoadingVideos(false);
     }
   };
 
@@ -141,7 +183,7 @@ const CreateContentMain = () => {
       const response = await imageEditAPI.analyzeImage({
         image_url: selectedImage.public_url
       });
-
+      
       if (response.success) {
         setSuggestions(response.suggestions);
         setAnalysisStatus('success');
@@ -248,13 +290,17 @@ const CreateContentMain = () => {
   const handleNext = () => {
     if (!subAction) return alert('Please select an option first!');
     console.log('User selected:', subAction);
-     switch (subAction) {
-       case 'editVideo':
-         setCurrentPage('edit-content/videos');
-         break;
-       case 'createImage':
-         setCurrentPage('create-content/images');
-         break;
+    switch (subAction) {
+      case 'editVideo':
+        if (!selectedVideo) {
+          alert('Please select a video to edit first!');
+          return;
+        }
+        setCurrentPage('create-content/videos2');
+        break;
+      case 'createImage':
+        setCurrentPage('create-content/images');
+        break;
       case 'editImage':
         // Modal will be shown in Action Section
         break;
@@ -319,15 +365,15 @@ const CreateContentMain = () => {
             exit={{ opacity: 0, y: -10 }}
             className="mt-6 flex justify-center gap-3"
           >
-             <Button
+            <Button
                className={`w-40 h-24 flex-col ${subAction === 'createImage' ? 'border-blue-500 border-2' : ''
-                 }`}
-               variant="secondary"
+                }`}
+              variant="secondary"
                onClick={() => setSubAction('createImage')}
-             >
+            >
                <Sparkles size={36} />
                <div className="mt-1">Generate Image</div>
-             </Button>
+            </Button>
             <Button
               className={`w-40 h-24 flex-col ${subAction === 'createReel' ? 'border-blue-500 border-2' : ''
                 }`}
@@ -375,23 +421,66 @@ const CreateContentMain = () => {
 
         {subAction === 'editVideo' && (
           <div className="w-80">
-            <Label className="text-sm font-semibold mb-2 block">
+            <div className="flex justify-between items-center mb-2">
+              <Label className="text-sm font-semibold">
               Choose a video to edit:
             </Label>
+              <button
+                onClick={loadUserVideos}
+                disabled={loadingVideos}
+                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+              >
+                {loadingVideos ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
             <div className="border rounded-md p-3 space-y-2">
-              {['PromoVideo.mp4', 'AdClip.mp4', 'DemoFootage.mp4'].map(
-                (v, i) => (
+              {loadingVideos ? (
+                <div className="text-center py-4 text-gray-500">
+                  Loading your videos...
+                </div>
+              ) : userVideos.length > 0 ? (
+                userVideos.map((video) => (
                   <Button
-                    key={i}
-                    className="w-full justify-start"
+                    key={video.id}
+                    className={`w-full justify-start ${
+                      selectedVideo?.id === video.id ? 'border-blue-500 bg-blue-50' : ''
+                    }`}
                     variant="outline"
-                    onClick={() => console.log('Edit', v)}
+                    onClick={() => {
+                      console.log('Edit video:', video.title);
+                      setSelectedVideo(video);
+                    }}
                   >
-                    {v}
+                    <div className="flex items-center gap-2">
+                      <video
+                        src={video.public_url}
+                        className="w-8 h-8 object-cover rounded"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className="text-left">
+                        <div className="font-medium">{video.title}</div>
+                        <div className="text-xs text-gray-500 capitalize">{video.type}</div>
+                      </div>
+                    </div>
                   </Button>
-                )
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  No videos found. Upload some videos first!
+                </div>
               )}
             </div>
+            
+            {/* Selected Video Indicator */}
+            {selectedVideo && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="text-sm font-medium text-blue-800">Selected Video:</div>
+                <div className="text-sm text-blue-600">{selectedVideo.title}</div>
+                <div className="text-xs text-blue-500 capitalize">{selectedVideo.type}</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -753,8 +842,9 @@ const CreateContentMain = () => {
       {/* Final Next Button */}
       <div className="flex justify-center mt-8 mb-6 px-5">
         <Button
-          className="bg-blue-600 hover:bg-blue-500 w-full text-white px-8 py-3 rounded-md"
+          className="bg-blue-600 hover:bg-blue-500 w-full text-white px-8 py-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleNext}
+          disabled={subAction === 'editVideo' && !selectedVideo}
         >
           Next
         </Button>
@@ -1297,7 +1387,16 @@ const CreateVideo = () => {
 
 
 const CreateVideo2 = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, selectedVideo } = usePage();
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string>(selectedVideo?.public_url || '/sample-video.mp4');
+
+  // Update selectedVideoUrl when selectedVideo changes
+  useEffect(() => {
+    if (selectedVideo) {
+      setSelectedVideoUrl(selectedVideo.public_url);
+    }
+  }, [selectedVideo]);
+
   return (
     <div
       className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
@@ -1305,14 +1404,39 @@ const CreateVideo2 = () => {
     >
       {/* Header */}
       <div className="w-full mt-10 flex justify-start items-center p-3">
-        <button className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white" onClick={() => setCurrentPage('home')}><House /></button>
+        <button className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white" onClick={() => setCurrentPage('create-content')}><ArrowLeft /></button>
         <div className="text-md font-bold ml-3">Create Video with AI</div>
       </div>
 
-      <div className="bg-[#1e1e1e] text-white  shadow-lg p-4 w-full max-w-2xl mx-auto">
-        <VideoEditorPreview />
-      </div>
+      {/* Selected Video Info */}
+      {selectedVideo && (
+        <div className="p-4 mb-4">
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">Selected Video</h2>
+            <div className="flex items-center gap-3">
+              <video
+                src={selectedVideo.public_url}
+                className="w-16 h-16 object-cover rounded-lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+              <div>
+                <p className="font-medium text-gray-800">{selectedVideo.title}</p>
+                <p className="text-sm text-gray-600 capitalize">{selectedVideo.type}</p>
+                <p className="text-xs text-gray-500">Ready for AI editing</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Video Editor */}
+      <div className="flex-1 p-4">
+        <div className="bg-[#1e1e1e] text-white shadow-lg p-4 w-full max-w-2xl mx-auto rounded-lg">
+          <VideoEditorPreview selectedVideoUrl={selectedVideoUrl} />
+        </div>
+      </div>
     </div>
   )
 }

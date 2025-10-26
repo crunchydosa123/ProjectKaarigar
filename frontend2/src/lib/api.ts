@@ -780,4 +780,120 @@ class ImageEditAPI {
 
 export const imageEditAPI = new ImageEditAPI();
 
+// Video Editing API - matches test script structure
+export interface UserVideo {
+  id: string;
+  title: string;
+  public_url: string;
+  file_size: number;
+  created_at: string;
+  type: 'uploaded' | 'generated_reel';
+  filename?: string;
+  duration?: number;
+  segments?: number;
+  generation_type?: string;
+}
+
+export interface UserVideosResponse {
+  success: boolean;
+  videos: UserVideo[];
+  count: number;
+  error?: string;
+}
+
+export interface VideoEditRequest {
+  video_url: string;
+  edit_prompt: string;
+  topic?: string;
+  save_name?: string;
+}
+
+export interface TrendingAudioRequest {
+  video_url: string;
+  song_id: number;
+  topic?: string;
+  save_name?: string;
+}
+
+export interface TrendingSong {
+  id: string;
+  title: string;
+  artist: string;
+  duration: number;
+  public_url: string;
+}
+
+export interface VideoEditResponse {
+  success: boolean;
+  edited_video_url?: string;
+  video_info?: any;
+  message: string;
+  save_name?: string;
+  error?: string;
+}
+
+class VideoEditAPI {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = 'http://localhost:5000/api/video-edit';
+  }
+
+  private async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data?: any
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for session cookies
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Video Edit API Error:', error);
+      throw error;
+    }
+  }
+
+  async getUserVideos(): Promise<UserVideosResponse> {
+    return this.request<UserVideosResponse>('/get-user-videos', 'GET');
+  }
+
+  async editVideo(request: VideoEditRequest): Promise<VideoEditResponse> {
+    return this.request<VideoEditResponse>('/edit-video', 'POST', request);
+  }
+
+  async addTrendingAudio(request: TrendingAudioRequest): Promise<VideoEditResponse> {
+    return this.request<VideoEditResponse>('/add-trending-audio', 'POST', request);
+  }
+
+  async getTrendingSongs(): Promise<{success: boolean, songs: TrendingSong[]}> {
+    return this.request('/get-trending-songs', 'GET');
+  }
+
+  async healthCheck(): Promise<{ status: string; service: string; message: string }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const videoEditAPI = new VideoEditAPI();
+
 // Force reload - Logo Generation API ready

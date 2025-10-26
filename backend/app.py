@@ -6,9 +6,10 @@ from routes.conversational import conversational_bp
 from routes.logo_generation import logo_bp
 from routes.profile_management import profile_bp
 from routes.media_upload import media_bp
-from routes.reel_generation import reel_bp
+# from routes.reel_generation import reel_bp  # Commented out - not ready yet
 from routes.image_generation import image_gen_bp
 from routes.image_editing import image_edit_bp
+from routes.video_editing import video_edit_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'], supports_credentials=True)
@@ -27,9 +28,10 @@ app.register_blueprint(conversational_bp, url_prefix="/api/conversational")
 app.register_blueprint(logo_bp, url_prefix="/api/logo")
 app.register_blueprint(profile_bp, url_prefix="/api/profile")
 app.register_blueprint(media_bp, url_prefix="/api/media")
-app.register_blueprint(reel_bp, url_prefix="/api/reel")
+# app.register_blueprint(reel_bp, url_prefix="/api/reel")  # Commented out - not ready yet
 app.register_blueprint(image_gen_bp, url_prefix="/api/image-gen")
 app.register_blueprint(image_edit_bp, url_prefix="/api/image-edit")
+app.register_blueprint(video_edit_bp, url_prefix="/api/video-edit")
 
 @app.route('/')
 def home():
@@ -73,9 +75,9 @@ def home():
                 "GET /api/media/health": "Media upload service health check"
             },
             "reel_generation": {
-                "POST /api/reel/generate-reel": "Generate reel from selected images using Veo 3.1",
-                "GET /api/reel/get-generated-reels": "List user's generated reels",
-                "GET /api/reel/health": "Reel generation service health check"
+                "POST /api/reel/generate-reel": "Generate reel from selected images using Veo 3.1 (DISABLED - not ready yet)",
+                "GET /api/reel/get-generated-reels": "List user's generated reels (DISABLED - not ready yet)",
+                "GET /api/reel/health": "Reel generation service health check (DISABLED - not ready yet)"
             },
             "image_generation": {
                 "POST /api/image-gen/generate-image": "Generate image from text prompt or reference image using Imagen/Gemini",
@@ -86,6 +88,13 @@ def home():
                 "POST /api/image-edit/analyze-image": "Analyze image and generate creative editing suggestions using Gemini",
                 "POST /api/image-edit/edit-image": "Edit image using AI-generated or custom prompt using Gemini",
                 "GET /api/image-edit/health": "Image editing service health check"
+            },
+            "video_editing": {
+                "GET /api/video-edit/get-user-videos": "Get all user videos/reels from Firestore and Cloud Storage",
+                "POST /api/video-edit/edit-video": "Edit video using AI prompts (matches test_req.py structure)",
+                "POST /api/video-edit/add-trending-audio": "Add trending audio to video (matches test_req_trending_audio.py structure)",
+                "GET /api/video-edit/get-trending-songs": "Get list of trending songs from FFmpeg service",
+                "GET /api/video-edit/health": "Video editing service health check"
             },
             "testing": {
                 "GET /testing/": "Testing route",
@@ -103,16 +112,17 @@ def health_check():
     }
 
 if __name__ == '__main__':
-    print("🚀 Starting Project Kaarigar Backend...")
-    print("📋 Available endpoints:")
-    print("  🔐 Authentication: /api/auth/*")
-    print("  💬 Conversational: /api/conversational/*")
-    print("  🎨 Logo Generation: /api/logo/*")
-    print("  👤 Profile Management: /api/profile/*")
-    print("  📁 Media Upload: /api/media/*")
-    print("  🎬 Reel Generation: /api/reel/*")
-    print("  🎨 Image Generation: /api/image-gen/*")
-    print("  ✏️ Image Editing: /api/image-edit/*")
-    print("  🧪 Testing: /testing/*")
-    print("  📊 Health: /health")
+    print("Starting Project Kaarigar Backend...")
+    print("Available endpoints:")
+    print("  Authentication: /api/auth/*")
+    print("  Conversational: /api/conversational/*")
+    print("  Logo Generation: /api/logo/*")
+    print("  Profile Management: /api/profile/*")
+    print("  Media Upload: /api/media/*")
+    print("  Reel Generation: /api/reel/* (DISABLED - not ready yet)")
+    print("  Image Generation: /api/image-gen/*")
+    print("  Image Editing: /api/image-edit/*")
+    print("  Video Editing: /api/video-edit/*")
+    print("  Testing: /testing/*")
+    print("  Health: /health")
     app.run(debug=True, host='0.0.0.0', port=5000)
