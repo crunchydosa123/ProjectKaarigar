@@ -1,0 +1,33 @@
+# Ignore Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+
+# Ignore credentials and secrets
+*.json
+*.key
+*.pem
+
+# Ignore temporary and local files
+*.log
+*.mp4
+*.tmp
+*.DS_Store
+videos/
+uploads/
+temp/
+tmp/
+
+# Ignore unnecessary development files
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Ignore docs and assets not needed in container
+README.md
+notebooks/
+tests/
