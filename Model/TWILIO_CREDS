@@ -1,0 +1,6 @@
+TWILIO_ACCOUNT_SID = "ACe7815acf39a739898e084fb8f61f3edc"
+TWILIO_AUTH_TOKEN = "e1c5d57847356c3517fe2b2a3a7d1fdf"
+TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886"
+ADMIN_WHATSAPP_NUMBER = "whatsapp:+917058642591"
+ADMIN_API_KEY = "verysecret"  # optional API key to protect admin endpoints
+PUBLIC_BASE_URL = "https://marilynn-uncudgeled-potentially.ngrok-free.dev"
