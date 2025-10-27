@@ -1,348 +1,77 @@
 #!/usr/bin/env python3
 """
-Voice-Controlled Conversational Agent with Camera and Recorder Integration using LangGraph.
+Voice-Controlled Conversational Agent with Camera and Recorder Integration.
 
-Notifies user when recording starts, suppresses responses during recording, uses sounddevice/soundfile for audio capture,
-and analyzes video audio with Gemini (google.generativeai) to detect 'stop recording' timestamp for video trimming using FFmpeg.
+Features:
+- Analyze single camera frame using Gemini image analysis (with robust JSON parsing).
+- Fallback to local OpenCV heuristics if Gemini fails.
+- Before taking photo or starting video: show simple lighting/background suggestions,
+  let the user fix them and re-check until satisfied.
+- Once the user confirms it's fine, announce "photo/video in 5 seconds" (TTS + printed countdown),
+  then take photo or start recording. For video, the user says "stop recording" (voice) or types it.
+- Analyze recorded audio with Gemini to detect "stop recording" timestamp; trim audio/video at that timestamp with FFmpeg.
+- Robust parsing and fallback trimming if Gemini doesn't give usable timestamp.
+
+Usage:
+    python conversational_agent.py [--text-mode] [--no-tts-play] [--output-dir sessions]
+
 Requirements:
-- pip install opencv-python speechrecognition gtts sounddevice soundfile langgraph langchain-google-genai numpy google-generativeai
-- FFmpeg installed for audio/video processing.
-- Set environment variable: GEMINI_API_KEY
-- Usage: python conversational_agent.py [--text-mode] [--no-tts-play]
+- FFmpeg installed (for video processing)
+- Set GEMINI_API_KEY environment variable for Gemini (optional; local fallback works)
 """
 
 import os
 import sys
-import json
 import time
-import argparse
 import io
-from datetime import datetime
-from pathlib import Path
+import json
+import argparse
 import threading
-import cv2
 import subprocess
 import re
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+import cv2
 import numpy as np
-from typing import TypedDict, Annotated, Sequence
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
-from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+
+# Optional dependencies
 try:
     import sounddevice as sd
     import soundfile as sf
     SOUNDDEVICE_AVAILABLE = True
 except Exception:
     SOUNDDEVICE_AVAILABLE = False
-import speech_recognition as sr
+
+try:
+    import speech_recognition as sr
+    SR_AVAILABLE = True
+except Exception:
+    SR_AVAILABLE = False
+
 from gtts import gTTS
-import google.generativeai as genai
 
-# ------------------ Configuration ------------------
+# Optional Gemini SDK
+try:
+    import google.generativeai as genai
+    GEMINI_SDK_AVAILABLE = True
+except Exception:
+    GEMINI_SDK_AVAILABLE = False
+
+# Configure GEMINI
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
-GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")  # Updated to 2.5-flash
-
-# Configure genai client
-genai.configure(api_key=GEMINI_API_KEY)
-
-# ------------------ State Definition for LangGraph ------------------
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], "add_messages"]
-
-# ------------------ Tools ------------------
-camera = None
-recorder = None
-
-@tool
-def take_photo() -> str:
-    """Take a photo using the camera."""
-    global camera
-    if camera is None:
-        return "Camera not initialized."
-    success = camera.take_photo()
-    return "Photo taken successfully!" if success else "Failed to take photo."
-
-@tool
-def start_recording() -> str:
-    """Start video and audio recording."""
-    global recorder
-    if recorder is None:
-        return "Recorder not initialized."
-    success = recorder.start_recording()
-    return "Recording started!" if success else "Failed to start recording or already recording."
-
-@tool
-def stop_recording() -> str:
-    """Stop recording and save the video."""
-    global recorder
-    if recorder is None:
-        return "Recorder not initialized."
-    success = recorder.stop_recording()
-    return "Recording stopped and saved!" if success else "Not currently recording."
-
-tools = [take_photo, start_recording, stop_recording]
-
-# ------------------ LLM Setup ------------------
-llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, google_api_key=GEMINI_API_KEY)
-llm_with_tools = llm.bind_tools(tools)
-
-# ------------------ Gemini Audio Analysis ------------------
-def analyze_audio_for_timestamp(audio_path: str) -> float:
-    """Analyze audio with Gemini (google.generativeai) to find the timestamp of 'stop recording'."""
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+if GEMINI_SDK_AVAILABLE and GEMINI_API_KEY:
     try:
-        client = genai.GenerativeModel(GEMINI_MODEL_NAME)
-        # Upload audio file
-        with open(audio_path, "rb") as audio_file:
-            uploaded_file = genai.upload_file(audio_path)
-        # Request transcription with timestamp for 'stop recording'
-        prompt = (
-            "Transcribe the audio and provide the exact timestamp (in seconds) when the phrase "
-            "'stop recording' or 'recording stop' is spoken. Return only the timestamp as a float (e.g., 10.5). "
-            "If the phrase is not found, return -1."
-        )
-        response = client.generate_content([prompt, uploaded_file])
-        # Parse response (assuming it returns a timestamp as text)
-        timestamp_str = response.text.strip()
-        try:
-            timestamp = float(timestamp_str)
-            if timestamp >= 0:
-                print(f"Detected 'stop recording' at {timestamp} seconds")
-                return timestamp
-            else:
-                print("Could not detect 'stop recording' in audio. Using fallback trimming.")
-                return -1
-        except ValueError:
-            print("Invalid timestamp format in Gemini response. Using fallback trimming.")
-            return -1
-    except Exception as e:
-        print(f"Error analyzing audio with Gemini: {e}")
-        return -1
+        genai.configure(api_key=GEMINI_API_KEY)
+    except Exception:
+        # proceed; we'll fallback to local heuristics if any Gemini calls fail
+        pass
 
-# ------------------ LangGraph Nodes ------------------
-def llm_node(state: AgentState) -> AgentState:
-    messages = state["messages"]
-    response = llm_with_tools.invoke(messages)
-    return {"messages": [response]}
+# ---------- Utilities ----------
 
-tool_node = ToolNode(tools)
-
-# ------------------ Camera and Recorder Classes ------------------
-class VoiceControlledCamera:
-    def __init__(self):
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise ValueError("Could not open camera")
-        self.photo_dir = 'photos'
-        if not os.path.exists(self.photo_dir):
-            os.makedirs(self.photo_dir)
-
-    def take_photo(self):
-        ret, frame = self.cap.read()
-        if ret:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.photo_dir, f"photo_{timestamp}.jpg")
-            cv2.imwrite(filename, frame)
-            print(f"Photo saved as {filename}")
-            return True
-        else:
-            print("Failed to grab frame")
-            return False
-
-    def __del__(self):
-        if self.cap:
-            self.cap.release()
-
-class VoiceControlledRecorder:
-    def __init__(self):
-        self.is_recording = False
-        self.video_writer = None
-        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.video_filename = 'temp_video.avi'
-        self.audio_filename = 'temp_audio.wav'
-        self.video_dir = 'videos'
-        if not os.path.exists(self.video_dir):
-            os.makedirs(self.video_dir)
-        self.recording_thread = None
-        self.audio_thread = None
-        self.chunk = 1024
-        self.channels = 1
-        self.rate = 44100
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise ValueError("Could not open camera")
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 20.0
-        self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    def start_audio_recording(self):
-        self.audio_thread = threading.Thread(target=self.audio_record_loop)
-        self.audio_thread.daemon = True
-        self.audio_thread.start()
-
-    def audio_record_loop(self):
-        if not SOUNDDEVICE_AVAILABLE:
-            print("sounddevice not available, cannot record audio")
-            return
-        recording = []
-        with sd.InputStream(samplerate=self.rate, channels=self.channels) as stream:
-            while self.is_recording:
-                data, overflowed = stream.read(self.chunk)
-                if not overflowed:
-                    recording.append(data)
-        sf.write(self.audio_filename, np.concatenate(recording), self.rate)
-
-    def start_recording(self):
-        if not self.is_recording:
-            self.video_writer = cv2.VideoWriter(self.video_filename, self.fourcc, self.fps, (self.frame_width, self.frame_height))
-            if not self.video_writer.isOpened():
-                print("Error opening video writer")
-                return False
-            self.is_recording = True
-            print("Recording started...")
-            self.recording_thread = threading.Thread(target=self.record_loop)
-            self.recording_thread.daemon = True
-            self.recording_thread.start()
-            self.start_audio_recording()
-            return True
-        return False
-
-    def stop_recording(self):
-        if self.is_recording:
-            self.is_recording = False
-            if self.video_writer:
-                self.video_writer.release()
-                self.video_writer = None
-            time.sleep(0.5)
-            self.merge_audio_video()
-            return True
-        return False
-
-    def merge_audio_video(self):
-        if os.path.exists(self.video_filename) and os.path.exists(self.audio_filename):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = os.path.join(self.video_dir, f"recording_{timestamp}.mp4")
-            trimmed_audio = os.path.join(self.video_dir, f"trimmed_audio_{timestamp}.wav")
-            trimmed_video = os.path.join(self.video_dir, f"trimmed_video_{timestamp}.avi")
-
-            # Analyze audio to find 'stop recording' timestamp
-            stop_timestamp = analyze_audio_for_timestamp(self.audio_filename)
-            if stop_timestamp < 0:
-                # Fallback: Trim last 3 seconds
-                stop_timestamp = None
-                print("Using fallback: trimming last 3 seconds of audio and video")
-
-            # Trim audio
-            if stop_timestamp is not None:
-                trim_audio_cmd = [
-                    'ffmpeg', '-i', self.audio_filename, '-to', str(stop_timestamp),
-                    '-c:a', 'copy', trimmed_audio, '-y'
-                ]
-            else:
-                trim_audio_cmd = [
-                    'ffmpeg', '-i', self.audio_filename, '-t', 'trim=end-3',
-                    '-c:a', 'copy', trimmed_audio, '-y'
-                ]
-            trim_result = subprocess.call(trim_audio_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            audio_to_use = trimmed_audio if trim_result == 0 else self.audio_filename
-            print(f"Using audio: {audio_to_use}")
-
-            # Trim video to match audio duration
-            if stop_timestamp is not None:
-                trim_video_cmd = [
-                    'ffmpeg', '-i', self.video_filename, '-to', str(stop_timestamp),
-                    '-c:v', 'copy', trimmed_video, '-y'
-                ]
-            else:
-                # Estimate video duration and trim last 3 seconds
-                probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', self.video_filename]
-                probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-                try:
-                    duration = float(json.loads(probe_result.stdout)['format']['duration'])
-                    trim_duration = duration - 3
-                except Exception:
-                    trim_duration = 'trim=end-3'
-                trim_video_cmd = [
-                    'ffmpeg', '-i', self.video_filename, '-to', str(trim_duration),
-                    '-c:v', 'copy', trimmed_video, '-y'
-                ]
-            trim_video_result = subprocess.call(trim_video_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            video_to_use = trimmed_video if trim_video_result == 0 else self.video_filename
-            print(f"Using video: {video_to_use}")
-
-            # Merge trimmed video and audio
-            cmd = [
-                'ffmpeg', '-i', video_to_use, '-i', audio_to_use,
-                '-c:v', 'copy', '-c:a', 'aac', '-shortest', output_filename, '-y'
-            ]
-            result = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if result == 0:
-                os.remove(self.video_filename)
-                os.remove(self.audio_filename)
-                if os.path.exists(trimmed_audio):
-                    os.remove(trimmed_audio)
-                if os.path.exists(trimmed_video):
-                    os.remove(trimmed_video)
-                print(f"Recording saved as {output_filename}")
-            else:
-                os.remove(self.audio_filename)
-                if os.path.exists(trimmed_audio):
-                    os.remove(trimmed_audio)
-                if os.path.exists(trimmed_video):
-                    os.remove(trimmed_video)
-                os.rename(video_to_use, output_filename)
-                print(f"Recording saved as {output_filename} (no audio)")
-
-    def record_loop(self):
-        while self.is_recording:
-            ret, frame = self.cap.read()
-            if ret:
-                self.video_writer.write(frame)
-            else:
-                print("Failed to grab frame")
-                break
-            time.sleep(1 / self.fps)
-        if self.video_writer:
-            self.video_writer.release()
-
-    def __del__(self):
-        if self.cap:
-            self.cap.release()
-        if self.video_writer:
-            self.video_writer.release()
-
-# ------------------ Audio Capture with sounddevice ------------------
-def capture_audio_segment(duration=5, sample_rate=44100, channels=1) -> str:
-    """Capture audio using sounddevice and transcribe with Google STT."""
-    if not SOUNDDEVICE_AVAILABLE:
-        print("sounddevice not available, cannot capture audio")
-        return ""
-    try:
-        print("Listening...")
-        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=channels)
-        sd.wait()
-        temp_wav = "temp_segment.wav"
-        sf.write(temp_wav, recording, sample_rate)
-        recognizer = sr.Recognizer()
-        with sr.AudioFile(temp_wav) as source:
-            audio = recognizer.record(source)
-        transcript = recognizer.recognize_google(audio)
-        print(f"Recognized: {transcript}")
-        os.remove(temp_wav)
-        return transcript
-    except sr.UnknownValueError:
-        print("Could not understand audio")
-        return ""
-    except sr.RequestError as e:
-        print(f"Error with Google STT service: {e}")
-        return ""
-    except Exception as e:
-        print(f"Error capturing audio: {e}")
-        return ""
-
-# ------------------ Google TTS Helper ------------------
-def google_tts_bytes(text: str, lang: str = 'en') -> bytes:
+def google_tts_bytes(text: str, lang: str = "en") -> bytes:
     tts = gTTS(text=text, lang=lang)
     fp = io.BytesIO()
     tts.write_to_fp(fp)
@@ -350,144 +79,760 @@ def google_tts_bytes(text: str, lang: str = 'en') -> bytes:
     return fp.read()
 
 def play_audio_file(path: str):
+    """Play using ffplay if available; otherwise print path."""
     if not os.path.exists(path):
-        print("Audio file not found:", path)
+        print("Audio path not found:", path)
         return
     try:
         subprocess.run(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path], check=True)
     except Exception:
-        print(f"🔈 TTS saved to {path} — no playback.")
+        print(f"(Playback not available) TTS saved to {path}")
 
-# ------------------ LangGraph Setup ------------------
-workflow = StateGraph(state_schema=AgentState)
-workflow.add_node("llm", llm_node)
-workflow.add_node("tools", tool_node)
-workflow.set_entry_point("llm")
-workflow.add_conditional_edges("llm", tools_condition, {"tools": "tools", END: END})
-workflow.add_edge("tools", END)
-graph = workflow.compile()
+def safe_tts(text: str, out_dir: Path, no_play: bool):
+    if not text:
+        return
+    try:
+        b = google_tts_bytes(text)
+        p = out_dir / f"tts_{int(time.time())}.mp3"
+        with open(p, "wb") as f:
+            f.write(b)
+        if not no_play:
+            play_audio_file(str(p))
+        else:
+            print(f"(TTS suppressed) Saved to {p}")
+    except Exception as e:
+        print("TTS error:", e)
 
-# ------------------ Main CLI Loop ------------------
+# ---------- Parsing helpers ----------
+
+def parse_time_from_text(text: str) -> Optional[float]:
+    """Extract seconds from free-form text."""
+    if not text:
+        return None
+    # HH:MM:SS(.ms)
+    m = re.search(r'(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)', text)
+    if m:
+        try:
+            h = int(m.group(1)) if m.group(1) else 0
+            mm = int(m.group(2))
+            ss = float(m.group(3))
+            return h*3600 + mm*60 + ss
+        except Exception:
+            pass
+    # MM:SS
+    m2 = re.search(r'(\d{1,2}):(\d{1,2}(?:\.\d+)?)', text)
+    if m2:
+        try:
+            mm = int(m2.group(1))
+            ss = float(m2.group(2))
+            return mm*60 + ss
+        except Exception:
+            pass
+    # plain numbers
+    nums = re.findall(r'(-?\d+(?:\.\d+)?)', text)
+    for n in nums:
+        try:
+            val = float(n)
+            if 0 <= val <= 24*3600:
+                return val
+        except Exception:
+            continue
+    return None
+
+# ---------- Audio analysis with Gemini for stop timestamp ----------
+
+def analyze_audio_for_timestamp(audio_path: str) -> float:
+    """
+    Use Gemini to find timestamp in the audio where user said 'stop recording'.
+    Returns:
+      - float timestamp in seconds if found
+      - -1.0 if not found or error
+    The function is robust: it attempts direct parsing, JSON parse, and uses parse_time_from_text as fallback.
+    If Gemini SDK or API key is not available, it returns -1.0 immediately.
+    """
+    if not os.path.exists(audio_path):
+        print("Audio file does not exist for analysis:", audio_path)
+        return -1.0
+
+    if not GEMINI_SDK_AVAILABLE or not GEMINI_API_KEY:
+        print("Gemini SDK or API key not available; skipping audio analysis.")
+        return -1.0
+
+    try:
+        client = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        uploaded = genai.upload_file(audio_path)
+        prompt = (
+            "Transcribe the provided audio and return ONLY a timestamp in seconds (a single number) "
+            "representing the exact time when the speaker says 'stop recording' or 'recording stop'. "
+            "If the phrase is not present, return -1. Do not add extra text."
+        )
+        # pass prompt + file
+        response = client.generate_content([prompt, uploaded])
+        resp_text = ""
+        if hasattr(response, "text"):
+            resp_text = response.text
+        else:
+            resp_text = str(response)
+        resp_text = (resp_text or "").strip()
+        # Try JSON parse if possible
+        try:
+            parsed = json.loads(resp_text)
+            # If it's a number or contains a numeric field, try to retrieve
+            if isinstance(parsed, (int, float)):
+                val = float(parsed)
+                return val if val >= 0 else -1.0
+            if isinstance(parsed, dict):
+                # try common keys
+                for k in ("timestamp", "time", "seconds", "stop_timestamp"):
+                    if k in parsed:
+                        try:
+                            v = float(parsed[k])
+                            return v if v >= 0 else -1.0
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+        # Try to parse free-form text to get a number
+        ts = parse_time_from_text(resp_text)
+        if ts is not None:
+            # success
+            print(f"Gemini audio analysis returned timestamp {ts} seconds (raw response: {resp_text[:200]})")
+            return float(ts)
+        # explicit -1 check
+        if re.search(r'\b-1\b', resp_text):
+            return -1.0
+        # nothing found
+        print("Could not extract timestamp from Gemini response. Response was:")
+        print(resp_text[:500])
+        return -1.0
+    except Exception as e:
+        print("Error communicating with Gemini for audio analysis:", e)
+        return -1.0
+
+# ---------- Frame analysis (Gemini + local fallback) ----------
+
+def analyze_frame_locally(image_path: str) -> Dict[str, Any]:
+    """Local heuristics producing suggestions and basic metrics."""
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return {"lighting":"unknown","brightness":None,"contrast":None,"background_issues":[],"suggestions":["Could not read frame."]}
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        brightness = float(np.mean(gray) / 255.0)
+        contrast = float(np.std(gray) / 128.0)
+        # classify brightness
+        if brightness < 0.25:
+            lighting = "dark"
+        elif brightness < 0.45:
+            lighting = "dim"
+        elif brightness <= 0.75:
+            lighting = "good"
+        else:
+            lighting = "bright"
+        # side brightness differences -> possible backlight
+        h, w = gray.shape
+        thirds = [gray[:, :w//3], gray[:, w//3:2*w//3], gray[:, 2*w//3:]]
+        side_means = [np.mean(t) for t in thirds]
+        issues = []
+        if max(side_means) - min(side_means) > 45:
+            issues.append("Strong back or side light (window behind).")
+        # clutter detection via edge density
+        edges = cv2.Canny(gray, 50, 150)
+        edge_density = edges.sum() / (h*w*255.0)
+        if edge_density > 0.015:
+            issues.append("Background looks cluttered.")
+        # suggestions
+        suggestions = []
+        if lighting in ("dark", "dim"):
+            suggestions.append("Add a soft front light (lamp behind camera) or move closer to window (but not behind it).")
+        if "Strong back or side light (window behind)." in issues:
+            suggestions.append("Turn so the window is in front or to your side (avoid backlighting).")
+        if "Background looks cluttered." in issues:
+            suggestions.append("Choose a plain wall or tidy a small area behind you.")
+        if not suggestions:
+            suggestions.append("Looks good — camera at eye level, keep it that way.")
+        return {
+            "lighting": lighting,
+            "brightness": round(brightness, 3),
+            "contrast": round(min(max(contrast, 0.0), 1.0), 3),
+            "background_issues": issues,
+            "suggestions": suggestions
+        }
+    except Exception as e:
+        return {"lighting":"unknown","brightness":None,"contrast":None,"background_issues":[],"suggestions":[f"Error analyzing frame: {e}"]}
+
+def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
+    """
+    If Gemini SDK available and API key set, ask it to return JSON analysis.
+    Otherwise fallback to analyze_frame_locally.
+    """
+    if GEMINI_SDK_AVAILABLE and GEMINI_API_KEY:
+        try:
+            client = genai.GenerativeModel(GEMINI_MODEL_NAME)
+            uploaded = genai.upload_file(image_path)
+            prompt = (
+                "Analyze the provided image for webcam-style lighting and background problems. "
+                "Return ONLY a JSON object with keys: lighting (one of ['dark','dim','good','bright','overexposed']), "
+                "brightness (0..1), contrast (0..1), background_issues (list of short strings), suggestions (list of 1-3 short strings)."
+            )
+            response = client.generate_content([prompt, uploaded])
+            resp_text = response.text if hasattr(response, "text") else str(response)
+            # try parse JSON
+            try:
+                parsed = json.loads(resp_text)
+                # normalize keys
+                out = {
+                    "lighting": parsed.get("lighting", "unknown"),
+                    "brightness": parsed.get("brightness"),
+                    "contrast": parsed.get("contrast"),
+                    "background_issues": parsed.get("background_issues", []),
+                    "suggestions": parsed.get("suggestions", [])
+                }
+                # ensure lists
+                out["background_issues"] = out["background_issues"] if isinstance(out["background_issues"], list) else []
+                out["suggestions"] = out["suggestions"] if isinstance(out["suggestions"], list) else []
+                return out
+            except Exception:
+                # try to extract JSON blob
+                m = re.search(r'\{.*\}', resp_text, flags=re.DOTALL)
+                if m:
+                    try:
+                        parsed = json.loads(m.group(0))
+                        return {
+                            "lighting": parsed.get("lighting", "unknown"),
+                            "brightness": parsed.get("brightness"),
+                            "contrast": parsed.get("contrast"),
+                            "background_issues": parsed.get("background_issues", []),
+                            "suggestions": parsed.get("suggestions", [])
+                        }
+                    except Exception:
+                        pass
+            # if anything fails, fallback
+            print("Gemini response not parseable; falling back to local analysis.")
+            return analyze_frame_locally(image_path)
+        except Exception as e:
+            print("Gemini image analysis failed:", e)
+            return analyze_frame_locally(image_path)
+    else:
+        return analyze_frame_locally(image_path)
+
+# ---------- Camera & Recorder ----------
+
+class VoiceControlledCamera:
+    def __init__(self, cam_index=0):
+        self.cap = cv2.VideoCapture(cam_index)
+        if not self.cap.isOpened():
+            raise ValueError("Could not open camera")
+        self.photo_dir = "photos"
+        Path(self.photo_dir).mkdir(exist_ok=True)
+
+    def capture_frame(self, tmp_path="temp_frame.jpg") -> Optional[str]:
+        ret, frame = self.cap.read()
+        if not ret:
+            return None
+        cv2.imwrite(tmp_path, frame)
+        return tmp_path
+
+    def take_photo(self) -> Optional[str]:
+        ret, frame = self.cap.read()
+        if not ret:
+            return None
+        fname = f"photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        path = Path(self.photo_dir) / fname
+        cv2.imwrite(str(path), frame)
+        return str(path)
+
+    def release(self):
+        if self.cap:
+            self.cap.release()
+
+class VoiceControlledRecorder:
+    def __init__(self, out_dir="videos", cam_index=0):
+        self.is_recording = False
+        self.out_dir = Path(out_dir)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.video_filename = "temp_video.avi"
+        self.audio_filename = "temp_audio.wav"
+        self.cap = cv2.VideoCapture(cam_index)
+        if not self.cap.isOpened():
+            raise ValueError("Could not open camera")
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 20.0
+        self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        self.video_writer = None
+        self.record_thread = None
+        self.audio_thread = None
+
+    def start_audio_thread(self):
+        if not SOUNDDEVICE_AVAILABLE:
+            print("sounddevice not available; audio will not be recorded.")
+            return
+        def audio_loop():
+            frames = []
+            try:
+                with sd.InputStream(samplerate=44100, channels=1) as stream:
+                    while self.is_recording:
+                        data, overflowed = stream.read(1024)
+                        if not overflowed:
+                            frames.append(data.copy())
+            except Exception as e:
+                print("Audio recording error:", e)
+            if frames:
+                try:
+                    sf.write(self.audio_filename, np.concatenate(frames), 44100)
+                except Exception as e:
+                    print("Error saving audio:", e)
+        self.audio_thread = threading.Thread(target=audio_loop, daemon=True)
+        self.audio_thread.start()
+
+    def record_loop(self):
+        while self.is_recording:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            self.video_writer.write(frame)
+            time.sleep(1 / (self.fps or 20.0))
+        if self.video_writer:
+            self.video_writer.release()
+
+    def start_recording(self) -> bool:
+        if self.is_recording:
+            return False
+        self.video_writer = cv2.VideoWriter(self.video_filename, self.fourcc, self.fps, (self.frame_width, self.frame_height))
+        if not self.video_writer.isOpened():
+            print("Could not open video writer.")
+            return False
+        self.is_recording = True
+        self.record_thread = threading.Thread(target=self.record_loop, daemon=True)
+        self.record_thread.start()
+        self.start_audio_thread()
+        return True
+
+    def stop_recording(self):
+        if not self.is_recording:
+            return False
+        self.is_recording = False
+        # allow threads to finish and then merge
+        time.sleep(0.6)
+        self.merge_audio_video()
+        return True
+
+    # ---- updated merge_audio_video: uses Gemini audio analysis to trim ----
+    def merge_audio_video(self):
+        timestamp_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = str(self.out_dir / f"recording_{timestamp_tag}.mp4")
+
+        video_exists = os.path.exists(self.video_filename)
+        audio_exists = os.path.exists(self.audio_filename)
+
+        if not video_exists:
+            print("No video file to process.")
+            return
+
+        # default: no trimming (use full durations)
+        stop_timestamp = None
+
+        # If audio exists, ask Gemini to find 'stop recording' timestamp
+        if audio_exists:
+            detected = analyze_audio_for_timestamp(self.audio_filename)
+            if detected is not None and detected >= 0:
+                stop_timestamp = float(detected)
+            else:
+                stop_timestamp = None
+
+        # probe durations to be safe and compute fallback
+        # get video duration
+        def probe_duration(path):
+            try:
+                cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                dur = float(res.stdout.strip())
+                return dur
+            except Exception:
+                return None
+
+        video_dur = probe_duration(self.video_filename)
+        audio_dur = probe_duration(self.audio_filename) if audio_exists else None
+
+        # If Gemini detected timestamp, cap it to both durations
+        if stop_timestamp is not None:
+            # cap to durations
+            if video_dur is not None and stop_timestamp > video_dur:
+                print(f"Gemini timestamp {stop_timestamp}s > video duration {video_dur}s, capping to video duration.")
+                stop_timestamp = video_dur
+            if audio_dur is not None and stop_timestamp > audio_dur:
+                print(f"Gemini timestamp {stop_timestamp}s > audio duration {audio_dur}s, capping to audio duration.")
+                stop_timestamp = min(stop_timestamp, audio_dur)
+        else:
+            # fallback: trim last 3 seconds if durations available
+            fallback_trim = 3.0
+            if video_dur is not None:
+                stop_timestamp = max(0.0, video_dur - fallback_trim)
+            elif audio_dur is not None:
+                stop_timestamp = max(0.0, audio_dur - fallback_trim)
+            else:
+                # no durations known -> use full files (no trimming)
+                stop_timestamp = None
+
+        # Prepare trimmed filenames
+        trimmed_audio = None
+        trimmed_video = None
+
+        # Trim audio if present and stop_timestamp known
+        if audio_exists and stop_timestamp is not None:
+            trimmed_audio = os.path.join(self.out_dir, f"trimmed_audio_{timestamp_tag}.wav")
+            try:
+                cmd_audio = [
+                    'ffmpeg', '-loglevel', 'error', '-y', '-i', self.audio_filename,
+                    '-to', str(stop_timestamp),
+                    '-c:a', 'copy', trimmed_audio
+                ]
+                subprocess.run(cmd_audio, check=True)
+                print(f"Trimmed audio to {stop_timestamp}s -> {trimmed_audio}")
+            except Exception as e:
+                print("Audio trimming failed, will use original audio:", e)
+                trimmed_audio = None
+
+        # Trim video if stop_timestamp known
+        if video_exists and stop_timestamp is not None:
+            trimmed_video = os.path.join(self.out_dir, f"trimmed_video_{timestamp_tag}.avi")
+            try:
+                cmd_video = [
+                    'ffmpeg', '-loglevel', 'error', '-y', '-i', self.video_filename,
+                    '-to', str(stop_timestamp),
+                    '-c:v', 'copy', trimmed_video
+                ]
+                subprocess.run(cmd_video, check=True)
+                print(f"Trimmed video to {stop_timestamp}s -> {trimmed_video}")
+            except Exception as e:
+                print("Video trimming failed, will use original video:", e)
+                trimmed_video = None
+
+        # Determine which files to merge
+        audio_to_merge = trimmed_audio if (trimmed_audio and os.path.exists(trimmed_audio)) else (self.audio_filename if audio_exists else None)
+        video_to_merge = trimmed_video if (trimmed_video and os.path.exists(trimmed_video)) else self.video_filename
+
+        # If audio present merge, else just move/rename video
+        if audio_to_merge:
+            cmd_merge = [
+                'ffmpeg', '-loglevel', 'error', '-y', '-i', video_to_merge, '-i', audio_to_merge,
+                '-c:v', 'copy', '-c:a', 'aac', '-shortest', output_file
+            ]
+            try:
+                subprocess.run(cmd_merge, check=True)
+                print("Merged trimmed video and audio ->", output_file)
+                # cleanup temp files (video_filename and audio_filename and trimmed ones)
+                try:
+                    if os.path.exists(self.video_filename):
+                        os.remove(self.video_filename)
+                    if os.path.exists(self.audio_filename):
+                        os.remove(self.audio_filename)
+                    if trimmed_audio and os.path.exists(trimmed_audio) and trimmed_audio != self.audio_filename:
+                        os.remove(trimmed_audio)
+                    if trimmed_video and os.path.exists(trimmed_video) and trimmed_video != self.video_filename:
+                        os.remove(trimmed_video)
+                except Exception:
+                    pass
+            except Exception as e:
+                print("Merging failed, saving raw files instead:", e)
+                # fallback: if merge failed, keep trimmed video if exists or raw
+                if trimmed_video and os.path.exists(trimmed_video):
+                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.avi")
+                    os.rename(trimmed_video, fallback)
+                    print("Saved trimmed video without audio to", fallback)
+                elif os.path.exists(self.video_filename):
+                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.avi")
+                    os.rename(self.video_filename, fallback)
+                    print("Saved raw video to", fallback)
+        else:
+            # no audio to merge: just save/rename video
+            try:
+                final_path = str(self.out_dir / f"recording_{timestamp_tag}.avi")
+                # if trimmed_video exists, move it; else move original
+                src = trimmed_video if (trimmed_video and os.path.exists(trimmed_video)) else self.video_filename
+                if src and os.path.exists(src):
+                    os.rename(src, final_path)
+                    print("Saved video to", final_path)
+                else:
+                    print("No usable video file found to save.")
+            except Exception as e:
+                print("Failed to save video file:", e)
+
+    def release(self):
+        if self.cap:
+            self.cap.release()
+        if self.video_writer:
+            self.video_writer.release()
+
+# ---------- Simple voice/text helpers ----------
+
+def capture_audio_segment(duration=4, sample_rate=44100, channels=1) -> str:
+    """Record a short audio snippet and return Google STT transcript (if available)."""
+    if not SOUNDDEVICE_AVAILABLE or not SR_AVAILABLE:
+        return ""
+    try:
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=channels)
+        sd.wait()
+        temp_wav = "temp_segment.wav"
+        sf.write(temp_wav, recording, sample_rate)
+        r = sr.Recognizer()
+        with sr.AudioFile(temp_wav) as source:
+            audio = r.record(source)
+        text = r.recognize_google(audio)
+        try:
+            os.remove(temp_wav)
+        except Exception:
+            pass
+        return text
+    except Exception:
+        return ""
+
+def parse_ready_from_text(text: str) -> str:
+    """Map recognized text to commands: 'ready'|'check'|'cancel'|'stop' or empty."""
+    if not text:
+        return ""
+    t = text.lower()
+    if any(k in t for k in ("ready", "proceed", "go", "yes", "ok", "okay")):
+        return "ready"
+    if any(k in t for k in ("check", "again", "recheck", "retry")):
+        return "check"
+    if any(k in t for k in ("cancel", "abort", "no")):
+        return "cancel"
+    if any(k in t for k in ("stop recording", "stop", "finish")):
+        return "stop"
+    return ""
+
+# ---------- Interactive pre-check + capture flows ----------
+
+def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path, text_mode: bool, no_tts: bool):
+    """Analyze frame, suggest fixes, allow user to re-check, then take photo after 5s countdown."""
+    tmp = "temp_frame.jpg"
+    frame_path = camera.capture_frame(tmp)
+    if not frame_path:
+        print("Failed to capture camera frame for analysis.")
+        return
+    analysis = analyze_frame_with_gemini(frame_path)
+    while True:
+        # Present simple suggestions
+        print("\n--- Camera check ---")
+        print(f"Lighting: {analysis.get('lighting')}, brightness: {analysis.get('brightness')}, contrast: {analysis.get('contrast')}")
+        if analysis.get("background_issues"):
+            print("Background issues:", ", ".join(analysis["background_issues"]))
+        print("Suggestions:")
+        for s in analysis.get("suggestions", []):
+            print(" -", s)
+        # speak a short suggestion
+        safe_tts("Quick camera suggestion: " + " ".join(analysis.get("suggestions", [])[:2]), out_dir, no_tts)
+
+        # Ask user whether they want to fix and re-check or proceed
+        if text_mode:
+            choice = input("\nType 'ready' to take photo, 'check' to re-analyze, or 'cancel' to abort: ").strip().lower()
+            if choice in ("ready", "go", "yes", "proceed"):
+                cmd = "ready"
+            elif choice in ("check", "again", "retry"):
+                cmd = "check"
+            elif choice in ("cancel", "quit", "abort"):
+                cmd = "cancel"
+            else:
+                print("Unrecognized input; treating as 'check'.")
+                cmd = "check"
+        else:
+            print("Say 'ready' to proceed, 'check' to re-analyze, or 'cancel' to abort (listening 4s)...")
+            spoken = capture_audio_segment(duration=4)
+            cmd = parse_ready_from_text(spoken)
+            if not cmd:
+                print("No clear voice command detected; defaulting to 'check'.")
+                cmd = "check"
+            else:
+                print("Heard:", cmd)
+
+        if cmd == "cancel":
+            print("Cancelled.")
+            return
+        elif cmd == "check":
+            # re-capture and analyze
+            time.sleep(0.5)
+            frame_path = camera.capture_frame(tmp)
+            if not frame_path:
+                print("Failed to capture frame. Aborting.")
+                return
+            analysis = analyze_frame_with_gemini(frame_path)
+            continue
+        elif cmd == "ready":
+            # countdown 5s and take photo
+            safe_tts("Taking photo in 5 seconds. Get ready.", out_dir, no_tts)
+            for i in range(5, 0, -1):
+                print(f"Taking photo in {i}...")
+                time.sleep(1)
+            photo_path = camera.take_photo()
+            if photo_path:
+                print("Photo saved to", photo_path)
+                safe_tts("Photo taken.", out_dir, no_tts)
+            else:
+                print("Failed to take photo.")
+            return
+
+def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: VoiceControlledRecorder, out_dir: Path, text_mode: bool, no_tts: bool):
+    """Analyze frame, suggest fixes, allow user to re-check, then start recording after 5s countdown and stop on 'stop recording'."""
+    tmp = "temp_frame.jpg"
+    frame_path = camera.capture_frame(tmp)
+    if not frame_path:
+        print("Failed to capture camera frame for analysis.")
+        return
+    analysis = analyze_frame_with_gemini(frame_path)
+    while True:
+        print("\n--- Camera check ---")
+        print(f"Lighting: {analysis.get('lighting')}, brightness: {analysis.get('brightness')}, contrast: {analysis.get('contrast')}")
+        if analysis.get("background_issues"):
+            print("Background issues:", ", ".join(analysis["background_issues"]))
+        print("Suggestions:")
+        for s in analysis.get("suggestions", []):
+            print(" -", s)
+        safe_tts("Quick camera suggestion: " + " ".join(analysis.get("suggestions", [])[:2]), out_dir, no_tts)
+
+        if text_mode:
+            choice = input("\nType 'ready' to start recording, 'check' to re-analyze, or 'cancel' to abort: ").strip().lower()
+            if choice in ("ready", "go", "yes", "proceed"):
+                cmd = "ready"
+            elif choice in ("check", "again", "retry"):
+                cmd = "check"
+            elif choice in ("cancel", "quit", "abort"):
+                cmd = "cancel"
+            else:
+                print("Unrecognized input; treating as 'check'.")
+                cmd = "check"
+        else:
+            print("Say 'ready' to start recording, 'check' to re-analyze, or 'cancel' to abort (listening 4s)...")
+            spoken = capture_audio_segment(duration=4)
+            cmd = parse_ready_from_text(spoken)
+            if not cmd:
+                print("No clear voice command detected; defaulting to 'check'.")
+                cmd = "check"
+            else:
+                print("Heard:", cmd)
+
+        if cmd == "cancel":
+            print("Cancelled.")
+            return
+        elif cmd == "check":
+            time.sleep(0.5)
+            frame_path = camera.capture_frame(tmp)
+            if not frame_path:
+                print("Failed to capture frame. Aborting.")
+                return
+            analysis = analyze_frame_with_gemini(frame_path)
+            continue
+        elif cmd == "ready":
+            safe_tts("Starting recording in 5 seconds. Say stop recording to end.", out_dir, no_tts)
+            for i in range(5, 0, -1):
+                print(f"Recording starts in {i}...")
+                time.sleep(1)
+            started = recorder.start_recording()
+            if not started:
+                print("Failed to start recording.")
+                return
+            print("Recording started. Say 'stop recording' or type it to stop.")
+            # Monitor for stop command either voice or text
+            while recorder.is_recording:
+                if text_mode:
+                    # check typed input non-blocking: prompt user
+                    print("(Type 'stop recording' to stop or press Enter to wait...)")
+                    s = input().strip().lower()
+                    if "stop recording" in s or s == "stop":
+                        recorder.stop_recording()
+                        safe_tts("Recording stopped and saved.", out_dir, no_tts)
+                        break
+                else:
+                    # listen short segments for stop command
+                    spoken = capture_audio_segment(duration=3)
+                    cmd2 = parse_ready_from_text(spoken)
+                    if cmd2 == "stop":
+                        recorder.stop_recording()
+                        safe_tts("Recording stopped and saved.", out_dir, no_tts)
+                        break
+                    # else continue listening
+            return
+
+# ---------- Main CLI ----------
+
 def parse_args():
-    p = argparse.ArgumentParser(description="Voice-Controlled Conversational Agent with LangGraph")
-    p.add_argument("--text-mode", action="store_true", help="Type inputs instead of voice")
-    p.add_argument("--no-tts-play", action="store_true", help="Don't play TTS audio")
+    p = argparse.ArgumentParser(description="Voice-Controlled Conversational Agent")
+    p.add_argument("--text-mode", action="store_true", help="Use typed inputs instead of voice")
+    p.add_argument("--no-tts-play", action="store_true", help="Don't play TTS audio (only save)")
     p.add_argument("--output-dir", "-o", default="sessions", help="Session output directory")
     return p.parse_args()
 
 def main():
-    global camera, recorder
     args = parse_args()
+    text_mode = args.text_mode
+    no_tts = args.no_tts_play
     out_dir = Path(args.output_dir)
     out_dir.mkdir(exist_ok=True)
-    audios_dir = out_dir / "audios"
-    audios_dir.mkdir(exist_ok=True)
+    audio_dir = out_dir / "audios"
+    audio_dir.mkdir(exist_ok=True)
+    video_dir = out_dir / "videos"
+    video_dir.mkdir(exist_ok=True)
+    photo_dir = out_dir / "photos"
+    photo_dir.mkdir(exist_ok=True)
 
+    # instantiate camera and recorder
     try:
         camera = VoiceControlledCamera()
-        recorder = VoiceControlledRecorder()
-    except ValueError as e:
-        print(f"❌ Camera init failed: {e}")
-        return
-
-    messages = [SystemMessage(content="You are a helpful voice-controlled assistant integrated with a camera and recorder. You can chat casually, control the camera and recorder using tools. During recording, do not respond except to stop recording when requested. Keep responses short, natural, and engaging. Always end with a question to continue the conversation unless recording.")]
-    print("Initializing agent...")
-
-    # Welcome message
-    welcome = "Hello! I'm your voice-controlled assistant. I can chat, take photos, record videos. What would you like to do?"
-    print("\nAssistant:", welcome)
-    try:
-        tts_bytes = google_tts_bytes(welcome)
-        welcome_path = audios_dir / f"welcome_{int(time.time())}.mp3"
-        with open(welcome_path, "wb") as f:
-            f.write(tts_bytes)
-        if not args.no_tts_play:
-            play_audio_file(str(welcome_path))
     except Exception as e:
-        print("⚠️ TTS failed:", e)
+        print("Camera init failed:", e)
+        return
+    try:
+        recorder = VoiceControlledRecorder(out_dir=str(video_dir))
+    except Exception as e:
+        print("Recorder init failed:", e)
+        recorder = None
+
+    print("Assistant ready. Say or type commands. Examples: 'take photo', 'record video', 'help', 'quit'.")
+
+    # Welcome TTS
+    safe_tts("Hello! I can check your lighting and background before taking photos or videos. Say or type 'take photo' or 'record video' to begin.", out_dir, no_tts)
 
     while True:
-        transcript = ""
-        if args.text_mode:
+        user_input = ""
+        if text_mode:
             user_input = input("\nYou: ").strip()
-            if user_input.lower() in ("bye", "thank you bye"):
-                print("Stopping script as requested.")
-                break
-            transcript = user_input
-            print("\nYou:", transcript)
         else:
-            transcript = capture_audio_segment(duration=5)
-            if not transcript:
+            # listen for command (short)
+            print("\nListening for a command (4s)...")
+            user_input = capture_audio_segment(duration=4)
+            print("Heard:", user_input)
+        if not user_input:
+            continue
+        ui = user_input.lower()
+
+        if any(k in ui for k in ("quit", "exit", "bye")):
+            print("Goodbye.")
+            break
+        if "help" in ui:
+            print("Commands: 'take photo', 'record video', 'quit'")
+            continue
+
+        # Photo flow
+        if any(k in ui for k in ("take photo", "take a photo", "photo", "take picture", "snap")):
+            interactive_precheck_and_photo(camera, out_dir, text_mode, no_tts)
+            continue
+
+        # Video flow
+        if any(k in ui for k in ("record video", "start recording", "record", "video")):
+            if recorder is None:
+                print("Recorder not initialized; cannot record video.")
                 continue
-            if re.search(r'\b(thank you bye|bye)\b', transcript.lower()):
-                print("Stopping script as requested.")
-                break
+            interactive_precheck_and_video(camera, recorder, out_dir, text_mode, no_tts)
+            continue
 
-        if transcript and not recorder.is_recording:
-            messages.append(HumanMessage(content=transcript))
-            result = graph.invoke({"messages": messages})
-            new_messages = result["messages"]
-            last_msg = new_messages[-1]
-            if isinstance(last_msg, ToolMessage):
-                assistant_text = last_msg.content
-                if last_msg.content == "Recording started!":
-                    print("\nAssistant:", assistant_text)
-                    if not args.no_tts_play:
-                        try:
-                            tts_bytes = google_tts_bytes(assistant_text)
-                            tts_path = audios_dir / f"assistant_{int(time.time())}.mp3"
-                            with open(tts_path, "wb") as f:
-                                f.write(tts_bytes)
-                            play_audio_file(str(tts_path))
-                        except Exception as e:
-                            print("⚠️ TTS failed:", e)
-            else:
-                assistant_text = last_msg.content
-                print("\nAssistant:", assistant_text)
-                if not args.no_tts_play:
-                    try:
-                        tts_bytes = google_tts_bytes(assistant_text)
-                        tts_path = audios_dir / f"assistant_{int(time.time())}.mp3"
-                        with open(tts_path, "wb") as f:
-                            f.write(tts_bytes)
-                        play_audio_file(str(tts_path))
-                    except Exception as e:
-                        print("⚠️ TTS failed:", e)
-            messages = new_messages
-        elif recorder.is_recording:
-            if re.search(r'\bstop recording\b', transcript.lower()):
-                messages.append(HumanMessage(content="stop_recording"))
-                result = graph.invoke({"messages": messages})
-                new_messages = result["messages"]
-                last_msg = new_messages[-1]
-                assistant_text = last_msg.content
-                print("\nAssistant:", assistant_text)
-                if not args.no_tts_play:
-                    try:
-                        tts_bytes = google_tts_bytes(assistant_text)
-                        tts_path = audios_dir / f"assistant_{int(time.time())}.mp3"
-                        with open(tts_path, "wb") as f:
-                            f.write(tts_bytes)
-                        play_audio_file(str(tts_path))
-                    except Exception as e:
-                        print("⚠️ TTS failed:", e)
-                messages = new_messages
+        # General fallback
+        print("I didn't catch a recognized command. Try 'take photo' or 'record video'. Type 'help' for options.")
 
-        if args.text_mode:
-            cont = input("Continue? (Enter or 'bye'): ").strip()
-            if cont.lower() in ("bye", "thank you bye"):
-                print("Stopping script as requested.")
-                break
-
-    # Cleanup
-    if camera:
-        del camera
+    # cleanup
+    camera.release()
     if recorder:
-        del recorder
-    history_path = out_dir / f"history_{int(time.time())}.json"
-    with open(history_path, "w") as f:
-        json.dump([{"role": m.type, "content": m.content} for m in messages], f, indent=2)
-    print(f"\nSession saved to {history_path}. Goodbye!")
+        recorder.release()
 
 if __name__ == "__main__":
     main()
