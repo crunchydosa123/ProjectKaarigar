@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 from reel_model import convert_images_to_reel, optimize_prompt_with_gemini
 from reel_ideas_generator import ReelIdeasGenerator
+from image_anlayzes import ImageToPromptGenerator
 from werkzeug.utils import secure_filename
 import tempfile
 import json
@@ -25,6 +26,7 @@ cloud_manager = CloudStorageManager(
 )
 
 ideas_generator = ReelIdeasGenerator()
+image_analyzer = ImageToPromptGenerator()
 
 print(f"📁 Video storage folder: {UPLOAD_FOLDER}")
 
@@ -82,7 +84,407 @@ def analyze_content_for_segments(prompt: str, image_paths: list = None) -> tuple
         return 1, 6, []
 
 
-# ==================== NEW ENDPOINTS: Reel Ideas Workflow ====================
+# ==================== IMAGE ANALYSIS & PROMPT GENERATION ENDPOINTS ====================
+
+@app.route('/api/image-analysis/analyze', methods=['POST'])
+def analyze_image_endpoint():
+    """
+    Analyze image and extract visual elements
+    
+    Request:
+    {
+        "image": file (multipart/form-data)
+    }
+    
+    Response:
+    {
+        "success": true,
+        "analysis": {
+            "objects": [...],
+            "colors": [...],
+            "mood": "...",
+            "lighting": "...",
+            ...
+        }
+    }
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided'}), 400
+        
+        file = request.files['image']
+        if not file or not file.filename:
+            return jsonify({'error': 'No selected file'}), 400
+        
+        logging.info(f"📸 Analyzing image: {file.filename}")
+        
+        temp_dir = tempfile.mkdtemp(prefix="img_analysis_")
+        filename = secure_filename(file.filename)
+        image_path = os.path.join(temp_dir, filename)
+        file.save(image_path)
+        
+        result = image_analyzer.analyze_image_content(image_path)
+        
+        # Cleanup temp file
+        try:
+            os.remove(image_path)
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'analysis': result['analysis'],
+                'image_file': filename
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logging.error(f"Image analysis failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/generate-prompt', methods=['POST'])
+def generate_prompt_from_image():
+    """
+    Analyze image and generate optimized video prompt
+    Returns ONLY the optimized video prompt (no detailed analysis)
+    
+    Request:
+    {
+        "image": file (multipart/form-data),
+        "user_intent": "optional creative direction"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "prompt": "cinematic video prompt optimized for video generation",
+        "image_file": "filename"
+    }
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided'}), 400
+        
+        file = request.files['image']
+        if not file or not file.filename:
+            return jsonify({'error': 'No selected file'}), 400
+        
+        user_intent = request.form.get('user_intent', None)
+        
+        logging.info(f"🎬 Generating video prompt for: {file.filename}")
+        
+        temp_dir = tempfile.mkdtemp(prefix="img_prompt_")
+        filename = secure_filename(file.filename)
+        image_path = os.path.join(temp_dir, filename)
+        file.save(image_path)
+        
+        # Generate optimized prompt directly
+        result = image_analyzer.generate_video_prompt_direct(image_path, user_intent)
+        
+        # Cleanup temp file
+        try:
+            os.remove(image_path)
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        if result.get('success'):
+            logging.info(f"✅ Video prompt generated successfully")
+            return jsonify({
+                'success': True,
+                'prompt': result.get('prompt'),
+                'image_file': filename
+            })
+        else:
+            logging.error(f"Failed to generate prompt: {result.get('error')}")
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to generate prompt')
+            }), 500
+            
+    except Exception as e:
+        logging.error(f"Prompt generation failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/segmentation-plan', methods=['POST'])
+def segmentation_plan_endpoint():
+    """
+    Generate multi-segment video plan from single image
+    
+    Request:
+    {
+        "image": file (multipart/form-data),
+        "num_segments": 3 (optional, default: 3)
+    }
+    
+    Response:
+    {
+        "success": true,
+        "segmentation_plan": {
+            "segments": [...],
+            "transitions": [...],
+            "overall_pacing": "fast/moderate/slow",
+            "total_duration": 12
+        }
+    }
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided'}), 400
+        
+        file = request.files['image']
+        if not file or not file.filename:
+            return jsonify({'error': 'No selected file'}), 400
+        
+        num_segments = int(request.form.get('num_segments', 3))
+        if num_segments < 1 or num_segments > 10:
+            return jsonify({'error': 'num_segments must be between 1 and 10'}), 400
+        
+        logging.info(f"📐 Creating segmentation plan: {file.filename} ({num_segments} segments)")
+        
+        temp_dir = tempfile.mkdtemp(prefix="img_segment_")
+        filename = secure_filename(file.filename)
+        image_path = os.path.join(temp_dir, filename)
+        file.save(image_path)
+        
+        result = image_analyzer.generate_segmentation_plan(image_path, num_segments)
+        
+        # Cleanup temp file
+        try:
+            os.remove(image_path)
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'segmentation_plan': result['segmentation_plan'],
+                'image_file': filename,
+                'recommendation': f"Total video duration: {result['segmentation_plan'].get('total_duration', 'N/A')} seconds"
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logging.error(f"Segmentation planning failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/multi-angle', methods=['POST'])
+def multi_angle_endpoint():
+    """
+    Generate multiple creative prompts from single image
+    
+    Request:
+    {
+        "image": file (multipart/form-data),
+        "variations": 3 (optional, default: 3)
+    }
+    
+    Response:
+    {
+        "success": true,
+        "multi_angle_prompts": {
+            "prompts": [
+                {
+                    "perspective": "name",
+                    "description": "...",
+                    "prompt": "...",
+                    "duration": 4,
+                    "intensity": "low/medium/high",
+                    "camera_style": "..."
+                },
+                ...
+            ]
+        }
+    }
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided'}), 400
+        
+        file = request.files['image']
+        if not file or not file.filename:
+            return jsonify({'error': 'No selected file'}), 400
+        
+        num_variations = int(request.form.get('variations', 3))
+        if num_variations < 1 or num_variations > 5:
+            return jsonify({'error': 'variations must be between 1 and 5'}), 400
+        
+        logging.info(f"🎨 Generating multi-angle prompts: {file.filename} ({num_variations} variations)")
+        
+        temp_dir = tempfile.mkdtemp(prefix="img_multiangle_")
+        filename = secure_filename(file.filename)
+        image_path = os.path.join(temp_dir, filename)
+        file.save(image_path)
+        
+        result = image_analyzer.generate_multi_angle_prompts(image_path, num_variations)
+        
+        # Cleanup temp file
+        try:
+            os.remove(image_path)
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'multi_angle_prompts': result['multi_angle_prompts'],
+                'image_file': filename,
+                'variations_count': len(result['multi_angle_prompts'].get('prompts', []))
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logging.error(f"Multi-angle generation failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/process', methods=['POST'])
+def process_images_endpoint():
+    """
+    Intelligent image processing - handles single or multiple images
+    Returns only optimized video prompts (simplified workflow)
+    
+    Request (Form Data):
+    {
+        "images": file or files (multipart/form-data),
+        "user_intent": "optional creative direction"
+    }
+    
+    Response for Single Image:
+    {
+        "success": true,
+        "workflow": "single_image",
+        "image_count": 1,
+        "image_file": "filename.jpg",
+        "prompt": "optimized video prompt"
+    }
+    
+    Response for Multiple Images:
+    {
+        "success": true,
+        "workflow": "multiple_images",
+        "image_count": 3,
+        "processed": 3,
+        "prompts": [
+            {
+                "index": 1,
+                "image": "filename.jpg",
+                "prompt": "optimized video prompt"
+            },
+            ...
+        ]
+    }
+    """
+    try:
+        if 'images' not in request.files:
+            return jsonify({'error': 'No images provided'}), 400
+        
+        files = request.files.getlist('images')
+        if not files or not any(f for f in files if f.filename):
+            return jsonify({'error': 'No selected files'}), 400
+        
+        user_intent = request.form.get('user_intent', None)
+        
+        logging.info(f"🖼️  Processing {len(files)} image(s)")
+        
+        # Save temp images
+        temp_dir = tempfile.mkdtemp(prefix="img_process_")
+        image_paths = []
+        
+        for file in files:
+            if file and file.filename:
+                filename = secure_filename(file.filename)
+                unique_filename = f"{os.urandom(6).hex()}_{filename}"
+                filepath = os.path.join(temp_dir, unique_filename)
+                file.save(filepath)
+                image_paths.append((filepath, filename))
+                logging.info(f"  📸 Saved: {filename}")
+        
+        if not image_paths:
+            return jsonify({'error': 'No valid images saved'}), 400
+        
+        # Process images using new simplified workflow
+        result = image_analyzer.process_images([p[0] for p in image_paths], user_intent)
+        
+        # Cleanup temp files
+        try:
+            for path, _ in image_paths:
+                os.remove(path)
+            os.rmdir(temp_dir)
+        except Exception as e:
+            logging.warning(f"Cleanup warning: {e}")
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            logging.error(f"Image processing failed: {result.get('error')}")
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logging.error(f"Image processing failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/logs', methods=['GET'])
+def get_analysis_logs():
+    """
+    Get analysis operation logs
+    
+    Response:
+    {
+        "success": true,
+        "logs": [
+            "[timestamp] [EVENT_TYPE] message",
+            ...
+        ],
+        "total_entries": 25
+    }
+    """
+    try:
+        logs = image_analyzer.get_logs()
+        return jsonify({
+            'success': True,
+            'logs': logs,
+            'total_entries': len(logs)
+        })
+    except Exception as e:
+        logging.error(f"Failed to get logs: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-analysis/clear-logs', methods=['POST'])
+def clear_analysis_logs():
+    """
+    Clear analysis operation logs
+    
+    Response:
+    {
+        "success": true,
+        "message": "Logs cleared"
+    }
+    """
+    try:
+        image_analyzer.clear_logs()
+        return jsonify({
+            'success': True,
+            'message': 'Analysis logs cleared successfully'
+        })
+    except Exception as e:
+        logging.error(f"Failed to clear logs: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== REEL IDEAS WORKFLOW ENDPOINTS ====================
 
 @app.route('/api/reel-generation/ideas', methods=['POST'])
 def generate_reel_ideas():
@@ -280,6 +682,7 @@ def generate_video_script():
 
 @app.route('/api/reel-generation/generate-video', methods=['POST'])
 def generate_video_from_script():
+    """Generate video from script and upload to cloud storage"""
     logging.debug("Received request to generate video from script.")
     try:
         data = request.get_json()
@@ -340,7 +743,7 @@ def generate_video_from_script():
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== EXISTING ENDPOINTS ====================
+# ==================== VIDEO GENERATION ENDPOINTS ====================
 
 @app.route('/api/generate-video/text', methods=['POST'])
 def generate_text_to_video():
@@ -412,7 +815,10 @@ def generate_text_to_video():
 
 @app.route('/api/generate-video/images', methods=['POST'])
 def generate_images_to_video():
-    """Generate video from images and upload to cloud storage"""
+    """
+    Generate video from images and upload to cloud storage
+    Uses optimized prompts from image analysis
+    """
     try:
         if 'images' not in request.files:
             return jsonify({'error': 'No images provided'}), 400
@@ -421,9 +827,8 @@ def generate_images_to_video():
         if not files or not any(f for f in files if f.filename):
             return jsonify({'error': 'No selected files'}), 400
             
-        prompt = request.form.get('prompt', '').strip()
-        if not prompt:
-            return jsonify({'error': 'Prompt is required'}), 400
+        custom_prompt = request.form.get('prompt', '').strip()
+        logging.info(f"📸 Processing {len(files)} image(s)")
         
         temp_upload_dir = tempfile.mkdtemp(prefix="veo_uploads_")
         
@@ -440,7 +845,32 @@ def generate_images_to_video():
         if not image_paths:
             return jsonify({'error': 'No valid images uploaded'}), 400
         
-        print(f"📸 Processing {len(image_paths)} image(s)")
+        # Generate prompts from images if no custom prompt provided
+        if not custom_prompt:
+            logging.info("🎯 Generating video prompts from images...")
+            result = image_analyzer.process_images(image_paths)
+            
+            if result.get('success'):
+                # Extract prompts based on workflow
+                if result.get('workflow') == 'single_image':
+                    prompt = result.get('prompt', '')
+                else:  # multiple_images
+                    # Combine all prompts for sequence
+                    prompts = [p.get('prompt', '') for p in result.get('prompts', [])]
+                    prompt = ' '.join(prompts) if prompts else ''
+            else:
+                logging.error("Failed to generate prompts from images")
+                return jsonify({
+                    'error': 'Failed to analyze images and generate prompts'
+                }), 500
+        else:
+            prompt = custom_prompt
+            logging.info(f"Using custom prompt: {prompt[:100]}...")
+        
+        if not prompt:
+            return jsonify({'error': 'Could not generate prompt from images'}), 400
+        
+        logging.info(f"🎬 Generating video with prompt: {prompt[:100]}...")
         
         segments, duration, captions = analyze_content_for_segments(prompt, image_paths)
         output_name = os.path.join(UPLOAD_FOLDER, f"image_video_{os.urandom(8).hex()}.mp4")
@@ -457,6 +887,7 @@ def generate_images_to_video():
             text_only=False
         )
         
+        # Cleanup uploaded images
         for path in image_paths:
             try:
                 os.remove(path)
@@ -490,7 +921,8 @@ def generate_images_to_video():
                     'message': 'Video generated and uploaded to cloud successfully',
                     'generated_video_url': cloud_info['public_url'],
                     'cloud_path': cloud_info['cloud_path'],
-                    'file_size_mb': round(file_size, 2)
+                    'file_size_mb': round(file_size, 2),
+                    'generated_prompt': prompt
                 })
             else:
                 return jsonify({
@@ -508,6 +940,8 @@ def generate_images_to_video():
         print(f"❌ Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+# ==================== VIDEO MANAGEMENT ENDPOINTS ====================
 
 @app.route('/api/videos', methods=['GET'])
 def list_videos():
@@ -597,12 +1031,58 @@ def health_check():
 
 if __name__ == '__main__':
     import os
+    import sys
 
-    port = int(os.environ.get("PORT", 8080))  # Cloud Run provides PORT, default to 8080
-    logging.info("Starting Flask Video Generation API with Ideas Workflow")
+    port = int(os.environ.get("PORT", 5000))
+    
+    # Startup logging
+    logging.info("=" * 80)
+    logging.info("🚀 Starting Flask Video Generation API with Image Analysis")
+    logging.info("=" * 80)
     logging.info(f"Current directory: {CURRENT_DIR}")
     logging.info(f"Local videos folder: {UPLOAD_FOLDER}")
     logging.info(f"Cloud bucket: {cloud_manager.bucket_name}")
     logging.info(f"Brand ID: {cloud_manager.brand_id}")
     logging.info(f"Server starting at http://0.0.0.0:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    logging.info("=" * 80)
+    
+    logging.info("\n📋 Available API Endpoints:\n")
+    
+    logging.info("   🖼️  IMAGE ANALYSIS & PROMPT GENERATION:")
+    logging.info("   - POST /api/image-analysis/analyze (detailed analysis)")
+    logging.info("   - POST /api/image-analysis/generate-prompt (optimized prompt only)")
+    logging.info("   - POST /api/image-analysis/segmentation-plan")
+    logging.info("   - POST /api/image-analysis/multi-angle")
+    logging.info("   - POST /api/image-analysis/process (simplified workflow)")
+    logging.info("   - GET  /api/image-analysis/logs")
+    logging.info("   - POST /api/image-analysis/clear-logs")
+    
+    logging.info("\n   💡 REEL IDEAS WORKFLOW:")
+    logging.info("   - POST /api/reel-generation/ideas")
+    logging.info("   - POST /api/reel-generation/refine-idea")
+    logging.info("   - POST /api/reel-generation/regenerate-ideas")
+    logging.info("   - POST /api/reel-generation/generate-video-script")
+    logging.info("   - POST /api/reel-generation/generate-video")
+    
+    logging.info("\n   🎥 VIDEO GENERATION:")
+    logging.info("   - POST /api/generate-video/text")
+    logging.info("   - POST /api/generate-video/images (auto-generates prompts from images)")
+    
+    logging.info("\n   📁 VIDEO MANAGEMENT:")
+    logging.info("   - GET  /api/videos")
+    logging.info("   - GET  /api/cloud-videos")
+    logging.info("   - POST /api/cleanup")
+    logging.info("   - GET  /api/health")
+    
+    logging.info("\n" + "=" * 80 + "\n")
+    
+    try:
+        app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
+    except OSError as e:
+        if "Address already in use" in str(e):
+            logging.error(f"❌ Port {port} is already in use!")
+            logging.info(f"Try setting a different port: PORT=5001 python reel_generation_api.py")
+            sys.exit(1)
+        else:
+            logging.error(f"❌ Error: {str(e)}")
+            sys.exit(1)
