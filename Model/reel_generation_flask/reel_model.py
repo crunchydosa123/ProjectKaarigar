@@ -300,104 +300,6 @@ def generate_clip_for_text(optimized_prompt: str, duration_seconds: int,
         raise RuntimeError(f"Failed to generate text-only clip: {e}")
 
 
-# -------------------- Text overlay with ffmpeg --------------------
-def overlay_text_on_clip(clip_path: str, text: str, out_path: str, 
-                        fontsize: int = 46, margin_bottom: int = 80) -> bool:
-    """Add text caption overlay to video clip using ffmpeg
-    
-    Args:
-        clip_path: Path to input video clip
-        text: Caption text to overlay
-        out_path: Path to output video with caption
-        fontsize: Font size in pixels
-        margin_bottom: Bottom margin in pixels
-        
-    Returns:
-        True if successful, False otherwise
-    """
-    if not _check_ffmpeg_available():
-        log_event("ERROR", "ffmpeg not available for text overlay")
-        return False
-
-    if not os.path.exists(clip_path):
-        log_event("ERROR", f"Clip not found for text overlay", {"path": clip_path})
-        return False
-
-    font = _find_font()
-    tmp_txt = None
-    tmp_dir_caption = None
-    
-    try:
-        tmp_dir_caption = tempfile.mkdtemp(prefix="veo_caption_")
-        tmp_txt = Path(tmp_dir_caption) / "caption.txt"
-        
-        with open(tmp_txt, "w", encoding="utf-8") as f:
-            f.write(text)
-
-        # Convert paths to forward slashes for ffmpeg compatibility
-        txt_file_path = str(tmp_txt).replace("\\", "/")
-        clip_path_fwd = str(clip_path).replace("\\", "/")
-        out_path_fwd = str(out_path).replace("\\", "/")
-
-        drawtext_parts = [
-            f"textfile={txt_file_path}",
-            f"fontsize={fontsize}",
-            "fontcolor=white",
-            "box=1",
-            "boxcolor=black@0.5",
-            "boxborderw=10",
-            "x=(w-text_w)/2",
-            f"y=h-text_h-{margin_bottom}",
-            "reload=1",
-        ]
-        
-        if font:
-            font_fwd = str(font).replace("\\", "/")
-            drawtext_parts.insert(0, f"fontfile={font_fwd}")
-
-        vf = "drawtext=" + ":".join(drawtext_parts)
-
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i", clip_path_fwd,
-            "-vf", vf,
-            "-c:a", "copy",
-            out_path_fwd
-        ]
-        
-        preview_text = text[:50] + "..." if len(text) > 50 else text
-        log_event("OVERLAY", f"Adding caption to clip", {"text": preview_text})
-        
-        completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
-        
-        if completed.returncode != 0:
-            stderr_msg = completed.stderr.decode(errors="ignore")
-            log_event("ERROR", "ffmpeg text overlay failed", {"stderr": stderr_msg[-200:]})
-            return False
-        
-        log_event("SUCCESS", "Caption overlay applied successfully")
-        return True
-        
-    except subprocess.TimeoutExpired:
-        log_event("ERROR", "ffmpeg caption overlay timed out")
-        return False
-    except Exception as e:
-        log_event("ERROR", f"Caption overlay error", {"error": str(e)})
-        return False
-    finally:
-        if tmp_txt and tmp_txt.exists():
-            try:
-                tmp_txt.unlink()
-            except Exception:
-                pass
-        if tmp_dir_caption and os.path.exists(tmp_dir_caption):
-            try:
-                shutil.rmtree(tmp_dir_caption, ignore_errors=True)
-            except Exception:
-                pass
-
-
 # -------------------- Stitching --------------------
 def stitch_clips(clips: List[str], final_output: str, keep_temp: bool = False) -> bool:
     """Concatenate multiple MP4 clips into single video using ffmpeg
@@ -612,15 +514,8 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
                 try:
                     clip_path = generate_clip_for_text(optimized_prompt, duration_seconds=clip_duration, 
                                                       tmp_dir=tmp_dir, idx=clip_idx)
-                    caption_text = caption_sequence[clip_idx - 1] if caption_sequence else None
-                    
-                    if caption_text:
-                        overlaid = Path(tmp_dir) / f"{Path(clip_path).stem}_caption.mp4"
-                        success_overlay = overlay_text_on_clip(clip_path, caption_text, str(overlaid))
-                        generated_clips.append(str(overlaid) if success_overlay else clip_path)
-                    else:
-                        generated_clips.append(clip_path)
-                    
+                    # Skip text overlay
+                    generated_clips.append(clip_path)
                     clip_idx += 1
                 except Exception as e:
                     log_event("WARN", f"Skipped segment", {"index": clip_idx, "error": str(e)})
@@ -640,15 +535,8 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
                     try:
                         clip_path = generate_clip_for_image(img, optimized_prompt, duration_seconds=clip_duration, 
                                                            tmp_dir=tmp_dir, idx=clip_idx)
-                        caption_text = caption_sequence[clip_idx - 1] if caption_sequence else None
-                        
-                        if caption_text:
-                            overlaid = Path(tmp_dir) / f"{Path(clip_path).stem}_caption.mp4"
-                            success_overlay = overlay_text_on_clip(clip_path, caption_text, str(overlaid))
-                            generated_clips.append(str(overlaid) if success_overlay else clip_path)
-                        else:
-                            generated_clips.append(clip_path)
-
+                        # Skip text overlay
+                        generated_clips.append(clip_path)
                         clip_idx += 1
                     except Exception as e:
                         log_event("WARN", f"Skipped segment", {"index": clip_idx, "error": str(e)})
@@ -682,7 +570,7 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             except Exception:
                 pass
-        
+
         log_event("END", "=== REEL GENERATION COMPLETE ===")
 
 
