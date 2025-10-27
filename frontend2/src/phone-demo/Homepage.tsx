@@ -74,11 +74,11 @@ const Homepage = () => {
           <div className='text-xs font-bold m-2 text-left'>Build Your Brand Story</div>
         </button>
 
-        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left'>
+        <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('list-products')}>
           <div className='ml-2 mt-2 bg-[#185FBC] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Store />
           </div>
-          <div className='text-xs font-bold m-2 text-left'>List Product on Marketplace</div>
+          <div className='text-xs font-bold m-2 text-left'>List and Market your Products </div>
         </button>
 
         <button className='bg-white rounded-md h-25 flex flex-col justify-between items-left' onClick={()=> setCurrentPage('create-content')}>
@@ -92,7 +92,7 @@ const Homepage = () => {
           <div className='ml-2 mt-2 bg-[#D25B79] w-12 h-12 rounded-lg flex items-center justify-center text-white'>
             <Lightbulb />
           </div>
-          <div className='text-xs font-bold m-2 text-left'>AI Insights</div>
+          <div className='text-xs font-bold m-2 text-left'>Understand your Sales</div>
         </button>
       </div>
 

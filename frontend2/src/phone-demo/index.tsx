@@ -15,6 +15,8 @@ import AIInsights from './AIInsights';
 import EditVideo from './EditVideo';
 import EditContent from './EditContent';
 import UploadMedia from './UploadMedia';
+import ListProduct from './ListProducts';
+import ListProducts from './ListProducts';
 
 
 const PhoneDemo = () => {
@@ -57,6 +59,8 @@ const PhoneDemo = () => {
       {currentPage === "add-product/ai-cameraman" && <AICameraman />}
 
       {currentPage === "upload-media" && <UploadMedia />}
+
+      {currentPage.startsWith("list-products") ? <ListProducts /> : null}
     </PhoneLayout>
   )
 }
