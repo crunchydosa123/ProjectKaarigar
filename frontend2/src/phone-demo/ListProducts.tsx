@@ -15,6 +15,8 @@ const ListProducts = () => {
       return <ListContentMain />; // default create content screen
     case 'list-products/whatsapp-campaign':
       return <WhatsappCampaign />;
+    case 'list-products/whatsapp-campaign':
+      return <WhatsappCampaign />;
     default:
       return <ListContentMain />
   }
