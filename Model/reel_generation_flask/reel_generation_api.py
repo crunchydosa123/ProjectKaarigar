@@ -8,6 +8,7 @@ import tempfile
 import json
 from pathlib import Path
 from cloud_storage_manager import CloudStorageManager
+import logging
 
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +27,9 @@ cloud_manager = CloudStorageManager(
 ideas_generator = ReelIdeasGenerator()
 
 print(f"📁 Video storage folder: {UPLOAD_FOLDER}")
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def analyze_content_for_segments(prompt: str, image_paths: list = None) -> tuple:
@@ -276,36 +280,20 @@ def generate_video_script():
 
 @app.route('/api/reel-generation/generate-video', methods=['POST'])
 def generate_video_from_script():
-    """
-    Generate final video from script
-    
-    Request:
-    {
-        "script": "string"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "generated_video_url": "https://...",
-        "cloud_path": "gs://...",
-        "file_size_mb": float
-    }
-    """
+    logging.debug("Received request to generate video from script.")
     try:
         data = request.get_json()
-        
+        logging.debug(f"Request data: {data}")
+
         script = data.get('script', '').strip()
-        
         if not script:
+            logging.error("Script is required but not provided.")
             return jsonify({'error': 'script is required'}), 400
-        
-        print(f"🎬 Generating video from script...")
-        
-        # Generate output filename
+
+        logging.info("Generating video from script...")
         output_name = os.path.join(UPLOAD_FOLDER, f"script_video_{os.urandom(8).hex()}.mp4")
-        
-        # Use reel_model to generate video from script
+        logging.debug(f"Output file path: {output_name}")
+
         success = convert_images_to_reel(
             image_inputs=[],
             user_prompt=script,
@@ -315,34 +303,40 @@ def generate_video_from_script():
             captions=None,
             text_only=True
         )
-        
+
         if success and os.path.exists(output_name):
             file_size = os.path.getsize(output_name) / (1024 * 1024)
-            print(f"✅ Video generated: {file_size:.2f} MB")
-            
-            # Upload to Cloud Storage
-            print(f"☁️  Uploading to Cloud Storage...")
+            logging.info(f"Video generated successfully: {output_name} ({file_size:.2f} MB)")
+
+            logging.info("Uploading video to Cloud Storage...")
             cloud_info = cloud_manager.upload_video(output_name, video_type="generated")
-            
+
             if cloud_info:
+                try:
+                    os.remove(output_name)
+                    logging.info(f"Deleted local file after upload: {output_name}")
+                except Exception as e:
+                    logging.warning(f"Failed to delete local file: {output_name}. Error: {e}")
+
                 return jsonify({
                     'success': True,
                     'message': 'Video generated and uploaded successfully',
                     'generated_video_url': cloud_info['public_url'],
                     'cloud_path': cloud_info['cloud_path'],
-                    'file_size_mb': cloud_info['file_size_mb'],
-                    'local_path': output_name
+                    'file_size_mb': cloud_info['file_size_mb']
                 })
             else:
+                logging.error("Cloud upload failed.")
                 return jsonify({
                     'error': 'Video generated but cloud upload failed',
                     'local_path': output_name
                 }), 206
         else:
+            logging.error("Video generation failed.")
             return jsonify({'error': 'Failed to generate video'}), 500
-            
+
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        logging.exception("An error occurred during video generation.")
         return jsonify({'error': str(e)}), 500
 
 
@@ -385,9 +379,15 @@ def generate_text_to_video():
             cloud_info = cloud_manager.upload_video(output_name, video_type="text")
             
             if cloud_info:
+                # Delete the local file after successful upload
+                try:
+                    os.remove(output_name)
+                    logging.info(f"Deleted local file: {output_name}")
+                except Exception as e:
+                    logging.warning(f"Failed to delete local file: {output_name}. Error: {e}")
+                
                 return jsonify({
                     'success': True,
-                    'video_path': output_name,
                     'message': 'Video generated and uploaded to cloud successfully',
                     'generated_video_url': cloud_info['public_url'],
                     'cloud_path': cloud_info['cloud_path'],
@@ -396,13 +396,14 @@ def generate_text_to_video():
             else:
                 return jsonify({
                     'success': True,
-                    'video_path': output_name,
                     'message': 'Video generated but cloud upload failed',
                     'file_size_mb': round(file_size, 2),
                     'cloud_error': 'Upload to cloud storage failed'
                 }), 206
         else:
-            return jsonify({'error': 'Failed to generate video'}), 500
+            return jsonify({
+                'error': 'Failed to generate video'
+            }), 500
             
     except Exception as e:
         print(f"❌ Error: {str(e)}")
@@ -459,14 +460,16 @@ def generate_images_to_video():
         for path in image_paths:
             try:
                 os.remove(path)
-            except:
-                pass
-        
+                logging.info(f"Deleted uploaded image: {path}")
+            except Exception as e:
+                logging.warning(f"Failed to delete uploaded image: {path}. Error: {e}")
+
         try:
             os.rmdir(temp_upload_dir)
-        except:
-            pass
-                
+            logging.info(f"Deleted temporary upload directory: {temp_upload_dir}")
+        except Exception as e:
+            logging.warning(f"Failed to delete temporary upload directory: {temp_upload_dir}. Error: {e}")
+
         if success and os.path.exists(output_name):
             file_size = os.path.getsize(output_name) / (1024 * 1024)
             print(f"✅ Video saved locally: {output_name} ({file_size:.2f} MB)")
@@ -475,9 +478,15 @@ def generate_images_to_video():
             cloud_info = cloud_manager.upload_video(output_name, video_type="image")
             
             if cloud_info:
+                # Delete the local file after successful upload
+                try:
+                    os.remove(output_name)
+                    logging.info(f"Deleted local file: {output_name}")
+                except Exception as e:
+                    logging.warning(f"Failed to delete local file: {output_name}. Error: {e}")
+                
                 return jsonify({
                     'success': True,
-                    'video_path': output_name,
                     'message': 'Video generated and uploaded to cloud successfully',
                     'generated_video_url': cloud_info['public_url'],
                     'cloud_path': cloud_info['cloud_path'],
@@ -486,13 +495,14 @@ def generate_images_to_video():
             else:
                 return jsonify({
                     'success': True,
-                    'video_path': output_name,
                     'message': 'Video generated but cloud upload failed',
                     'file_size_mb': round(file_size, 2),
                     'cloud_error': 'Upload to cloud storage failed'
                 }), 206
         else:
-            return jsonify({'error': 'Failed to generate video'}), 500
+            return jsonify({
+                'error': 'Failed to generate video'
+            }), 500
             
     except Exception as e:
         print(f"❌ Error: {str(e)}")
@@ -564,13 +574,12 @@ def cleanup_video():
         
         try:
             os.remove(video_path)
-            filename = os.path.basename(video_path)
-            print(f"🗑️  Deleted local: {filename}")
+            logging.info(f"Deleted local video file: {video_path}")
             return jsonify({'success': True, 'message': 'Local video deleted successfully (cloud copy preserved)'})
         except Exception as e:
-            print(f"❌ Delete error: {e}")
+            logging.warning(f"Failed to delete local video file: {video_path}. Error: {e}")
             return jsonify({'error': f'Failed to delete video: {str(e)}'}), 500
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -587,24 +596,13 @@ def health_check():
 
 
 if __name__ == '__main__':
-    print(f"\n{'='*70}")
-    print(f"🚀 Flask Video Generation API with Ideas Workflow")
-    print(f"{'='*70}")
-    print(f"📁 Current directory: {CURRENT_DIR}")
-    print(f"📁 Local videos folder: {UPLOAD_FOLDER}")
-    print(f"☁️  Cloud bucket: {cloud_manager.bucket_name}")
-    print(f"🏢 Brand ID: {cloud_manager.brand_id}")
-    print(f"🌐 Server: http://localhost:5000")
-    print(f"{'='*70}\n")
-    print("📋 Available Endpoints:")
-    print("   Ideas Workflow:")
-    print("   - POST /api/reel-generation/ideas")
-    print("   - POST /api/reel-generation/refine-idea")
-    print("   - POST /api/reel-generation/regenerate-ideas")
-    print("   - POST /api/reel-generation/generate-video-script")
-    print("   - POST /api/reel-generation/generate-video")
-    print("   Video Generation:")
-    print("   - POST /api/generate-video/text")
-    print("   - POST /api/generate-video/images")
-    print(f"{'='*70}\n")
-    app.run(debug=True, port=5000, use_reloader=False)
+    import os
+
+    port = int(os.environ.get("PORT", 8080))  # Cloud Run provides PORT, default to 8080
+    logging.info("Starting Flask Video Generation API with Ideas Workflow")
+    logging.info(f"Current directory: {CURRENT_DIR}")
+    logging.info(f"Local videos folder: {UPLOAD_FOLDER}")
+    logging.info(f"Cloud bucket: {cloud_manager.bucket_name}")
+    logging.info(f"Brand ID: {cloud_manager.brand_id}")
+    logging.info(f"Server starting at http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
