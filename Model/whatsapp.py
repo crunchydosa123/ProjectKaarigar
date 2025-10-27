@@ -84,7 +84,7 @@ ALLOWED_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
 # Hardcoded USERS (end users) - replace with your real test numbers
 # ---------------------------
 USERS = {
-    "whatsapp:+917058642591",
+    "whatsapp:+917058642591", #Siddhartha ka number
 }
 
 # ---------------------------
