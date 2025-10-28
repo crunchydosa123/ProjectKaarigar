@@ -56,7 +56,7 @@ try:
 except Exception:
     SR_AVAILABLE = False
 
-from gtts import gTTS
+from google.cloud import texttospeech
 
 # Optional Gemini SDK
 try:
@@ -77,14 +77,6 @@ if GEMINI_SDK_AVAILABLE and GEMINI_API_KEY:
 
 # ---------- Utilities ----------
 
-def google_tts_bytes(text: str, lang: str = "en") -> bytes:
-    tts = gTTS(text=text, lang=lang)
-    fp = io.BytesIO()
-    tts.write_to_fp(fp)
-    fp.seek(0)
-    return fp.read()
-
-
 def play_audio_file(path: str):
     """Play using ffplay if available; otherwise print path."""
     if not os.path.exists(path):
@@ -95,21 +87,83 @@ def play_audio_file(path: str):
     except Exception:
         print(f"(Playback not available) TTS saved to {path}")
 
+def synthesize_gemini_pro_tts(
+    text: str,
+    output_filepath: str = "output.mp3",
+    language_code: str = "hi-IN",
+    voice_name: str = "achernar",
+    model_name: str = "gemini-2.5-pro-tts",
+    speaking_rate: float = 1.0,
+    pitch: float = 0.0,
+) -> str:
+    """
+    Convert text to speech using Google Gemini Pro TTS (via Cloud Text-to-Speech client).
+
+    Args:
+        text (str): The text to convert into speech.
+        output_filepath (str): Path to save the generated MP3 file.
+        language_code (str): Language code (e.g., 'hi-IN', 'en-IN').
+        voice_name (str): The voice to use (e.g., 'achernar').
+        model_name (str): TTS model to use ('gemini-2.5-pro-tts' by default).
+        speaking_rate (float): Speech speed multiplier.
+        pitch (float): Voice pitch adjustment.
+
+    Returns:
+        str: Path to the generated MP3 file.
+    """
+    if not text.strip():
+        raise ValueError("Input text cannot be empty.")
+
+    client = texttospeech.TextToSpeechClient()
+
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+
+    voice = texttospeech.VoiceSelectionParams(
+        language_code=language_code,
+        name=voice_name,
+        model_name=model_name,
+        ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+    )
+
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=speaking_rate,
+        pitch=pitch,
+    )
+
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config,
+    )
+
+    with open(output_filepath, "wb") as out:
+        out.write(response.audio_content)
+
+    print(f"✅ Gemini Pro TTS audio saved to {output_filepath}")
+    return output_filepath
+
 
 def safe_tts(text: str, out_dir: Path, no_play: bool):
+    """Produce TTS using synthesize_gemini_pro_tts.
+
+    Saves an MP3 file to out_dir and optionally plays it (unless no_play=True).
+    If the Cloud client isn't available or synthesis fails, the function will print the text instead.
+    """
     if not text:
         return
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p = out_dir / f"tts_{int(time.time())}.mp3"
     try:
-        b = google_tts_bytes(text)
-        p = out_dir / f"tts_{int(time.time())}.mp3"
-        with open(p, "wb") as f:
-            f.write(b)
+        synthesize_gemini_pro_tts(text, str(p))
         if not no_play:
             play_audio_file(str(p))
         else:
             print(f"(TTS suppressed) Saved to {p}")
     except Exception as e:
-        print("TTS error:", e)
+        print("Gemini Pro TTS error:", e)
+        print("Fallback (print):", text)
 
 # ---------- Parsing helpers ----------
 
