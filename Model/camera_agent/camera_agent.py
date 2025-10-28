@@ -66,7 +66,7 @@ except Exception:
     GEMINI_SDK_AVAILABLE = False
 
 # Configure GEMINI
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 if GEMINI_SDK_AVAILABLE and GEMINI_API_KEY:
     try:
