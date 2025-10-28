@@ -59,47 +59,50 @@ def print_info(message: str):
     """Print info message"""
     print(f"{Colors.OKCYAN}ℹ️  {message}{Colors.ENDC}")
 
-def make_request(method: str, endpoint: str, data: Dict = None, files: Dict = None, timeout: int = 300, use_form_data: bool = False) -> Dict:
+def make_request(
+    method: str,
+    endpoint: str,
+    data: Dict = None,
+    files: Dict = None,
+    timeout: int = 300,
+    use_form_data: bool = False,
+    json_mode: bool = False
+) -> Dict:
     """Make HTTP request to the API"""
     url = f"{BASE_URL}{endpoint}"
-    
+
     try:
         if method.upper() == 'GET':
             response = requests.get(url, timeout=timeout)
         elif method.upper() == 'POST':
             if files:
+                # For multipart form-data file uploads
                 response = requests.post(url, data=data, files=files, timeout=timeout)
             elif use_form_data:
+                # For normal form-data (application/x-www-form-urlencoded)
                 response = requests.post(url, data=data, timeout=timeout)
+            elif json_mode:
+                # For application/json requests (like image_urls API)
+                response = requests.post(url, json=data, timeout=timeout)
             else:
+                # Default to JSON if not specified
                 response = requests.post(url, json=data, timeout=timeout)
         else:
             raise ValueError(f"Unsupported method: {method}")
-        
+
         return {
             'success': response.status_code == 200,
             'status_code': response.status_code,
             'data': response.json() if response.headers.get('content-type', '').startswith('application/json') else response.text,
             'headers': dict(response.headers)
         }
+
     except requests.exceptions.Timeout:
-        return {
-            'success': False,
-            'error': 'Request timeout',
-            'status_code': 408
-        }
+        return {'success': False, 'error': 'Request timeout', 'status_code': 408}
     except requests.exceptions.ConnectionError:
-        return {
-            'success': False,
-            'error': 'Connection error',
-            'status_code': 503
-        }
+        return {'success': False, 'error': 'Connection error', 'status_code': 503}
     except Exception as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'status_code': 500
-        }
+        return {'success': False, 'error': str(e), 'status_code': 500}
 
 # ==================== TEST CASES ====================
 
@@ -167,37 +170,28 @@ def test_2_generate_ideas():
         return False
 
 def test_3_generate_ideas_with_image():
-    """TEST 3: Generate Ideas with Image Context"""
-    print_header("TEST 3: Generate Ideas with Image")
-    
-    print_info(f"Testing endpoint: POST {BASE_URL}/api/reel-generation/ideas (with image)")
-    
-    # Use the working image from focused tests
-    image_path = r"D:\projects\Project_Kaarigar\3rd_Times_Thecharm\ProjectKaarigar\edited_diary_magical.png"
-    
-    if not os.path.exists(image_path):
-        print_warning(f"Test image not found: {image_path}")
-        print_info("Skipping image context test")
-        return None
-    
+    """TEST 3: Generate Ideas with Image URL Context"""
+    print_header("TEST 3: Generate Ideas with Image URL")
+
+    print_info(f"Testing endpoint: POST {BASE_URL}/api/reel-generation/ideas (with image_url)")
+
+    # Example image URL (replace or extend this list as needed)
+    image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
+
     data = {
-        'initial_prompt': 'Create a video showcasing this magical diary'
+        'initial_prompt': 'Create a video showcasing this magical diary',
+        'image_url': image_url
     }
-    
-    files = {
-        'image': open(image_path, 'rb')
-    }
-    
-    result = make_request('POST', '/api/reel-generation/ideas', data=data, files=files)
-    
-    # Close the file
-    files['image'].close()
-    
+
+    print_info(f"Making request with image URL: {image_url}")
+
+    result = make_request('POST', '/api/reel-generation/ideas', data=data, timeout=300)
+
     if result['success']:
         response_data = result['data']
         if response_data.get('success'):
             ideas = response_data.get('ideas', [])
-            print_success("Ideas with image context generated", {
+            print_success("Ideas with image URL context generated successfully", {
                 "Total Ideas": response_data.get('count'),
                 "Ideas": ideas
             })
@@ -373,32 +367,26 @@ def test_8_generate_text_to_video():
         return False
 
 def test_9_generate_images_to_video():
-    """TEST 9: Generate Images to Video (Single & Multiple Images)"""
-    print_header("TEST 9: Generate Images to Video")
-    
+    """TEST 9: Generate Images to Video (Using Image URLs)"""
+    print_header("TEST 9: Generate Images to Video (Image URLs)")
+
     print_info(f"Testing endpoint: POST {BASE_URL}/api/generate-video/images")
     print_warning("This test may take several minutes due to video generation...")
-    
-    # Test with single image first
-    print_info("Test 9a: Single image test...")
-    image_path = r"D:\projects\Project_Kaarigar\3rd_Times_Thecharm\ProjectKaarigar\edited_diary_magical.png"
-    
-    if not os.path.exists(image_path):
-        print_warning(f"Test image not found: {image_path}")
-        print_info("Skipping images-to-video test")
-        return None
-    
+
+    # Test 9a: Single image URL
+    print_info("Test 9a: Single image URL test...")
+
+    single_image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
+
     data = {
-        'prompt': 'Transform this magical diary into an enchanting video'
+        "prompt": "Transform this magical diary into an enchanting video",
+        "image_urls": [single_image_url]
     }
-    
-    files = {
-        'images': open(image_path, 'rb')
-    }
-    
-    result = make_request('POST', '/api/generate-video/images', data=data, files=files, timeout=600)
-    files['images'].close()
-    
+
+    print_info(f"Making request with 1 image URL: {single_image_url}")
+
+    result = make_request('POST', '/api/generate-video/images', data=data, timeout=600, json_mode=True)
+
     if result['success']:
         response_data = result['data']
         if response_data.get('success'):
@@ -406,7 +394,8 @@ def test_9_generate_images_to_video():
                 "Message": response_data.get('message'),
                 "Video URL": response_data.get('generated_video_url'),
                 "Cloud Path": response_data.get('cloud_path'),
-                "File Size (MB)": response_data.get('file_size_mb')
+                "File Size (MB)": response_data.get('file_size_mb'),
+                "Images Used": 1
             })
         else:
             print_error("Single image API returned error", {"Error": response_data.get('error')})
@@ -417,85 +406,43 @@ def test_9_generate_images_to_video():
             "Error": result.get('error', result.get('data'))
         })
         return False
-    
-    # Test with multiple images
-    print_info("\nTest 9b: Multiple images test...")
-    
-    # Check for test images (using only 2 images to avoid timeout)
-    image_paths = [
-        r"D:\projects\Project_Kaarigar\3rd_Times_Thecharm\ProjectKaarigar\edited_diary_magical.png",
-        r"D:\projects\Project_Kaarigar\3rd_Times_Thecharm\ProjectKaarigar\Model\images (2).jpeg"
+
+    # Test 9b: Multiple image URLs
+    print_info("\nTest 9b: Multiple image URLs test...")
+
+    multiple_image_urls = [
+        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg",
+        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(2).jpeg"
     ]
-    
-    # Filter to only existing images
-    existing_images = [path for path in image_paths if os.path.exists(path)]
-    
-    if len(existing_images) < 2:
-        print_warning(f"Only {len(existing_images)} test image(s) found. Need at least 2 for multiple image test.")
-        print_info("Skipping multiple images test")
-        return True  # Return True since single image test passed
-    
-    print_success(f"Found {len(existing_images)} test images for multiple image test")
-    
+
     data = {
-        'prompt': 'Create a magical story video from these 2 images'
+        "prompt": "Create a magical story video from these images",
+        "image_urls": multiple_image_urls
     }
-    
-    # Open multiple image files
-    files = {}
-    file_handles = []
-    for i, img_path in enumerate(existing_images):
-        try:
-            file_handle = open(img_path, 'rb')
-            files[f'images'] = file_handle  # Note: This will overwrite, but getlist() handles it
-            file_handles.append(file_handle)
-        except Exception as e:
-            print_error(f"Failed to open image {img_path}: {e}")
-            continue
-    
-    if not file_handles:
-        print_error("No image files could be opened")
-        return False
-    
-    # For multiple files, we need to use a different approach
-    try:
-        import requests
-        url = f"{BASE_URL}/api/generate-video/images"
-        
-        # Prepare files for multiple upload
-        files_data = []
-        for img_path in existing_images:
-            files_data.append(('images', open(img_path, 'rb')))
-        
-        response = requests.post(url, data=data, files=files_data, timeout=600)
-        
-        # Close all file handles
-        for file_handle in files_data:
-            file_handle[1].close()
-        
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get('success'):
-                print_success("Multiple images-to-video generated successfully", {
-                    "Message": response_data.get('message'),
-                    "Video URL": response_data.get('generated_video_url'),
-                    "Cloud Path": response_data.get('cloud_path'),
-                    "File Size (MB)": response_data.get('file_size_mb'),
-                    "Images Used": len(existing_images)
-                })
-                return True
-            else:
-                print_error("Multiple images API returned error", {"Error": response_data.get('error')})
-                return False
-        else:
-            print_error("Multiple images request failed", {
-                "Status Code": response.status_code,
-                "Response": response.text[:200]
+
+    print_success(f"Using {len(multiple_image_urls)} image URLs for multiple image test")
+
+    result = make_request('POST', '/api/generate-video/images', data=data, timeout=600, json_mode=True)
+
+    if result['success']:
+        response_data = result['data']
+        if response_data.get('success'):
+            print_success("Multiple images-to-video generated successfully", {
+                "Message": response_data.get('message'),
+                "Video URL": response_data.get('generated_video_url'),
+                "Cloud Path": response_data.get('cloud_path'),
+                "File Size (MB)": response_data.get('file_size_mb'),
+                "Images Used": len(multiple_image_urls)
             })
+            return True
+        else:
+            print_error("Multiple images API returned error", {"Error": response_data.get('error')})
             return False
-            
-    except Exception as e:
-        print_error(f"Multiple images test failed: {e}")
+    else:
+        print_error("Multiple images request failed", {
+            "Status Code": result['status_code'],
+            "Error": result.get('error', result.get('data'))
+        })
         return False
 
 def test_10_list_videos():
