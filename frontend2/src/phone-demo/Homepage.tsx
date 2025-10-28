@@ -5,15 +5,38 @@ import { LogOut } from 'lucide-react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePage } from '@/contexts/PageContext';
+import { useEffect, useState } from 'react';
+import { productAPI } from '@/lib/api';
+import type { ProductItem } from '@/lib/api';
 
 const Homepage = () => {
-  const { setCurrentPage, user, logout } = usePage();
-  
-  const products = [
-    { name: "Product 1", image: "/product1.png" },
-    { name: "Product 2", image: "/product2.png" },
-    { name: "Product 3", image: "/product3.png" },
-    { name: "Product 4", image: "/product4.png" },
+  const { setCurrentPage, user, logout, setSelectedProductId } = usePage();
+
+  const [products, setProducts] = useState<ProductItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const resp = await productAPI.list();
+        if (resp && resp.success && mounted) {
+          setProducts(resp.products || []);
+        }
+      } catch (err) {
+        // keep empty list on error, we still show placeholders below
+        console.warn('Failed to load products for homepage', err);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  // Fallback sample products used only when user has no products
+  const sampleProducts = [
+    { id: 'sample-1', name: "Product 1", image: "/product1.png" },
+    { id: 'sample-2', name: "Product 2", image: "/product2.png" },
+    { id: 'sample-3', name: "Product 3", image: "/product3.png" },
+    { id: 'sample-4', name: "Product 4", image: "/product4.png" },
   ];
   return (
     <div
@@ -105,14 +128,24 @@ const Homepage = () => {
         
 
         <div className='flex space-x-3 overflow-x-auto pb-2 hide-scrollbar'>
-          {products.map((product, index) => (
+          {(products.length > 0 ? products : sampleProducts).map((product, index) => (
             <Card
-              key={index}
-              className='min-w-[160px] h-24 flex-shrink-0 relative p-0 overflow-hidden rounded-lg cursor-pointer'
+              key={product.id ?? index}
+              onClick={() => {
+                // If this is a real product from API it should have an id
+                if (product.id && !product.id.toString().startsWith('sample-')) {
+                  setSelectedProductId(product.id);
+                  setCurrentPage('product-detail');
+                } else {
+                  // For sample items just navigate to product list
+                  setCurrentPage('list-products');
+                }
+              }}
+              className='min-w-[120px] h-24 flex-shrink-0 relative p-0 overflow-hidden rounded-lg cursor-pointer'
             >
               <div
                 className='absolute inset-0 bg-cover bg-center'
-                style={{ backgroundImage: `url(${product.image})` }}
+                style={{ backgroundImage: `url(${(product as any).image_urls?.[0] ?? (product as any).image ?? '/product-placeholder.png'})` }}
               ></div>
 
               <div className='absolute inset-0 bg-black/30'></div>
