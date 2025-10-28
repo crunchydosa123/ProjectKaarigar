@@ -12,6 +12,12 @@ Features:
 - Analyze recorded audio with Gemini to detect "stop recording" timestamp; trim audio/video at that timestamp with FFmpeg.
 - Robust parsing and fallback trimming if Gemini doesn't give usable timestamp.
 
+Enhancements added by assistant:
+- If brightness/background problems are significant, ask the user whether they'd like the app to try automatic adjustments.
+  If the user accepts, the script will preview adjusted frames and — if accepted — save adjusted photos or record adjusted video (frames are adjusted before writing).
+- Live preview windows are shown during pre-check and recording. The preview overlays directional arrows to indicate which side is brighter
+  and where the user should move relative to light sources.
+
 Usage:
     python conversational_agent.py [--text-mode] [--no-tts-play] [--output-dir sessions]
 
@@ -31,7 +37,7 @@ import subprocess
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import cv2
 import numpy as np
@@ -60,7 +66,7 @@ except Exception:
     GEMINI_SDK_AVAILABLE = False
 
 # Configure GEMINI
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 if GEMINI_SDK_AVAILABLE and GEMINI_API_KEY:
     try:
@@ -78,6 +84,7 @@ def google_tts_bytes(text: str, lang: str = "en") -> bytes:
     fp.seek(0)
     return fp.read()
 
+
 def play_audio_file(path: str):
     """Play using ffplay if available; otherwise print path."""
     if not os.path.exists(path):
@@ -87,6 +94,7 @@ def play_audio_file(path: str):
         subprocess.run(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path], check=True)
     except Exception:
         print(f"(Playback not available) TTS saved to {path}")
+
 
 def safe_tts(text: str, out_dir: Path, no_play: bool):
     if not text:
@@ -261,6 +269,7 @@ def analyze_frame_locally(image_path: str) -> Dict[str, Any]:
     except Exception as e:
         return {"lighting":"unknown","brightness":None,"contrast":None,"background_issues":[],"suggestions":[f"Error analyzing frame: {e}"]}
 
+
 def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
     """
     If Gemini SDK available and API key set, ask it to return JSON analysis.
@@ -316,7 +325,74 @@ def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
     else:
         return analyze_frame_locally(image_path)
 
-# ---------- Camera & Recorder ----------
+# ---------- New helper functions for in-app lighting adjustments and preview overlays ----------
+
+def apply_gamma_correction(img: np.ndarray, gamma: float) -> np.ndarray:
+    """Apply gamma correction to an image."""
+    inv_gamma = 1.0 / float(gamma)
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(256)]).astype("uint8")
+    return cv2.LUT(img, table)
+
+
+def apply_clahe_color(img: np.ndarray) -> np.ndarray:
+    """Apply CLAHE on the L channel of LAB to improve local contrast."""
+    try:
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        cl = clahe.apply(l)
+        limg = cv2.merge((cl, a, b))
+        final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        return final
+    except Exception:
+        return img
+
+
+def overlay_direction_arrows(frame: np.ndarray) -> Tuple[np.ndarray, int]:
+    """Overlay simple arrows pointing to the side that is brighter and return which side (0=left,1=center,2=right)."""
+    h, w = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    thirds = [gray[:, :w//3], gray[:, w//3:2*w//3], gray[:, 2*w//3:]]
+    side_means = [np.mean(t) for t in thirds]
+    best_idx = int(np.argmax(side_means))
+    # draw arrow from center towards that side
+    center = (w // 2, h // 2)
+    if best_idx == 0:
+        dest = (w // 6, h // 2)
+        label = "Better light -> Left"
+    elif best_idx == 1:
+        dest = (w // 2, h // 4)
+        label = "Light is centered"
+    else:
+        dest = (w * 5 // 6, h // 2)
+        label = "Better light -> Right"
+    cv2.arrowedLine(frame, center, dest, (0, 255, 0), 3, tipLength=0.15)
+    cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    return frame, best_idx
+
+
+def show_side_by_side_preview(orig: np.ndarray, adjusted: Optional[np.ndarray], window_name: str = "Preview (o: original, a: adjusted)"):
+    """Show a side-by-side preview of original and adjusted frames with overlays. Non-blocking: displays for a limited time or until key press."""
+    try:
+        if adjusted is None:
+            disp = orig.copy()
+        else:
+            # resize adjusted to match original if necessary
+            if adjusted.shape != orig.shape:
+                adjusted = cv2.resize(adjusted, (orig.shape[1], orig.shape[0]))
+            left = cv2.resize(orig, (orig.shape[1]//2, orig.shape[0]//2))
+            right = cv2.resize(adjusted, (orig.shape[1]//2, orig.shape[0]//2))
+            disp = np.hstack([left, right])
+        disp_overlay, _ = overlay_direction_arrows(disp)
+        cv2.imshow(window_name, disp_overlay)
+        # Wait for 1s but allow keypress to interrupt. Return key code.
+        k = cv2.waitKey(1000) & 0xFF
+        return k
+    except Exception as e:
+        print("Preview display error:", e)
+        return -1
+
+# ---------- Camera & Recorder (enhanced previews and adjustable capture) ----------
 
 class VoiceControlledCamera:
     def __init__(self, cam_index=0):
@@ -333,13 +409,23 @@ class VoiceControlledCamera:
         cv2.imwrite(tmp_path, frame)
         return tmp_path
 
-    def take_photo(self) -> Optional[str]:
+    def take_photo(self, adjusted_frame: Optional[np.ndarray] = None) -> Optional[str]:
         ret, frame = self.cap.read()
         if not ret:
             return None
+        if adjusted_frame is not None:
+            # ensure adjusted frame size matches captured frame
+            try:
+                if adjusted_frame.shape != frame.shape:
+                    adjusted_frame = cv2.resize(adjusted_frame, (frame.shape[1], frame.shape[0]))
+                frame_to_save = adjusted_frame
+            except Exception:
+                frame_to_save = frame
+        else:
+            frame_to_save = frame
         fname = f"photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         path = Path(self.photo_dir) / fname
-        cv2.imwrite(str(path), frame)
+        cv2.imwrite(str(path), frame_to_save)
         return str(path)
 
     def release(self):
@@ -363,6 +449,9 @@ class VoiceControlledRecorder:
         self.video_writer = None
         self.record_thread = None
         self.audio_thread = None
+        # New: whether to write adjusted frames to disk
+        self.apply_adjustment_mode: Optional[str] = None  # e.g. 'gamma'|'clahe'|None
+        self.preview_window_name = "Recording Preview"
 
     def start_audio_thread(self):
         if not SOUNDDEVICE_AVAILABLE:
@@ -387,14 +476,37 @@ class VoiceControlledRecorder:
         self.audio_thread.start()
 
     def record_loop(self):
+        # show live preview while recording and optionally write adjusted frames
+        cv2.namedWindow(self.preview_window_name, cv2.WINDOW_NORMAL)
         while self.is_recording:
             ret, frame = self.cap.read()
             if not ret:
                 break
-            self.video_writer.write(frame)
+            frame_to_show = frame.copy()
+            # overlay arrows for guidance
+            frame_to_show, _ = overlay_direction_arrows(frame_to_show)
+            # apply adjustment to frame_to_write if requested
+            frame_to_write = frame
+            if self.apply_adjustment_mode == 'gamma':
+                frame_to_write = apply_gamma_correction(frame_to_write, 1.6)
+            elif self.apply_adjustment_mode == 'clahe':
+                frame_to_write = apply_clahe_color(frame_to_write)
+            # write the (possibly adjusted) frame
+            self.video_writer.write(frame_to_write)
+            # show preview (resized for display)
+            display = cv2.resize(frame_to_show, (min(800, frame_to_show.shape[1]), min(450, frame_to_show.shape[0])))
+            cv2.imshow(self.preview_window_name, display)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                # allow quick-stop via preview window 'q'
+                self.is_recording = False
+                break
             time.sleep(1 / (self.fps or 20.0))
         if self.video_writer:
             self.video_writer.release()
+        try:
+            cv2.destroyWindow(self.preview_window_name)
+        except Exception:
+            pass
 
     def start_recording(self) -> bool:
         if self.is_recording:
@@ -588,6 +700,7 @@ def capture_audio_segment(duration=4, sample_rate=44100, channels=1) -> str:
     except Exception:
         return ""
 
+
 def parse_ready_from_text(text: str) -> str:
     """Map recognized text to commands: 'ready'|'check'|'cancel'|'stop' or empty."""
     if not text:
@@ -603,7 +716,29 @@ def parse_ready_from_text(text: str) -> str:
         return "stop"
     return ""
 
-# ---------- Interactive pre-check + capture flows ----------
+# ---------- Interactive pre-check + capture flows (enhanced with auto-adjust & preview) ----------
+
+def _ask_user_apply_adjustment(text_mode: bool, out_dir: Path, no_tts: bool) -> bool:
+    """Ask the user whether they'd like the app to attempt automatic lighting adjustments."""
+    prompt_msg = "I can try to automatically adjust exposure/contrast in software to improve lighting. Try it? (yes/no)"
+    if not text_mode:
+        safe_tts(prompt_msg, out_dir, no_tts)
+        print(prompt_msg, "(listening 3s)")
+        spoken = capture_audio_segment(duration=3)
+        if spoken and any(k in spoken.lower() for k in ("yes", "yeah", "yep", "ok", "sure", "do it")):
+            return True
+        return False
+    else:
+        ans = input(prompt_msg + " ").strip().lower()
+        return ans in ("y", "yes", "ok", "sure")
+
+
+def _choose_adjustment_mode_based_on_brightness(lighting: str) -> str:
+    """Simple heuristic: choose gamma for dark/dim, CLAHE for contrast issues."""
+    if lighting in ("dark", "dim"):
+        return 'gamma'
+    return 'clahe'
+
 
 def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path, text_mode: bool, no_tts: bool):
     """Analyze frame, suggest fixes, allow user to re-check, then take photo after 5s countdown."""
@@ -613,6 +748,7 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
         print("Failed to capture camera frame for analysis.")
         return
     analysis = analyze_frame_with_gemini(frame_path)
+    adjusted_frame_preview = None
     while True:
         # Present simple suggestions
         print("\n--- Camera check ---")
@@ -624,6 +760,48 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
             print(" -", s)
         # speak a short suggestion
         safe_tts("Quick camera suggestion: " + " ".join(analysis.get("suggestions", [])[:2]), out_dir, no_tts)
+
+        # If problems are noticeable, offer automatic adjustment
+        problems = (analysis.get('lighting') in ('dark', 'dim')) or bool(analysis.get('background_issues'))
+        apply_adj = False
+        chosen_adj_mode = None
+        if problems:
+            want_adj = _ask_user_apply_adjustment(text_mode, out_dir, no_tts)
+            if want_adj:
+                chosen_adj_mode = _choose_adjustment_mode_based_on_brightness(analysis.get('lighting'))
+                # load current frame and create adjusted preview
+                orig = cv2.imread(tmp)
+                if orig is not None:
+                    if chosen_adj_mode == 'gamma':
+                        adjusted_frame_preview = apply_gamma_correction(orig, 1.6)
+                    else:
+                        adjusted_frame_preview = apply_clahe_color(orig)
+                    # show preview side-by-side with overlay arrows
+                    print("Showing side-by-side preview (original | adjusted). Press Enter to accept adjusted, 'r' to re-check, or anything else to continue without.")
+                    k = show_side_by_side_preview(orig, adjusted_frame_preview)
+                    # interpret key: Enter/Return usually 13; sometimes 10; if text_mode we ask
+                    if text_mode:
+                        ans = input("Accept adjusted image? (yes/no/recheck): ").strip().lower()
+                        if ans in ('yes', 'y'):
+                            apply_adj = True
+                        elif ans in ('recheck', 'r'):
+                            apply_adj = False
+                            # continue loop to re-analyze
+                            frame_path = camera.capture_frame(tmp)
+                            if not frame_path:
+                                print("Failed to capture frame. Aborting.")
+                                return
+                            analysis = analyze_frame_with_gemini(frame_path)
+                            continue
+                        else:
+                            apply_adj = False
+                    else:
+                        # for non-text mode, accept if user said 'ready' in quick capture or if Enter pressed.
+                        # The key returned from show_side_by_side_preview isn't reliable across platforms; use default: accept after preview
+                        print("Auto-accepting adjusted preview (voice mode) — you can still choose 'check' when prompted next.)")
+                        apply_adj = True
+                else:
+                    print("Could not load frame for adjustment preview.")
 
         # Ask user whether they want to fix and re-check or proceed
         if text_mode:
@@ -649,6 +827,10 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
 
         if cmd == "cancel":
             print("Cancelled.")
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
             return
         elif cmd == "check":
             # re-capture and analyze
@@ -665,13 +847,19 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
             for i in range(5, 0, -1):
                 print(f"Taking photo in {i}...")
                 time.sleep(1)
-            photo_path = camera.take_photo()
+            # If apply_adj chosen, pass adjusted_frame_preview to save; otherwise None
+            photo_path = camera.take_photo(adjusted_frame=adjusted_frame_preview if apply_adj else None)
             if photo_path:
                 print("Photo saved to", photo_path)
                 safe_tts("Photo taken.", out_dir, no_tts)
             else:
                 print("Failed to take photo.")
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
             return
+
 
 def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: VoiceControlledRecorder, out_dir: Path, text_mode: bool, no_tts: bool):
     """Analyze frame, suggest fixes, allow user to re-check, then start recording after 5s countdown and stop on 'stop recording'."""
@@ -681,6 +869,8 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
         print("Failed to capture camera frame for analysis.")
         return
     analysis = analyze_frame_with_gemini(frame_path)
+    apply_adj_for_video = False
+    chosen_adj_mode = None
     while True:
         print("\n--- Camera check ---")
         print(f"Lighting: {analysis.get('lighting')}, brightness: {analysis.get('brightness')}, contrast: {analysis.get('contrast')}")
@@ -690,6 +880,38 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
         for s in analysis.get("suggestions", []):
             print(" -", s)
         safe_tts("Quick camera suggestion: " + " ".join(analysis.get("suggestions", [])[:2]), out_dir, no_tts)
+
+        problems = (analysis.get('lighting') in ('dark', 'dim')) or bool(analysis.get('background_issues'))
+        if problems:
+            want_adj = _ask_user_apply_adjustment(text_mode, out_dir, no_tts)
+            if want_adj:
+                chosen_adj_mode = _choose_adjustment_mode_based_on_brightness(analysis.get('lighting'))
+                orig = cv2.imread(tmp)
+                adjusted_preview = None
+                if orig is not None:
+                    if chosen_adj_mode == 'gamma':
+                        adjusted_preview = apply_gamma_correction(orig, 1.6)
+                    else:
+                        adjusted_preview = apply_clahe_color(orig)
+                    print("Showing preview. Press Enter to accept adjusted preview (video will be recorded with adjustment), 'r' to re-check, or any other key to decline.")
+                    show_side_by_side_preview(orig, adjusted_preview)
+                    if text_mode:
+                        ans = input("Accept adjusted preview for video (yes/no/recheck)? ").strip().lower()
+                        if ans in ('yes', 'y'):
+                            apply_adj_for_video = True
+                        elif ans in ('recheck', 'r'):
+                            frame_path = camera.capture_frame(tmp)
+                            if not frame_path:
+                                print("Failed to capture frame. Aborting.")
+                                return
+                            analysis = analyze_frame_with_gemini(frame_path)
+                            continue
+                        else:
+                            apply_adj_for_video = False
+                    else:
+                        # default to accept in voice mode after preview
+                        print("Auto-accepting adjusted preview for video (voice mode).")
+                        apply_adj_for_video = True
 
         if text_mode:
             choice = input("\nType 'ready' to start recording, 'check' to re-analyze, or 'cancel' to abort: ").strip().lower()
@@ -714,6 +936,10 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
 
         if cmd == "cancel":
             print("Cancelled.")
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
             return
         elif cmd == "check":
             time.sleep(0.5)
@@ -728,11 +954,16 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
             for i in range(5, 0, -1):
                 print(f"Recording starts in {i}...")
                 time.sleep(1)
+            # configure recorder to write adjusted frames if needed
+            if apply_adj_for_video and chosen_adj_mode:
+                recorder.apply_adjustment_mode = chosen_adj_mode
+            else:
+                recorder.apply_adjustment_mode = None
             started = recorder.start_recording()
             if not started:
                 print("Failed to start recording.")
                 return
-            print("Recording started. Say 'stop recording' or type it to stop.")
+            print("Recording started. Say 'stop recording' or type it to stop. You can also press 'q' in the preview window to stop.")
             # Monitor for stop command either voice or text
             while recorder.is_recording:
                 if text_mode:
@@ -752,6 +983,10 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
                         safe_tts("Recording stopped and saved.", out_dir, no_tts)
                         break
                     # else continue listening
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
             return
 
 # ---------- Main CLI ----------
@@ -762,6 +997,7 @@ def parse_args():
     p.add_argument("--no-tts-play", action="store_true", help="Don't play TTS audio (only save)")
     p.add_argument("--output-dir", "-o", default="sessions", help="Session output directory")
     return p.parse_args()
+
 
 def main():
     args = parse_args()
@@ -833,6 +1069,10 @@ def main():
     camera.release()
     if recorder:
         recorder.release()
+    try:
+        cv2.destroyAllWindows()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()
