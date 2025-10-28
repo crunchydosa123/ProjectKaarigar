@@ -12,18 +12,9 @@ Features:
 - Analyze recorded audio with Gemini to detect "stop recording" timestamp; trim audio/video at that timestamp with FFmpeg.
 - Robust parsing and fallback trimming if Gemini doesn't give usable timestamp.
 
-Enhancements added by assistant:
-- If brightness/background problems are significant, ask the user whether they'd like the app to try automatic adjustments.
-  If the user accepts, the script will preview adjusted frames and — if accepted — save adjusted photos or record adjusted video (frames are adjusted before writing).
-- Live preview windows are shown during pre-check and recording. The preview overlays directional arrows to indicate which side is brighter
-  and where the user should move relative to light sources.
-
-Usage:
-    python conversational_agent.py [--text-mode] [--no-tts-play] [--output-dir sessions]
-
-Requirements:
-- FFmpeg installed (for video processing)
-- Set GEMINI_API_KEY environment variable for Gemini (optional; local fallback works)
+Enhancements:
+- If brightness/background problems are significant, offer automatic adjustments (gamma/CLAHE) and side-by-side preview.
+- Live positioning preview (arrows) shown *before* recording so the subject can position themselves; arrows disappear when lighting is good.
 """
 
 import os
@@ -209,8 +200,6 @@ def analyze_audio_for_timestamp(audio_path: str) -> float:
     Returns:
       - float timestamp in seconds if found
       - -1.0 if not found or error
-    The function is robust: it attempts direct parsing, JSON parse, and uses parse_time_from_text as fallback.
-    If Gemini SDK or API key is not available, it returns -1.0 immediately.
     """
     if not os.path.exists(audio_path):
         print("Audio file does not exist for analysis:", audio_path)
@@ -228,7 +217,6 @@ def analyze_audio_for_timestamp(audio_path: str) -> float:
             "representing the exact time when the speaker says 'stop recording' or 'recording stop'. "
             "If the phrase is not present, return -1. Do not add extra text."
         )
-        # pass prompt + file
         response = client.generate_content([prompt, uploaded])
         resp_text = ""
         if hasattr(response, "text"):
@@ -239,12 +227,10 @@ def analyze_audio_for_timestamp(audio_path: str) -> float:
         # Try JSON parse if possible
         try:
             parsed = json.loads(resp_text)
-            # If it's a number or contains a numeric field, try to retrieve
             if isinstance(parsed, (int, float)):
                 val = float(parsed)
                 return val if val >= 0 else -1.0
             if isinstance(parsed, dict):
-                # try common keys
                 for k in ("timestamp", "time", "seconds", "stop_timestamp"):
                     if k in parsed:
                         try:
@@ -254,16 +240,12 @@ def analyze_audio_for_timestamp(audio_path: str) -> float:
                             continue
         except Exception:
             pass
-        # Try to parse free-form text to get a number
         ts = parse_time_from_text(resp_text)
         if ts is not None:
-            # success
             print(f"Gemini audio analysis returned timestamp {ts} seconds (raw response: {resp_text[:200]})")
             return float(ts)
-        # explicit -1 check
         if re.search(r'\b-1\b', resp_text):
             return -1.0
-        # nothing found
         print("Could not extract timestamp from Gemini response. Response was:")
         print(resp_text[:500])
         return -1.0
@@ -340,10 +322,8 @@ def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
             )
             response = client.generate_content([prompt, uploaded])
             resp_text = response.text if hasattr(response, "text") else str(response)
-            # try parse JSON
             try:
                 parsed = json.loads(resp_text)
-                # normalize keys
                 out = {
                     "lighting": parsed.get("lighting", "unknown"),
                     "brightness": parsed.get("brightness"),
@@ -351,12 +331,10 @@ def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
                     "background_issues": parsed.get("background_issues", []),
                     "suggestions": parsed.get("suggestions", [])
                 }
-                # ensure lists
                 out["background_issues"] = out["background_issues"] if isinstance(out["background_issues"], list) else []
                 out["suggestions"] = out["suggestions"] if isinstance(out["suggestions"], list) else []
                 return out
             except Exception:
-                # try to extract JSON blob
                 m = re.search(r'\{.*\}', resp_text, flags=re.DOTALL)
                 if m:
                     try:
@@ -370,7 +348,6 @@ def analyze_frame_with_gemini(image_path: str) -> Dict[str, Any]:
                         }
                     except Exception:
                         pass
-            # if anything fails, fallback
             print("Gemini response not parseable; falling back to local analysis.")
             return analyze_frame_locally(image_path)
         except Exception as e:
@@ -445,7 +422,6 @@ def show_side_by_side_preview(orig: np.ndarray, adjusted: Optional[np.ndarray], 
         if adjusted is None:
             disp = orig.copy()
         else:
-            # resize adjusted to match original if necessary
             if adjusted.shape != orig.shape:
                 adjusted = cv2.resize(adjusted, (orig.shape[1], orig.shape[0]))
             left = cv2.resize(orig, (orig.shape[1]//2, orig.shape[0]//2))
@@ -453,12 +429,88 @@ def show_side_by_side_preview(orig: np.ndarray, adjusted: Optional[np.ndarray], 
             disp = np.hstack([left, right])
         disp_overlay, _ = overlay_direction_arrows(disp)
         cv2.imshow(window_name, disp_overlay)
-        # Wait for 1s but allow keypress to interrupt. Return key code.
         k = cv2.waitKey(1000) & 0xFF
         return k
     except Exception as e:
         print("Preview display error:", e)
         return -1
+
+# ---------- New: Live positioning preview (before recording) ----------
+
+def live_position_preview(camera_obj, text_mode: bool, out_dir: Path, no_tts: bool, max_seconds: int = 300) -> bool:
+    """
+    Show a live preview with arrows to help the user position relative to light sources.
+    Returns True if user accepted positioning (press Enter/Space or said 'ready'), False if cancelled.
+    """
+    win = "Positioning Preview - Adjust until lighting is good (Enter/Space accept, q cancel)"
+    try:
+        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    except Exception:
+        pass
+
+    safe_tts("Position yourself. I will show arrows pointing toward better light. Say 'ready' or press Enter when you're ready.", out_dir, no_tts)
+    start_time = time.time()
+    accepted = False
+
+    while True:
+        if time.time() - start_time > max_seconds:
+            # timed out
+            print("Positioning preview timed out.")
+            break
+        # read frame from camera (use underlying capture to keep state consistent)
+        ret, frame = camera_obj.cap.read()
+        if not ret:
+            print("Failed to read from camera during positioning preview.")
+            break
+
+        disp, best_idx = overlay_direction_arrows(frame.copy())
+
+        # If lighting looks balanced overlay a helpful label and prompt
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        thirds = [gray[:, :w//3], gray[:, w//3:2*w//3], gray[:, 2*w//3:]]
+        side_means = [np.mean(t) for t in thirds]
+        diff = float(max(side_means) - min(side_means))
+        mean_brightness = float(np.mean(gray))
+        balanced = (best_idx == 1 and diff < 20 and 80 < mean_brightness < 200)
+
+        if balanced:
+            cv2.putText(disp, "Balanced lighting — press Enter or say 'ready' to accept", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2)
+        else:
+            cv2.putText(disp, "Adjust position or lights. Press Enter when ready.", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+
+        # display
+        try:
+            display = cv2.resize(disp, (min(900, disp.shape[1]), min(500, disp.shape[0])))
+            cv2.imshow(win, display)
+        except Exception:
+            cv2.imshow(win, disp)
+
+        key = cv2.waitKey(100) & 0xFF
+        if key in (13, 10, 32):  # Enter or Space
+            accepted = True
+            break
+        if key == ord('q'):
+            accepted = False
+            break
+
+        # voice check in non-text mode
+        if not text_mode:
+            spoken = capture_audio_segment(duration=1)
+            if spoken:
+                cmd = parse_ready_from_text(spoken)
+                if cmd == "ready":
+                    accepted = True
+                    break
+                if cmd == "cancel":
+                    accepted = False
+                    break
+
+    try:
+        cv2.destroyWindow(win)
+    except Exception:
+        pass
+    return accepted
 
 # ---------- Camera & Recorder (enhanced previews and adjustable capture) ----------
 
@@ -482,7 +534,6 @@ class VoiceControlledCamera:
         if not ret:
             return None
         if adjusted_frame is not None:
-            # ensure adjusted frame size matches captured frame
             try:
                 if adjusted_frame.shape != frame.shape:
                     adjusted_frame = cv2.resize(adjusted_frame, (frame.shape[1], frame.shape[0]))
@@ -544,25 +595,29 @@ class VoiceControlledRecorder:
         self.audio_thread.start()
 
     def record_loop(self):
-        # show live preview while recording and optionally write adjusted frames
+        # show live preview while recording but do NOT draw directional arrows during recording
         cv2.namedWindow(self.preview_window_name, cv2.WINDOW_NORMAL)
+        start_time = time.time()
         while self.is_recording:
             ret, frame = self.cap.read()
             if not ret:
                 break
-            frame_to_show = frame.copy()
-            # overlay arrows for guidance
-            frame_to_show, _ = overlay_direction_arrows(frame_to_show)
-            # apply adjustment to frame_to_write if requested
             frame_to_write = frame
             if self.apply_adjustment_mode == 'gamma':
                 frame_to_write = apply_gamma_correction(frame_to_write, 1.6)
             elif self.apply_adjustment_mode == 'clahe':
                 frame_to_write = apply_clahe_color(frame_to_write)
-            # write the (possibly adjusted) frame
+
+            # add a small overlay (timestamp) for preview only — this will not be the directional arrows
+            ts = datetime.now().strftime("%H:%M:%S")
+            frame_preview = frame_to_write.copy()
+            cv2.putText(frame_preview, f"Recording... {ts}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+
+            # write the (possibly adjusted) frame to disk
             self.video_writer.write(frame_to_write)
+
             # show preview (resized for display)
-            display = cv2.resize(frame_to_show, (min(800, frame_to_show.shape[1]), min(450, frame_to_show.shape[0])))
+            display = cv2.resize(frame_preview, (min(800, frame_preview.shape[1]), min(450, frame_preview.shape[0])))
             cv2.imshow(self.preview_window_name, display)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 # allow quick-stop via preview window 'q'
@@ -872,9 +927,8 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
                         else:
                             apply_adj = False
                     else:
-                        # for non-text mode, accept if user said 'ready' in quick capture or if Enter pressed.
-                        # The key returned from show_side_by_side_preview isn't reliable across platforms; use default: accept after preview
-                        print("Auto-accepting adjusted preview (voice mode) — you can still choose 'check' when prompted next.)")
+                        # auto-accept preview in voice mode
+                        print("Auto-accepting adjusted preview (voice mode).")
                         apply_adj = True
                 else:
                     print("Could not load frame for adjustment preview.")
@@ -935,7 +989,6 @@ def interactive_precheck_and_photo(camera: VoiceControlledCamera, out_dir: Path,
             except Exception:
                 pass
             return
-
 
 def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: VoiceControlledRecorder, out_dir: Path, text_mode: bool, no_tts: bool):
     """Analyze frame, suggest fixes, allow user to re-check, then start recording after 5s countdown and stop on 'stop recording'."""
@@ -1026,6 +1079,18 @@ def interactive_precheck_and_video(camera: VoiceControlledCamera, recorder: Voic
             analysis = analyze_frame_with_gemini(frame_path)
             continue
         elif cmd == "ready":
+            # BEFORE recording: show the live positioning preview with arrows so user can position without being recorded dancing
+            positioned = live_position_preview(camera, text_mode, out_dir, no_tts)
+            if not positioned:
+                print("Positioning not accepted — returning to pre-check.")
+                # re-capture and re-analyze
+                frame_path = camera.capture_frame(tmp)
+                if not frame_path:
+                    print("Failed to capture frame. Aborting.")
+                    return
+                analysis = analyze_frame_with_gemini(frame_path)
+                continue
+
             safe_tts("Starting recording in 5 seconds. Say stop recording to end.", out_dir, no_tts)
             for i in range(5, 0, -1):
                 print(f"Recording starts in {i}...")
@@ -1073,7 +1138,6 @@ def parse_args():
     p.add_argument("--no-tts-play", action="store_true", help="Don't play TTS audio (only save)")
     p.add_argument("--output-dir", "-o", default="sessions", help="Session output directory")
     return p.parse_args()
-
 
 def main():
     args = parse_args()
