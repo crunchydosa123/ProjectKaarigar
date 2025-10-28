@@ -1265,6 +1265,10 @@ class ProductAPI {
   create(payload: CreateProductRequest): Promise<CreateProductResponse> {
     return this.request<CreateProductResponse>('/create', 'POST', payload);
   }
+
+  update(productId: string, payload: Partial<CreateProductRequest>): Promise<{ success: boolean; message: string; error?: string }> {
+    return this.request(`/update/${productId}`, 'PUT', payload);
+  }
 }
 
 export const productAPI = new ProductAPI();

@@ -217,6 +217,106 @@ def create_product():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@product_bp.route('/update/<product_id>', methods=['PUT', 'PATCH'])
+def update_product(product_id: str):
+    """Update an existing product. Only the owner (session user) may update.
+
+    Accepts partial fields in JSON body. If image_ids/video_ids are provided,
+    their URLs will be resolved and merged with provided image_urls/video_urls.
+    """
+    try:
+        if not FIRESTORE_AVAILABLE:
+            return jsonify({"error": "Database not available"}), 500
+
+        user_id = get_user_from_session()
+        data = request.get_json() or {}
+
+        items_ref = db.collection("products").document(user_id).collection("items")
+        doc_ref = items_ref.document(product_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            # The product might belong to another user or not exist
+            return jsonify({"error": "Product not found"}), 404
+
+        existing = doc.to_dict() or {}
+
+        # Verify ownership: stored user_id on document must match session user
+        owner_id = existing.get('user_id')
+        if owner_id != user_id:
+            return jsonify({"error": "Forbidden"}), 403
+
+        # Extract updatable fields (allow partial updates)
+        name = data.get('name')
+        description = data.get('description')
+        price = data.get('price')
+        stock = data.get('stock')
+        currency = data.get('currency')
+        variants = data.get('variants')
+        image_ids = data.get('image_ids')
+        video_ids = data.get('video_ids')
+        image_urls_input = data.get('image_urls')
+        video_urls_input = data.get('video_urls')
+
+        # Resolve any provided ids into URLs (if provided)
+        resolved_image_urls, resolved_video_urls = _resolve_media_urls_by_ids(user_id, image_ids, video_ids)
+
+        # Merge existing lists with new inputs where appropriate
+        image_urls = existing.get('image_urls', [])
+        video_urls = existing.get('video_urls', [])
+
+        # If caller provided explicit image_urls/video_urls, prefer them (but merge unique)
+        if image_urls_input is not None:
+            image_urls = list({*image_urls_input, *resolved_image_urls})
+        else:
+            # merge resolved ids with existing
+            image_urls = list({*image_urls, *resolved_image_urls})
+
+        if video_urls_input is not None:
+            video_urls = list({*video_urls_input, *resolved_video_urls})
+        else:
+            video_urls = list({*video_urls, *resolved_video_urls})
+
+        # Build update document
+        update_doc = {
+            'updated_at': datetime.utcnow().isoformat(),
+        }
+
+        # Only set keys if provided (allow clearing by explicit null)
+        if name is not None:
+            update_doc['name'] = name.strip() if isinstance(name, str) else name
+        if description is not None:
+            update_doc['description'] = description.strip() if isinstance(description, str) else description
+        if price is not None:
+            update_doc['price'] = price
+        if stock is not None:
+            update_doc['stock'] = stock
+        if currency is not None:
+            update_doc['currency'] = currency
+        if variants is not None:
+            update_doc['variants'] = variants
+
+        # Always update image/video ids and urls if present in request (even empty lists)
+        if image_ids is not None:
+            update_doc['image_ids'] = image_ids
+        if video_ids is not None:
+            update_doc['video_ids'] = video_ids
+
+        update_doc['image_urls'] = image_urls
+        update_doc['video_urls'] = video_urls
+
+        # Apply update
+        doc_ref.update(update_doc)
+
+        return jsonify({"success": True, "message": "Product updated"}), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+    except Exception as e:
+        print(f"❌ /product/update error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @product_bp.route('/list', methods=['GET'])
 def list_products():
     """List products for current user from products/{user_id}/items."""

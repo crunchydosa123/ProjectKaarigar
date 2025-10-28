@@ -98,19 +98,37 @@ const ProductDetail: React.FC = () => {
   };
 
   const handleSaveEdit = async () => {
-    // TODO: Implement API call to update product
-    console.log('Saving edits:', editForm);
-    
-    // Update local state
-    if (product) {
-      setProduct({
-        ...product,
-        ...editForm
-      });
+    try {
+      setLoading(true);
+      // Call backend update route
+      if (!productId) throw new Error('Missing product id');
+      const payload = {
+        name: editForm.name,
+        description: editForm.description,
+        price: editForm.price,
+        stock: editForm.stock,
+        currency: editForm.currency
+      };
+
+      const res = await productAPI.update(productId, payload);
+      if (res && res.success) {
+        // Refresh product data from server
+        const listResp = await productAPI.list();
+        if (listResp && listResp.success) {
+          const updated = listResp.products.find((p: Product) => p.id === productId);
+          if (updated) setProduct(updated);
+        }
+        setShowEditDialog(false);
+        alert('Product updated successfully');
+      } else {
+        throw new Error((res && (res as any).error) || 'Update failed');
+      }
+    } catch (err: any) {
+      console.error('Failed to update product', err);
+      alert('Failed to update product: ' + (err.message || err));
+    } finally {
+      setLoading(false);
     }
-    
-    setShowEditDialog(false);
-    alert('Product updated successfully! (API integration pending)');
   };
 
   const handleShare = (platform: string) => {
