@@ -100,7 +100,7 @@ const Homepage = () => {
 
         <div className='flex justify-between items-center'>
           <div className='text-sm font-bold '>Your Products</div>
-          <button className='py-1 px-2 my-1 text-xs font-semibold bg-white rounded-md' onClick={()=> setCurrentPage('add-product')}>+ Add Product</button>
+          <button className='py-1 px-2 my-1 text-xs font-semibold bg-white rounded-md' onClick={()=> setCurrentPage('list-products/add-products')}>+ Add Product</button>
         </div>
         
 
