@@ -71,15 +71,32 @@ def save_reel_metadata_to_firestore(user_id, reel_data):
         return False
 
 def save_generated_video_to_firestore(user_id, video_data):
-    """Save generated video metadata under media/{user_id}/generated_video collection"""
+    """Save generated video metadata under media/{user_id}/uploadmedia/media_data/generated_reels"""
     try:
-        collection_ref = db.collection("media").document(user_id).collection("generated_video")
-        # Use auto-id document for each generated video
-        collection_ref.add({
+        doc_ref = db.collection("media").document(user_id).collection("uploadmedia").collection("media_data").document("generated_reels")
+        
+        # Get existing data or create new
+        doc = doc_ref.get()
+        if doc.exists:
+            existing_data = doc.to_dict()
+            generated_reels = existing_data.get('generated_reels', [])
+        else:
+            generated_reels = []
+        
+        # Add new generated reel
+        generated_reels.append({
             **video_data,
             'created_at': video_data.get('created_at') or datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
         })
+        
+        # Update document
+        doc_ref.set({
+            'generated_reels': generated_reels,
+            'last_updated': datetime.now().isoformat(),
+            'total_generated_reels': len(generated_reels)
+        })
+        
         return True
     except Exception as e:
         print(f"Error saving generated video to Firestore: {e}")
@@ -104,7 +121,8 @@ def generate_reel():
         if not user_id:
             return jsonify({'error': 'User ID is required'}), 400
         
-        # Get prompt
+        # Get title and prompt
+        title = request.form.get('title', '').strip()
         prompt = request.form.get('prompt', '').strip()
         if not prompt:
             return jsonify({'error': 'Prompt is required'}), 400
@@ -223,7 +241,7 @@ def generate_reel():
         # Prepare metadata
         reel_metadata = {
             'id': str(uuid.uuid4()),
-            'title': f"Reel - {prompt[:50]}...",
+            'title': title if title else f"Reel - {prompt[:50]}...",
             'prompt': prompt,
             'filename': output_filename,
             'cloud_path': cloud_path,
@@ -279,6 +297,7 @@ def generate_video_from_images_urls():
     try:
         data = request.get_json(silent=True) or {}
         prompt = (data.get('prompt') or '').strip()
+        title = (data.get('title') or '').strip()
         image_urls = data.get('image_urls') or []
         user_id = (data.get('user_id') or '').strip() or 'anonymous'
 
@@ -319,7 +338,7 @@ def generate_video_from_images_urls():
 
         reel_metadata = {
             'id': str(uuid.uuid4()),
-            'title': f"Reel - {prompt[:50]}...",
+            'title': title if title else f"Reel - {prompt[:50]}...",
             'prompt': prompt,
             'filename': output_filename,
             'cloud_path': cloud_path,
@@ -533,6 +552,119 @@ def proxy_image():
     except Exception as e:
         print(f"❌ Error proxying image: {str(e)}")
         return jsonify({'error': f'Error proxying image: {str(e)}'}), 500
+
+@reel_gen_bp.route('/api/reel-generator/delete-video', methods=['DELETE'])
+@cross_origin()
+def delete_video():
+    """Delete a video from both Cloud Storage and Firestore"""
+    try:
+        data = request.get_json(silent=True) or {}
+        video_id = data.get('video_id')
+        user_id = data.get('user_id')
+        cloud_path = data.get('cloud_path')
+        
+        if not video_id:
+            return jsonify({'success': False, 'error': 'Video ID is required'}), 400
+        
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User ID is required'}), 400
+        
+        print(f"🗑️ Deleting video: {video_id} for user: {user_id}")
+        
+        # Delete from Cloud Storage if cloud_path is provided
+        if cloud_path:
+            try:
+                bucket = storage_client.bucket(BUCKET_NAME)
+                blob = bucket.blob(cloud_path)
+                if blob.exists():
+                    blob.delete()
+                    print(f"✅ Deleted from Cloud Storage: {cloud_path}")
+                else:
+                    print(f"⚠️ Blob not found in Cloud Storage: {cloud_path}")
+            except Exception as e:
+                print(f"❌ Error deleting from Cloud Storage: {e}")
+                # Continue with Firestore deletion even if GCS fails
+        
+        # Delete from Firestore
+        try:
+            # Delete from generated_reels document
+            doc_ref = db.collection("media").document(user_id).collection("uploadmedia").collection("media_data").document("generated_reels")
+            doc = doc_ref.get()
+            
+            deleted_count = 0
+            if doc.exists:
+                data = doc.to_dict()
+                generated_reels = data.get('generated_reels', [])
+                
+                # Find and remove the video with matching ID
+                original_count = len(generated_reels)
+                generated_reels = [reel for reel in generated_reels if reel.get('id') != video_id]
+                deleted_count = original_count - len(generated_reels)
+                
+                if deleted_count > 0:
+                    # Update the document with the filtered list
+                    doc_ref.set({
+                        'generated_reels': generated_reels,
+                        'last_updated': datetime.now().isoformat(),
+                        'total_generated_reels': len(generated_reels)
+                    })
+                    print(f"✅ Deleted {deleted_count} video(s) from Firestore generated_reels")
+                else:
+                    print(f"⚠️ No video found with ID: {video_id}")
+            else:
+                print(f"⚠️ Generated reels document not found for user: {user_id}")
+            
+        except Exception as e:
+            print(f"❌ Error deleting from Firestore: {e}")
+            return jsonify({'success': False, 'error': f'Failed to delete from database: {str(e)}'}), 500
+        
+        return jsonify({
+            'success': True,
+            'message': f'Video {video_id} deleted successfully',
+            'deleted_from_storage': cloud_path is not None,
+            'deleted_from_database': deleted_count > 0
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in delete_video: {e}")
+        return jsonify({'success': False, 'error': f'Delete failed: {str(e)}'}), 500
+
+@reel_gen_bp.route('/api/reel-generator/generated-reels', methods=['GET'])
+@cross_origin()
+def get_generated_reels():
+    """Get generated reels for a specific user from the correct Firestore location"""
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User ID is required'}), 400
+        
+        print(f"📋 Fetching generated reels for user: {user_id}")
+        
+        # Get generated reels from the correct Firestore location
+        doc_ref = db.collection("media").document(user_id).collection("uploadmedia").collection("media_data").document("generated_reels")
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            data = doc.to_dict()
+            generated_reels = data.get('generated_reels', [])
+            print(f"✅ Found {len(generated_reels)} generated reels")
+            
+            return jsonify({
+                'success': True,
+                'reels': generated_reels,
+                'total': len(generated_reels)
+            })
+        else:
+            print(f"📭 No generated reels found for user {user_id}")
+            return jsonify({
+                'success': True,
+                'reels': [],
+                'total': 0
+            })
+            
+    except Exception as e:
+        print(f"❌ Error fetching generated reels: {e}")
+        return jsonify({'success': False, 'error': f'Failed to fetch generated reels: {str(e)}'}), 500
 
 @reel_gen_bp.route('/api/reel-generator/health', methods=['GET'])
 @cross_origin()
