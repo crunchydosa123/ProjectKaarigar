@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 import uuid
 from datetime import datetime
 from io import BytesIO
+import json
 
 # Initialize blueprint
 reel_gen_bp = Blueprint('reel_gen', __name__)
@@ -69,6 +70,21 @@ def save_reel_metadata_to_firestore(user_id, reel_data):
         print(f"Error saving to Firestore: {e}")
         return False
 
+def save_generated_video_to_firestore(user_id, video_data):
+    """Save generated video metadata under media/{user_id}/generated_video collection"""
+    try:
+        collection_ref = db.collection("media").document(user_id).collection("generated_video")
+        # Use auto-id document for each generated video
+        collection_ref.add({
+            **video_data,
+            'created_at': video_data.get('created_at') or datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        })
+        return True
+    except Exception as e:
+        print(f"Error saving generated video to Firestore: {e}")
+        return False
+
 @reel_gen_bp.route('/api/reel-generator', methods=['POST'])
 @cross_origin()
 def generate_reel():
@@ -107,7 +123,6 @@ def generate_reel():
         # Check for image URLs in form data
         if 'image_urls' in request.form:
             try:
-                import json
                 image_urls = json.loads(request.form.get('image_urls', '[]'))
             except:
                 image_urls = []
@@ -199,7 +214,7 @@ def generate_reel():
             f.write(b'placeholder video content')
         
         # Upload to Cloud Storage with user-specific path
-        cloud_path = f"media/{user_id}/uploadmedia/generated_reels/{output_filename}"
+        cloud_path = f"media/{user_id}/generated_video/{output_filename}"
         public_url = upload_to_gcs(output_path, cloud_path)
         
         if not public_url:
@@ -223,18 +238,23 @@ def generate_reel():
             'processing_method': 'BytesIO_in_memory'
         }
         
-        # Save to Firestore
+        # Save to Firestore (legacy list + new generated_video collection)
         if save_reel_metadata_to_firestore(user_id, reel_metadata):
-            print(f"✅ Reel metadata saved to Firestore")
+            print(f"✅ Reel metadata saved to Firestore (legacy created_reel)")
         else:
-            print(f"⚠️ Failed to save metadata to Firestore")
+            print(f"⚠️ Failed to save metadata to Firestore (legacy created_reel)")
+
+        if save_generated_video_to_firestore(user_id, reel_metadata):
+            print(f"✅ Generated video saved to Firestore (generated_video collection)")
+        else:
+            print(f"⚠️ Failed to save generated video to Firestore (generated_video collection)")
         
         return jsonify({
             'success': True,
             'message': 'Reel generated successfully using BytesIO',
             'reel_id': reel_metadata['id'],
             'title': reel_metadata['title'],
-            'public_url': public_url,
+            'generated_video_url': public_url,
             'cloud_path': cloud_path,
             'file_size_mb': reel_metadata['file_size_mb'],
             'images_used': total_images,
@@ -251,6 +271,80 @@ def generate_reel():
     except Exception as e:
         print(f"❌ Error generating reel: {e}")
         return jsonify({'error': f'Reel generation failed: {str(e)}'}), 500
+
+@reel_gen_bp.route('/api/generate-video/images', methods=['POST'])
+@cross_origin()
+def generate_video_from_images_urls():
+    """Generate video from image URLs (JSON body: { prompt, image_urls, user_id? })"""
+    try:
+        data = request.get_json(silent=True) or {}
+        prompt = (data.get('prompt') or '').strip()
+        image_urls = data.get('image_urls') or []
+        user_id = (data.get('user_id') or '').strip() or 'anonymous'
+
+        if not prompt:
+            return jsonify({'success': False, 'error': 'Prompt is required'}), 400
+        if not isinstance(image_urls, list) or len(image_urls) == 0:
+            return jsonify({'success': False, 'error': 'image_urls must be a non-empty list'}), 400
+
+        # Download images into memory to validate accessibility (optional)
+        bytes_objects = []
+        for i, url in enumerate(image_urls):
+            try:
+                resp = requests.get(url, timeout=30)
+                if resp.status_code == 200:
+                    b = BytesIO(resp.content)
+                    b.seek(0)
+                    bytes_objects.append(b)
+                else:
+                    print(f"Failed to fetch image {i+1}: {resp.status_code}")
+            except Exception as e:
+                print(f"Error fetching image {i+1}: {e}")
+
+        if len(bytes_objects) == 0:
+            return jsonify({'success': False, 'error': 'No valid image URLs provided'}), 400
+
+        # Create a placeholder output (replace with real generation)
+        temp_dir = tempfile.mkdtemp(prefix="reel_output_")
+        output_filename = f"reel_{uuid.uuid4().hex[:8]}.mp4"
+        output_path = os.path.join(temp_dir, output_filename)
+        with open(output_path, 'wb') as f:
+            f.write(b'placeholder video content')
+
+        # Upload to GCS under media/{user_id}/generated_video/
+        cloud_path = f"media/{user_id}/generated_video/{output_filename}"
+        public_url = upload_to_gcs(output_path, cloud_path)
+        if not public_url:
+            return jsonify({'success': False, 'error': 'Failed to upload video to cloud storage'}), 500
+
+        reel_metadata = {
+            'id': str(uuid.uuid4()),
+            'title': f"Reel - {prompt[:50]}...",
+            'prompt': prompt,
+            'filename': output_filename,
+            'cloud_path': cloud_path,
+            'public_url': public_url,
+            'images_count': len(bytes_objects),
+            'image_urls': image_urls,
+            'created_at': datetime.now().isoformat(),
+            'file_size_mb': round(os.path.getsize(output_path) / (1024 * 1024), 2),
+            'status': 'completed',
+            'processing_method': 'urls_json'
+        }
+
+        # Save metadata to Firestore collection
+        save_generated_video_to_firestore(user_id, reel_metadata)
+
+        return jsonify({
+            'success': True,
+            'message': 'Video generated successfully',
+            'generated_video_url': public_url,
+            'cloud_path': cloud_path,
+            'file_size_mb': reel_metadata['file_size_mb']
+        })
+    except Exception as e:
+        print(f"❌ Error in generate_video_from_images_urls: {e}")
+        return jsonify({'success': False, 'error': f'Generation failed: {str(e)}'}), 500
 
 @reel_gen_bp.route('/api/reel-generator/user-reels', methods=['GET'])
 @cross_origin()
