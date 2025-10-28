@@ -14,7 +14,9 @@ import {
   Clock,
   FileVideo,
   Sparkles,
-  Image as ImageIcon
+  Image as ImageIcon,
+  FileEdit,
+  Trash2
 } from 'lucide-react';
 import { mediaAPI, reelGeneratorAPI, imageGenAPI, type GeneratedReel, type MediaItem } from '@/lib/api';
 import { usePage } from '@/contexts/PageContext';
@@ -29,16 +31,22 @@ interface CombinedImageItem extends MediaItem {
 }
 
 const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
-  const { user } = usePage();
+  const { user, setCurrentPage } = usePage();
   const [userImages, setUserImages] = useState<CombinedImageItem[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [reelTitle, setReelTitle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [generationMessage, setGenerationMessage] = useState('');
   const [generatedReels, setGeneratedReels] = useState<GeneratedReel[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
+  const [allVideos, setAllVideos] = useState<any[]>([]);
+  const [loadingAllVideos, setLoadingAllVideos] = useState(false);
+  const [showAllVideos, setShowAllVideos] = useState(false);
+  const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
   
   // AI Script Suggestion states
   const [suggestingScript, setSuggestingScript] = useState(false);
@@ -113,12 +121,34 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
     
     try {
       console.log('🔄 Starting to load generated reels for user:', user.userId);
-      const response = await reelGeneratorAPI.getUserReels(user.userId);
-      console.log('📡 Reel Generator API response:', response);
+      const response = await reelGeneratorAPI.getGeneratedReels(user.userId);
+      console.log('📡 Generated Reels API response:', response);
       
       if (response.success) {
-        setGeneratedReels(response.reels);
-        console.log(`🎬 Successfully loaded ${response.reels.length} generated reels:`, response.reels);
+        const reels = response.reels || [];
+        const mappedReels: GeneratedReel[] = reels.map((reel: any) => ({
+          id: reel.id || reel.name,
+          title: reel.title || reel.name,
+          prompt: reel.prompt || 'Generated from images',
+          filename: reel.filename || reel.name,
+          cloud_path: reel.cloud_path || reel.name,
+          public_url: reel.public_url,
+          images_count: reel.images_count || 0,
+          created_at: reel.created_at || new Date().toISOString(),
+          file_size_mb: reel.file_size_mb || 0,
+          status: reel.status || 'completed',
+          description: reel.description || '',
+          duration_seconds: reel.duration_seconds || 0,
+          user_id: user.userId,
+          kaarigar_id: '',
+          video_type: 'generated_reel',
+          optimized_prompt: '',
+          selected_image_ids: [],
+          generated_at: reel.created_at || new Date().toISOString(),
+          is_active: true,
+        }));
+        setGeneratedReels(mappedReels);
+        console.log(`🎬 Successfully loaded ${mappedReels.length} generated reels:`, mappedReels);
       } else {
         console.error('❌ Failed to load generated reels:', response.error);
         setGeneratedReels([]);
@@ -133,6 +163,60 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       setGeneratedReels([]);
     } finally {
       console.log('✅ Finished loading generated reels');
+    }
+  };
+
+  const loadAllUserVideos = async () => {
+    try {
+      setLoadingAllVideos(true);
+      const response = await reelGeneratorAPI.getGeneratedReels(user?.userId || '');
+      console.log('📡 Generated Reels for modal response:', response);
+      
+      if (response.success) {
+        const reels = response.reels || [];
+        setAllVideos(reels);
+        setIsVideosModalOpen(true);
+      } else {
+        console.error('❌ Failed to load generated reels for modal:', response.error);
+        setAllVideos([]);
+        setIsVideosModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Failed to load generated reels for modal:', error);
+      setAllVideos([]);
+      setIsVideosModalOpen(true);
+    } finally {
+      setLoadingAllVideos(false);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: string, videoName: string, cloudPath?: string) => {
+    if (!confirm(`Are you sure you want to delete "${videoName}"?`)) {
+      return;
+    }
+
+    if (!user?.userId) {
+      alert('Please log in to delete videos');
+      return;
+    }
+
+    try {
+      console.log(`🗑️ Deleting video: ${videoName} (ID: ${videoId})`);
+      
+      const response = await reelGeneratorAPI.deleteVideo(videoId, user.userId, cloudPath);
+      
+      if (response.success) {
+        // Remove from local state
+        setAllVideos(prev => prev.filter(vid => vid.id !== videoId));
+        console.log(`✅ Video deleted successfully: ${response.message}`);
+        alert(`Video "${videoName}" deleted successfully!`);
+      } else {
+        console.error('❌ Delete failed:', response.error);
+        alert(`Failed to delete video: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Delete error:', error);
+      alert('Failed to delete video. Please try again.');
     }
   };
 
@@ -202,11 +286,14 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       console.log('📡 Reel Generator API response:', response);
 
       if (response.success) {
-        setScriptSuggestions(response.suggestions);
+        const suggestions = Array.isArray((response as any).suggestions)
+          ? (response as any).suggestions as string[]
+          : (Array.isArray((response as any).ideas) ? (response as any).ideas as string[] : []);
+        setScriptSuggestions(suggestions);
         setShowSuggestions(true);
         setGenerationStatus('success');
-        setGenerationMessage(`Generated ${response.suggestions.length} AI script suggestions!`);
-        console.log('✅ Script suggestions generated successfully:', response.suggestions);
+        setGenerationMessage(`Generated ${suggestions.length} AI script suggestions!`);
+        console.log('✅ Script suggestions generated successfully:', suggestions);
       } else {
         setGenerationStatus('error');
         setGenerationMessage(response.error || 'Failed to generate script suggestions');
@@ -248,6 +335,12 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       return;
     }
 
+    if (!reelTitle.trim()) {
+      setGenerationStatus('error');
+      setGenerationMessage('Please enter a title for your reel');
+      return;
+    }
+
     if (!prompt.trim()) {
       setGenerationStatus('error');
       setGenerationMessage('Please enter a prompt');
@@ -272,6 +365,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       console.log('📡 Calling reelGeneratorAPI.generateReel...');
       const response = await reelGeneratorAPI.generateReel({
         prompt: prompt.trim(),
+        title: reelTitle.trim(),
         imageUrls: imageUrls
       }, user.userId);
 
@@ -279,8 +373,12 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
 
       if (response.success) {
         setGenerationStatus('success');
-        setGenerationMessage(`Reel "${response.title}" generated successfully!`);
+        setGenerationMessage(`Reel "${reelTitle}" generated successfully!`);
         console.log('✅ Reel generated successfully:', response);
+        const url = (response as any).generated_video_url || (response as any).public_url;
+        if (typeof url === 'string' && url.length > 0) {
+          setResultVideoUrl(url);
+        }
         
         // Refresh the generated reels list
         console.log('🔄 Refreshing generated reels list...');
@@ -339,14 +437,37 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
          style={{ backgroundImage: "url('/white_bg.png')" }}>
       
       {/* Header */}
-      <div className="w-full mt-10 flex justify-start items-center p-3">
-        <button
-          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
-          onClick={onBack}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="text-md font-bold ml-3">Create Reel from Images</div>
+      <div className="w-full mt-10 flex justify-between items-center p-3">
+        <div className="flex items-center">
+          <button
+            className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
+            onClick={onBack}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="text-md font-bold ml-3">Create Reel from Images</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadAllUserVideos}
+            disabled={loadingAllVideos}
+            className="flex items-center gap-2"
+          >
+            <FileVideo className="w-4 h-4" />
+            {loadingAllVideos ? 'Loading...' : 'Generated Reels'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage('create-content/videos2')}
+            className="flex items-center gap-2"
+          >
+            <FileEdit className="w-4 h-4" />
+            Edit Video
+          </Button>
+        </div>
       </div>
 
       <div className="px-4 py-4 space-y-4">
@@ -378,6 +499,20 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                   Selected {selectedImageIds.length} image(s) from your media
                 </div>
               )}
+            </div>
+
+            {/* Title Input */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                Reel Title *
+              </label>
+              <Input
+                value={reelTitle}
+                onChange={(e) => setReelTitle(e.target.value)}
+                placeholder="Enter a title for your reel..."
+                disabled={generating}
+                className="w-full"
+              />
             </div>
 
             {/* Prompt Input */}
@@ -476,6 +611,38 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                 {generationMessage}
               </div>
             )}
+
+            {/* Generated Video Preview */}
+            {resultVideoUrl && (
+              <div className="mt-4">
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Generated Video</label>
+                <video
+                  controls
+                  src={resultVideoUrl}
+                  className="w-full max-w-2xl border border-gray-200 rounded"
+                />
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    onClick={() => {
+                      // The video is already saved to Firestore during generation
+                      alert('Video has been automatically saved to your media library!');
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <FileVideo className="w-4 h-4" />
+                    Video Saved to Media
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(resultVideoUrl, '_blank')}
+                    className="flex items-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Open in New Tab
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -535,6 +702,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
             </CardContent>
           </Card>
         )}
+
       </div>
 
       {/* Image Selection Modal */}
@@ -625,6 +793,107 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                   ))}
                 </div>
               </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Videos Modal */}
+      <Dialog open={isVideosModalOpen} onOpenChange={setIsVideosModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileVideo className="w-5 h-5 text-purple-600" />
+              Your Generated Reels
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {loadingAllVideos ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+                <span className="ml-2 text-gray-600">Loading videos...</span>
+              </div>
+            ) : allVideos.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <FileVideo className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No generated reels found.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                {allVideos.map((reel: any, idx: number) => (
+                  <div key={`${reel.id || reel.name || idx}-${idx}`} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                    {/* Video Thumbnail */}
+                    <div className="relative aspect-video bg-gray-100">
+                      <video
+                        src={reel.public_url}
+                        className="w-full h-full object-cover"
+                        poster={reel.thumbnail_url || ''}
+                        onError={(e) => {
+                          // Fallback to a placeholder if video fails to load
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
+                        <FileVideo className="w-12 h-12 text-gray-400" />
+                      </div>
+                      
+                      {/* Play overlay */}
+                      <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition-all flex items-center justify-center">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="opacity-0 hover:opacity-100 transition-opacity"
+                          onClick={() => window.open(reel.public_url, '_blank')}
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Video Info */}
+                    <div className="p-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-medium text-gray-900 truncate mb-1">
+                            {reel.title || reel.name || 'Untitled Reel'}
+                          </h3>
+                          <p className="text-xs text-gray-500 mb-1">
+                            {reel.prompt ? reel.prompt.substring(0, 50) + '...' : 'Generated reel'}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {reel.file_size_mb ? `${reel.file_size_mb}MB` : ''} • {reel.images_count || 0} images
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex items-center justify-between gap-2">
+                        <Button 
+                          size="sm" 
+                          onClick={() => window.open(reel.public_url, '_blank')}
+                          className="flex items-center gap-1 flex-1"
+                        >
+                          <Play className="w-3 h-3" />
+                          Play
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteVideo(
+                            reel.id, 
+                            reel.title || reel.name || 'Untitled Reel',
+                            reel.cloud_path
+                          )}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </DialogContent>

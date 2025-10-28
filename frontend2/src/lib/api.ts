@@ -947,6 +947,7 @@ export interface UserReelsResponse {
 
 export interface NewReelGenerationRequest {
   prompt: string;
+  title?: string;
   images?: File[];
   imageUrls?: string[];
 }
@@ -992,6 +993,10 @@ class ReelGeneratorAPI {
       });
       
       options.body = formData;
+    } else if (data instanceof FormData) {
+      // Allow direct passing of FormData
+      console.log(`📁 Using provided FormData`);
+      options.body = data as FormData;
     } else if (data) {
       // Handle JSON data
       console.log(`📦 Processing JSON data`);
@@ -1047,51 +1052,30 @@ class ReelGeneratorAPI {
     console.log(`🖼️ Image URLs:`, request.imageUrls);
     console.log(`📁 Images:`, request.images ? request.images.length : 0);
     
-    const formData = new FormData();
-    formData.append('prompt', request.prompt);
-    
-    // Handle image URLs by converting them to files via proxy
-    if (request.imageUrls && request.imageUrls.length > 0) {
-      console.log(`🔄 Converting ${request.imageUrls.length} image URLs to files via proxy...`);
-      
-      try {
-        for (let i = 0; i < request.imageUrls.length; i++) {
-          const imageUrl = request.imageUrls[i];
-          console.log(`📥 Downloading image ${i + 1} via proxy: ${imageUrl}`);
-          
-          // Use our backend proxy to avoid CORS issues
-          const proxyUrl = `http://localhost:5000/api/reel-generator/proxy-image?url=${encodeURIComponent(imageUrl)}&t=${Date.now()}`;
-          console.log(`🔄 Proxy URL: ${proxyUrl}`);
-          const response = await fetch(proxyUrl);
-          
-          if (!response.ok) {
-            console.error(`❌ Failed to fetch image ${i + 1} via proxy: ${response.status} ${response.statusText}`);
-            continue;
-          }
-          
-          const blob = await response.blob();
-          const fileName = `image_${i + 1}.${blob.type.split('/')[1] || 'jpg'}`;
-          const file = new File([blob], fileName, { type: blob.type });
-          
-          formData.append('images', file);
-          console.log(`✅ Added image ${i + 1}: ${fileName} (${file.size} bytes)`);
-        }
-      } catch (error) {
-        console.error(`❌ Error converting image URLs to files:`, error);
-        throw new Error(`Failed to process image URLs: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-    
-    // Handle direct file uploads
+    // Prefer JSON-based URL flow supported by backend
+    const payload: any = {
+      prompt: request.prompt,
+      title: request.title || '',
+      image_urls: request.imageUrls || [],
+      user_id: userId,
+    };
+
+    // If direct files are provided, fall back to FormData to /api/reel-generator
     if (request.images && request.images.length > 0) {
-      request.images.forEach((file, index) => {
-        formData.append('images', file);
-        console.log(`📁 Added image ${index + 1}: ${file.name} (${file.size} bytes)`);
-      });
+      const fd = new FormData();
+      fd.append('prompt', request.prompt);
+      fd.append('title', request.title || '');
+      fd.append('user_id', userId);
+      if (request.imageUrls && request.imageUrls.length > 0) {
+        fd.append('image_urls', JSON.stringify(request.imageUrls));
+      }
+      request.images.forEach((file) => fd.append('images', file));
+      console.log(`🔄 Calling form-data endpoint for mixed upload...`);
+      return this.request<ReelGenerationResponse>('/api/reel-generator', 'POST', fd);
     }
-    
-    console.log(`🔄 Calling request method...`);
-    return this.request<ReelGenerationResponse>('/api/generate-video/images', 'POST', formData);
+
+    console.log(`🔄 Calling JSON endpoint for image URLs...`);
+    return this.request<ReelGenerationResponse>('/api/generate-video/images', 'POST', payload);
   }
 
   async suggestScript(request: ScriptSuggestionRequest, userId: string): Promise<ScriptSuggestionResponse> {
@@ -1114,7 +1098,7 @@ class ReelGeneratorAPI {
           console.log(`📥 Downloading image ${i + 1} via proxy: ${imageUrl}`);
           
           // Use our backend proxy to avoid CORS issues
-          const proxyUrl = `http://localhost:5000/api/reel-generator/proxy-image?url=${encodeURIComponent(imageUrl)}&t=${Date.now()}`;
+          const proxyUrl = `${this.baseURL}/proxy-image?url=${encodeURIComponent(imageUrl)}&t=${Date.now()}`;
           console.log(`🔄 Proxy URL: ${proxyUrl}`);
           const response = await fetch(proxyUrl);
           
@@ -1155,6 +1139,13 @@ class ReelGeneratorAPI {
     return this.request<UserReelsResponse>('/api/videos', 'GET');
   }
 
+  async getGeneratedReels(userId: string): Promise<{ success: boolean; reels: any[]; total: number; error?: string }> {
+    console.log(`\n🎬 ===== GET GENERATED REELS REQUEST =====`);
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`🔄 Calling request method...`);
+    return this.request(`/api/reel-generator/generated-reels?user_id=${userId}`, 'GET');
+  }
+
   async generateTextToVideo(prompt: string): Promise<ReelGenerationResponse> {
     console.log(`\n📝 ===== GENERATE TEXT TO VIDEO REQUEST =====`);
     console.log(`📝 Prompt: ${prompt}`);
@@ -1164,6 +1155,14 @@ class ReelGeneratorAPI {
     
     console.log(`🔄 Calling request method...`);
     return this.request<ReelGenerationResponse>('/api/generate-video/text', 'POST', formData);
+  }
+
+  async deleteVideo(videoId: string, userId: string, cloudPath?: string): Promise<{ success: boolean; message: string; error?: string }> {
+    return this.request('/api/reel-generator/delete-video', 'DELETE', {
+      video_id: videoId,
+      user_id: userId,
+      cloud_path: cloudPath
+    });
   }
 
   async healthCheck(): Promise<{ status: string; service: string; bucket: string; brand_id: string }> {
