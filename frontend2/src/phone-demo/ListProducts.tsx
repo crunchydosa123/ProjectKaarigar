@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { usePage } from "@/contexts/PageContext";
 import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 const ListProducts = () => {
   const { currentPage } = usePage();
@@ -15,8 +16,8 @@ const ListProducts = () => {
       return <ListContentMain />; // default create content screen
     case 'list-products/whatsapp-campaign':
       return <WhatsappCampaign />;
-    case 'list-products/whatsapp-campaign':
-      return <WhatsappCampaign />;
+    case 'list-products/add-products':
+      return <AddProduct />
     default:
       return <ListContentMain />
   }
@@ -26,6 +27,7 @@ export default ListProducts;
 
 const ListContentMain = () => {
   const { setCurrentPage } = usePage();
+  
   return (
     <div
       className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
@@ -48,7 +50,7 @@ const ListContentMain = () => {
       <div className="px-4">
         <div className="flex justify-between my-2">
           <Label className="mb-1">Your Listed Products</Label>
-          <Button variant={"outline"} className="text-xs">
+          <Button variant={"outline"} className="text-xs" onClick={()=> setCurrentPage('list-products/add-products')}>
             <Plus /> Add Product
           </Button>
         </div>
@@ -285,5 +287,191 @@ const WhatsappCampaign = () => {
 };
 
 
+
+
+import { Trash } from "lucide-react";
+
+
+type Variant = {
+  color: string;
+  size: string;
+  price: string;
+  stock: string;
+  image?: File;
+};
+
+const AddProduct = () => {
+  const { setCurrentPage } = usePage();
+  const [name, setName] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([
+    { color: "", size: "", price: "", stock: "", image: undefined },
+  ]);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setImages((prev) => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const handleVariantChange = <K extends keyof Variant>(
+    index: number,
+    key: K,
+    value: Variant[K]
+  ) => {
+    const updated = [...variants];
+    updated[index][key] = value;
+    setVariants(updated);
+  };
+
+  const handleVariantImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    index: number
+  ) => {
+    if (e.target.files && e.target.files[0]) {
+      const updated = [...variants];
+      updated[index].image = e.target.files[0];
+      setVariants(updated);
+    }
+  };
+
+  const addVariant = () =>
+    setVariants([
+      ...variants,
+      { color: "", size: "", price: "", stock: "", image: undefined },
+    ]);
+
+  const removeVariant = (index: number) =>
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+
+  const saveProduct = () => {
+    const productData = {
+      name,
+      images,
+      variants,
+    };
+    console.log("Product saved:", productData);
+    alert("Product saved successfully!");
+    setCurrentPage("home");
+  };
+
+  return (
+    <div
+      className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
+      style={{ backgroundImage: "url('/white_bg.png')" }}
+    >
+      <div className="w-full mt-10 flex justify-start items-center p-3">
+        <button
+          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
+          onClick={() => setCurrentPage("home")}
+        >
+          <House />
+        </button>
+        <div className="text-md font-bold ml-3">Add a New Product</div>
+      </div>
+
+      <div className="px-4 pb-10">
+        <div className="my-2 flex flex-col gap-1">
+          <Label>Name of product</Label>
+          <Input
+            placeholder="Kurti"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="my-4 flex flex-col gap-1">
+          <Label>Upload Product Images</Label>
+          <Input type="file" multiple accept="image/*" onChange={handleImageUpload} />
+          <div className="flex flex-wrap gap-2 mt-2">
+            {images.map((img, idx) => (
+              <img
+                key={idx}
+                src={URL.createObjectURL(img)}
+                alt="preview"
+                className="w-20 h-20 object-cover rounded-lg border"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="my-4">
+          <Label>Variants</Label>
+          {variants.map((variant, index) => (
+            <div
+              key={index}
+              className="flex flex-col gap-2 my-3 p-2 rounded-md border"
+            >
+              <div className="flex flex-wrap gap-2 items-center">
+                <Input
+                  placeholder="Color"
+                  value={variant.color}
+                  onChange={(e) =>
+                    handleVariantChange(index, "color", e.target.value)
+                  }
+                />
+                <Input
+                  placeholder="Size"
+                  value={variant.size}
+                  onChange={(e) =>
+                    handleVariantChange(index, "size", e.target.value)
+                  }
+                />
+                <Input
+                  placeholder="Price"
+                  value={variant.price}
+                  onChange={(e) =>
+                    handleVariantChange(index, "price", e.target.value)
+                  }
+                />
+                <Input
+                  placeholder="Stock"
+                  value={variant.stock}
+                  onChange={(e) =>
+                    handleVariantChange(index, "stock", e.target.value)
+                  }
+                />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={() => removeVariant(index)}
+                >
+                  <Trash size={16} />
+                </Button>
+              </div>
+
+              <div className="flex flex-col">
+                <Label className="text-sm text-gray-700">Variant Image</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleVariantImageUpload(e, index)}
+                />
+                {variant.image && (
+                  <img
+                    src={URL.createObjectURL(variant.image)}
+                    alt="variant preview"
+                    className="w-24 h-24 mt-2 object-cover rounded-md border"
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+
+          <Button onClick={addVariant} variant="secondary" className="mt-2">
+            <Plus size={16} className="mr-1" /> Add Variant
+          </Button>
+        </div>
+
+        <Button
+          onClick={saveProduct}
+          className="w-full mt-6 "
+        >
+          Save Product
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 
