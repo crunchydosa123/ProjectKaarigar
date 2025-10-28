@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { usePage } from "@/contexts/PageContext";
-import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send, Upload, X, Check, Trash } from "lucide-react";
+import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send, Upload, X, Check, Trash, SkipBack, Undo2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { productAPI, mediaAPI, type CreateProductRequest } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -20,6 +20,8 @@ const ListProducts = () => {
       return <WhatsappCampaign />;
     case 'list-products/add-products':
       return <AddProduct />
+    case 'list-products/add-listing':
+      return <AddListing />
     default:
       return <ListContentMain />
   }
@@ -47,7 +49,7 @@ const ListContentMain = () => {
   // Load on mount
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useState(() => { loadProducts(); return undefined; });
-  
+
   return (
     <div
       className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
@@ -70,7 +72,7 @@ const ListContentMain = () => {
       <div className="px-4">
         <div className="flex justify-between my-2">
           <Label className="mb-1">Your Listed Products</Label>
-          <Button variant={"outline"} className="text-xs" onClick={()=> setCurrentPage('list-products/add-products')}>
+          <Button variant={"outline"} className="text-xs" onClick={() => setCurrentPage('list-products/add-products')}>
             <Plus /> Add Product
           </Button>
         </div>
@@ -82,9 +84,9 @@ const ListContentMain = () => {
             <div className="text-sm text-gray-500 px-2 py-3">No products yet. Click Add Product to create one.</div>
           )}
           {products.map((p) => (
-            <Button 
-              key={p.id} 
-              className="bg-white text-black w-full flex justify-between h-15" 
+            <Button
+              key={p.id}
+              className="bg-white text-black w-full flex justify-between h-15"
               variant={"outline"}
               onClick={() => {
                 setSelectedProductId(p.id);
@@ -107,10 +109,12 @@ const ListContentMain = () => {
         </div>
       </div>
 
+      <Button className="mx-4 mt-5" onClick={() => setCurrentPage('list-products/add-listing')}>List a product</Button>
+
       {/* Marketing Options */}
       <div className="px-4 mt-8 flex flex-col gap-1">
         <Label>Market Products</Label>
-        <Button variant={"outline"} className="flex justify-center gap-2" onClick={()=> setCurrentPage('list-products/whatsapp-campaign')}>
+        <Button variant={"outline"} className="flex justify-center gap-2" onClick={() => setCurrentPage('list-products/whatsapp-campaign')}>
           <img src="WhatsApp.webp" className="h-7 w-7" />
           Run a Message Campaign
         </Button>
@@ -315,6 +319,134 @@ const WhatsappCampaign = () => {
   );
 };
 
+import { Checkbox } from "@/components/ui/checkbox";
+
+
+const AddListing = () => {
+  const { setCurrentPage } = usePage();
+
+  // Local states
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [variants, setVariants] = useState<string[]>([]);
+  const [platform, setPlatform] = useState("");
+
+  // Example product data
+  const products = ["Clay Pot", "Handmade Vase", "Bamboo Lamp", "Copper Bottle"];
+
+  // Example variants
+  const variantOptions = [
+    { label: "Small (₹250)", value: "small" },
+    { label: "Medium (₹350)", value: "medium" },
+    { label: "Large (₹450)", value: "large" },
+  ];
+
+  const toggleVariant = (value: string) => {
+    setVariants((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
+
+  const handleListProduct = () => {
+    if (!selectedProduct || !platform) {
+      alert("Please select a product and a platform.");
+      return;
+    }
+
+    console.log("📦 Listing Details:", {
+      product: selectedProduct,
+      variants,
+      platform,
+    });
+
+    alert(`✅ ${selectedProduct} listed on ${platform}!`);
+  };
+
+  return (
+    <div
+      className="w-full h-full bg-cover bg-center flex flex-col overflow-y-auto overflow-x-hidden"
+      style={{ backgroundImage: "url('/white_bg.png')" }}
+    >
+      {/* Header */}
+      <div className="w-full mt-10 flex justify-between items-center p-3 border-b">
+        <button
+          className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
+          onClick={() => setCurrentPage("list-products")}
+        >
+          <Undo2 />
+        </button>
+        <div className="flex w-full justify-center">
+        <div className="text-md font-bold ml-3">List a Product</div>
+        </div>
+      </div>
+
+      {/* Product selection */}
+      <div className="px-4 mt-4">
+        <Label>Choose a product to list</Label>
+        <Select onValueChange={setSelectedProduct}>
+          <SelectTrigger className="mt-2">
+            <SelectValue placeholder="Select product" />
+          </SelectTrigger>
+          <SelectContent>
+            {products.map((product) => (
+              <SelectItem key={product} value={product}>
+                {product}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Variants */}
+      {/* Variants */}
+      <div className="px-4 mt-5">
+        <Label>Choose variants / sizes</Label>
+        <div className="flex flex-col gap-2 mt-2">
+          {variantOptions.map((opt) => (
+            <div key={opt.value} className="flex items-center space-x-2">
+              <Checkbox
+                checked={variants.includes(opt.value)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setVariants((prev) => [...prev, opt.value]);
+                  } else {
+                    setVariants((prev) => prev.filter((v) => v !== opt.value));
+                  }
+                }}
+                id={opt.value}
+              />
+              <Label htmlFor={opt.value}>{opt.label}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+
+      {/* Platform */}
+      <div className="px-4 flex flex-col justify-center gap-1 mt-5">
+        <Label>Choose platform</Label>
+        <div className="flex justify-center gap-2 mt-2">
+          {["Amazon", "Meesho", "WhatsApp"].map((p) => (
+            <Button
+              key={p}
+              variant={platform === p ? "default" : "outline"}
+              className="w-1/3 mt-1"
+              onClick={() => setPlatform(p)}
+            >
+              {p}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <Button className="mx-4 mt-6 mb-10" onClick={handleListProduct}>
+        List my product
+      </Button>
+    </div>
+  );
+};
+
+
+
 
 
 
@@ -340,27 +472,27 @@ const AddProduct = () => {
   const [stock, setStock] = useState("");
   const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
   const [productVideoUrls, setProductVideoUrls] = useState<string[]>([]);
-  
+
   // Variants
   const [variants, setVariants] = useState<Variant[]>([
     { description: "", color: "", size: "", price: "", stock: "", imageUrl: undefined, videoUrl: undefined },
   ]);
-  const [availableImages, setAvailableImages] = useState<{id:string;title:string;public_url:string}[]>([]);
-  const [availableVideos, setAvailableVideos] = useState<{id:string;title:string;public_url:string}[]>([]);
+  const [availableImages, setAvailableImages] = useState<{ id: string; title: string; public_url: string }[]>([]);
+  const [availableVideos, setAvailableVideos] = useState<{ id: string; title: string; public_url: string }[]>([]);
   const [saving, setSaving] = useState(false);
-  
+
   // Image Choice Dialog States
   const [showImageChoiceDialog, setShowImageChoiceDialog] = useState(false);
   const [imageChoiceMode, setImageChoiceMode] = useState<'product' | 'variant'>('product');
   const [currentVariantIndex, setCurrentVariantIndex] = useState<number>(-1);
   const [currentMediaType, setCurrentMediaType] = useState<'image' | 'video'>('image');
-  
+
   // Upload Dialog States
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{[key: string]: boolean}>({});
-  
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: boolean }>({});
+
   // Select Existing Dialog States
   const [showSelectDialog, setShowSelectDialog] = useState(false);
 
@@ -384,31 +516,31 @@ const AddProduct = () => {
 
   const handleUploadMedia = async () => {
     if (uploadingFiles.length === 0) return;
-    
+
     setUploading(true);
-    const newProgress: {[key: string]: boolean} = {};
-    
+    const newProgress: { [key: string]: boolean } = {};
+
     try {
       const uploadedUrls: string[] = [];
-      
+
       for (const file of uploadingFiles) {
         newProgress[file.name] = false;
-        setUploadProgress({...newProgress});
-        
+        setUploadProgress({ ...newProgress });
+
         const response = await mediaAPI.uploadMedia({
           file,
           media_type: currentMediaType,
           title: file.name
         });
-        
+
         if (response.success && response.public_url) {
           uploadedUrls.push(response.public_url);
         }
-        
+
         newProgress[file.name] = true;
-        setUploadProgress({...newProgress});
+        setUploadProgress({ ...newProgress });
       }
-      
+
       // Add uploaded media to product or variant
       if (imageChoiceMode === 'product') {
         if (currentMediaType === 'image') {
@@ -427,10 +559,10 @@ const AddProduct = () => {
         }
         setVariants(updated);
       }
-      
+
       // Reload media after upload
       await loadMediaChoices();
-      
+
       // Close dialog and reset
       setShowUploadDialog(false);
       setUploadingFiles([]);
@@ -442,7 +574,7 @@ const AddProduct = () => {
       setUploading(false);
     }
   };
-  
+
   const handleChooseImage = (mode: 'product' | 'variant', variantIndex: number = -1, mediaType: 'image' | 'video' = 'image') => {
     setImageChoiceMode(mode);
     setCurrentVariantIndex(variantIndex);
@@ -450,7 +582,7 @@ const AddProduct = () => {
     setShowImageChoiceDialog(true);
     loadMediaChoices();
   };
-  
+
   const handleSelectExistingImage = (mediaUrl: string) => {
     if (imageChoiceMode === 'product') {
       if (currentMediaType === 'image') {
@@ -470,7 +602,7 @@ const AddProduct = () => {
     setShowSelectDialog(false);
     setShowImageChoiceDialog(false);
   };
-  
+
   const removeProductImage = (index: number) => {
     setProductImageUrls(prev => prev.filter((_, i) => i !== index));
   };
@@ -515,11 +647,11 @@ const AddProduct = () => {
         price: price ? parseFloat(price) : undefined,
         stock: stock ? parseInt(stock) : undefined,
         currency: "INR",
-        variants: variants.map(v => ({ 
+        variants: variants.map(v => ({
           description: v.description,
-          color: v.color, 
-          size: v.size, 
-          price: v.price, 
+          color: v.color,
+          size: v.size,
+          price: v.price,
           stock: v.stock,
           image_url: v.imageUrl,
           video_url: v.videoUrl
@@ -598,15 +730,15 @@ const AddProduct = () => {
 
         <div className="my-4 flex flex-col gap-2">
           <Label>Product Images</Label>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex gap-2 items-center justify-center"
             onClick={() => handleChooseImage('product', -1, 'image')}
           >
             <ImagePlus className="w-4 h-4" />
             Choose Image
           </Button>
-          
+
           {/* Display selected product images */}
           {productImageUrls.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -633,15 +765,15 @@ const AddProduct = () => {
 
         <div className="my-4 flex flex-col gap-2">
           <Label>Product Videos</Label>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex gap-2 items-center justify-center"
             onClick={() => handleChooseImage('product', -1, 'video')}
           >
             <ImagePlus className="w-4 h-4" />
             Choose Video
           </Button>
-          
+
           {/* Display selected product videos */}
           {productVideoUrls.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -683,7 +815,7 @@ const AddProduct = () => {
                   }
                 />
               </div>
-              
+
               <div className="flex flex-wrap gap-2 items-center">
                 <Input
                   placeholder="Color"
@@ -813,7 +945,7 @@ const AddProduct = () => {
               Upload a new {currentMediaType} or select from existing {currentMediaType}s
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex flex-col gap-3 p-4">
             <Button
               variant="outline"
@@ -826,7 +958,7 @@ const AddProduct = () => {
               <Upload className="w-5 h-5" />
               Upload New {currentMediaType === 'image' ? 'Image' : 'Video'}
             </Button>
-            
+
             <Button
               variant="outline"
               className="h-16 flex items-center justify-center gap-2 text-base"
@@ -851,7 +983,7 @@ const AddProduct = () => {
               Choose from your uploaded {currentMediaType}s
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid grid-cols-3 gap-2 p-4">
             {currentMediaType === 'image' ? (
               availableImages.length === 0 ? (
@@ -901,7 +1033,7 @@ const AddProduct = () => {
               Select {currentMediaType} files to upload
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex flex-col gap-4 p-4">
             {/* File Input */}
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
@@ -926,14 +1058,14 @@ const AddProduct = () => {
                     <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {currentMediaType === 'image' ? (
-                          <img 
-                            src={URL.createObjectURL(file)} 
+                          <img
+                            src={URL.createObjectURL(file)}
                             alt={file.name}
                             className="w-10 h-10 object-cover rounded"
                           />
                         ) : (
-                          <video 
-                            src={URL.createObjectURL(file)} 
+                          <video
+                            src={URL.createObjectURL(file)}
                             className="w-16 h-10 object-cover rounded"
                           />
                         )}
