@@ -1,6 +1,12 @@
 from flask import Blueprint, request, jsonify, session
 from datetime import datetime
 from google.cloud import firestore
+import os
+import json
+import requests
+from urllib.parse import urlparse
+from pathlib import Path
+from google import genai
 
 # Blueprint
 product_bp = Blueprint('product_bp', __name__)
@@ -13,6 +19,17 @@ except Exception as e:
     print(f"❌ Failed to init Firestore for product routes: {e}")
     db = None
     FIRESTORE_AVAILABLE = False
+
+# GenAI Client for AI generation
+GENAI_CLIENT = None
+try:
+    project_id = os.getenv("VERTEX_PROJECT", "useful-figure-475210-g7")
+    location = os.getenv("VERTEX_LOCATION", "us-central1")
+    GENAI_CLIENT = genai.Client(vertexai=True, project=project_id, location=location)
+    print(f"✅ GenAI client initialized for project: {project_id}, location: {location}")
+except Exception as e:
+    print(f"⚠️ GenAI client initialization failed: {e}")
+    GENAI_CLIENT = None
 
 
 def get_user_from_session():
@@ -344,6 +361,161 @@ def list_products():
         return jsonify({"error": str(e)}), 401
     except Exception as e:
         print(f"❌ /product/list error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@product_bp.route('/ai-generate/<product_id>', methods=['POST'])
+def ai_generate_product_content(product_id: str):
+    """
+    Generate AI title and description for a product using its image and description.
+    Takes the first image URL and current description as input to GenAI.
+    Returns: { success: bool, ai_generated_title: str, ai_generated_description: str }
+    """
+    try:
+        if not FIRESTORE_AVAILABLE:
+            return jsonify({"error": "Database not available"}), 500
+
+        if not GENAI_CLIENT:
+            return jsonify({"error": "AI service not configured"}), 500
+
+        user_id = get_user_from_session()
+        
+        # Fetch the product
+        items_ref = db.collection("products").document(user_id).collection("items")
+        doc_ref = items_ref.document(product_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            return jsonify({"error": "Product not found"}), 404
+
+        product_data = doc.to_dict() or {}
+        
+        # Verify ownership
+        if product_data.get('user_id') != user_id:
+            return jsonify({"error": "Forbidden"}), 403
+
+        # Get image URL and description
+        image_urls = product_data.get('image_urls', [])
+        if not image_urls:
+            return jsonify({"error": "Product must have at least one image for AI generation"}), 400
+        
+        image_url = image_urls[0]
+        description = product_data.get('description', '')
+        product_name = product_data.get('name', '')
+
+        # Download image
+        try:
+            resp = requests.get(image_url, timeout=15)
+            resp.raise_for_status()
+            image_bytes = resp.content
+        except Exception as e:
+            return jsonify({"error": f"Failed to download product image: {str(e)}"}), 400
+
+        # Determine MIME type
+        try:
+            path = urlparse(image_url).path
+            ext = Path(path).suffix.lower()
+            mime_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".bmp": "image/bmp",
+            }
+            mime_type = mime_map.get(ext, "image/jpeg")
+        except Exception:
+            mime_type = "image/jpeg"
+
+        # Build prompt
+        prompt = (
+            "You are a product listing writer. Analyze the provided product image and the short product "
+            "description and return ONLY a valid JSON object with exactly two keys: "
+            "\"title\" and \"description\".\n\n"
+            "Requirements:\n"
+            "- title: one short SEO-friendly product title (5-12 words max).\n"
+            "- description: 2-3 professional, engaging sentences describing the product and benefits.\n"
+            "- Do NOT include any other keys, commentary, or wrapping text. Return pure JSON only.\n\n"
+            f"Product Name (if any): {product_name or 'Not specified'}\n"
+            f"Product Description: {description}\n\n"
+            "Now produce the JSON."
+        )
+
+        # Call GenAI
+        try:
+            response = GENAI_CLIENT.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[
+                    genai.types.Content(
+                        role="user",
+                        parts=[
+                            genai.types.Part(text=prompt),
+                            genai.types.Part(
+                                inline_data=genai.types.Blob(
+                                    mime_type=mime_type,
+                                    data=image_bytes
+                                )
+                            ),
+                        ],
+                    )
+                ],
+            )
+        except Exception as e:
+            return jsonify({"error": f"AI generation failed: {str(e)}"}), 500
+
+        raw_text = getattr(response, "text", None) or str(response)
+
+        # Parse JSON response
+        ai_title = ""
+        ai_description = ""
+        
+        try:
+            parsed = json.loads(raw_text)
+            ai_title = parsed.get("title", "")
+            ai_description = parsed.get("description", "")
+        except Exception:
+            # Fallback parsing
+            lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+            for line in lines:
+                lw = line.lower()
+                if '"title"' in lw or lw.startswith("title:"):
+                    idx = line.find(":")
+                    candidate = line[idx + 1:].strip() if idx != -1 else line
+                    candidate = candidate.strip().strip('",').strip("'")
+                    if candidate:
+                        ai_title = candidate
+                if '"description"' in lw or lw.startswith("description:"):
+                    idx = line.find(":")
+                    candidate = line[idx + 1:].strip() if idx != -1 else line
+                    candidate = candidate.strip().strip('",').strip("'")
+                    if candidate:
+                        ai_description = candidate
+
+            if not ai_title and lines:
+                ai_title = lines[0].strip().strip('",').strip("'")
+            if not ai_description and len(lines) >= 2:
+                ai_description = " ".join(lines[1:3])
+
+        # Update product with AI-generated content
+        update_doc = {
+            'ai_generated_title': ai_title,
+            'ai_generated_description': ai_description,
+            'updated_at': datetime.utcnow().isoformat(),
+        }
+        doc_ref.update(update_doc)
+
+        return jsonify({
+            "success": True,
+            "ai_generated_title": ai_title,
+            "ai_generated_description": ai_description,
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+    except Exception as e:
+        print(f"❌ /product/ai-generate error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
 
 

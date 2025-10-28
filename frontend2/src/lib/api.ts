@@ -1213,10 +1213,13 @@ export interface ProductItem {
   name: string;
   description?: string;
   price?: number;
+  stock?: number;
   currency?: string;
   image_urls?: string[];
   video_urls?: string[];
   created_at?: string;
+  ai_generated_title?: string;
+  ai_generated_description?: string;
 }
 
 export interface ProductListResponse {
@@ -1268,6 +1271,10 @@ class ProductAPI {
 
   update(productId: string, payload: Partial<CreateProductRequest>): Promise<{ success: boolean; message: string; error?: string }> {
     return this.request(`/update/${productId}`, 'PUT', payload);
+  }
+
+  generateAI(productId: string): Promise<{ success: boolean; ai_generated_title: string; ai_generated_description: string; error?: string }> {
+    return this.request(`/ai-generate/${productId}`, 'POST');
   }
 }
 

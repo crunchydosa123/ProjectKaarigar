@@ -32,6 +32,8 @@ interface Product {
   video_urls?: string[];
   created_at?: string;
   updated_at?: string;
+  ai_generated_title?: string;
+  ai_generated_description?: string;
 }
 
 const ProductDetail: React.FC = () => {
@@ -44,6 +46,7 @@ const ProductDetail: React.FC = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showListDialog, setShowListDialog] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -161,6 +164,41 @@ const ProductDetail: React.FC = () => {
 
   const handleListOnMarketplace = (marketplace: string) => {
     alert(`List on ${marketplace} - Integration coming soon!\n\nThis will allow you to automatically list your product on ${marketplace} with all images, descriptions, and variants.`);
+  };
+
+  const handleGenerateAI = async () => {
+    if (!product || !productId) {
+      alert('Product not found');
+      return;
+    }
+
+    if (!product.image_urls || product.image_urls.length === 0) {
+      alert('Product must have at least one image for AI generation');
+      return;
+    }
+
+    try {
+      setAiGenerating(true);
+      const response = await productAPI.generateAI(productId);
+      
+      if (response && response.success) {
+        // Update local product state with AI-generated content
+        setProduct({
+          ...product,
+          ai_generated_title: response.ai_generated_title,
+          ai_generated_description: response.ai_generated_description,
+        } as any);
+        
+        alert('AI content generated successfully!');
+      } else {
+        throw new Error((response as any)?.error || 'AI generation failed');
+      }
+    } catch (err: any) {
+      console.error('AI generation failed:', err);
+      alert('AI generation failed: ' + (err.message || err));
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   if (loading) {
@@ -284,6 +322,55 @@ const ProductDetail: React.FC = () => {
             <span className="text-sm">Share Product</span>
           </Button>
         </div>
+
+        {/* AI Generation Button */}
+        <Button
+          onClick={handleGenerateAI}
+          className="w-full h-auto py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          disabled={aiGenerating || !product.image_urls || product.image_urls.length === 0}
+        >
+          {aiGenerating ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+              Generating AI Content...
+            </>
+          ) : (
+            <>
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Generate AI Title & Description
+            </>
+          )}
+        </Button>
+
+        {/* AI Generated Content Display */}
+        {((product as any).ai_generated_title || (product as any).ai_generated_description) && (
+          <Card className="border-purple-200 bg-purple-50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                AI-Generated Content
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(product as any).ai_generated_title && (
+                <div>
+                  <h4 className="font-semibold text-sm text-purple-700 mb-1">AI Title</h4>
+                  <p className="text-gray-800">{(product as any).ai_generated_title}</p>
+                </div>
+              )}
+              {(product as any).ai_generated_description && (
+                <div>
+                  <h4 className="font-semibold text-sm text-purple-700 mb-1">AI Description</h4>
+                  <p className="text-gray-700 whitespace-pre-wrap">{(product as any).ai_generated_description}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Variants */}
         {product.variants && product.variants.length > 0 && (
