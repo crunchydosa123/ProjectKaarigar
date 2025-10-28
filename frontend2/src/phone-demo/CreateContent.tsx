@@ -1425,18 +1425,18 @@ const CreateVideo2 = () => {
                 <p className="font-medium text-gray-800">{selectedVideo.title}</p>
                 <p className="text-sm text-gray-600 capitalize">{selectedVideo.type}</p>
                 <p className="text-xs text-gray-500">Ready for AI editing</p>
-              </div>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
+                </div>
+          </div>
+        )}
 
       {/* Video Editor */}
       <div className="flex-1 p-4">
         <div className="bg-[#1e1e1e] text-white shadow-lg p-4 w-full max-w-2xl mx-auto rounded-lg">
           <VideoEditorPreview selectedVideoUrl={selectedVideoUrl} />
-        </div>
       </div>
+    </div>
     </div>
   )
 }

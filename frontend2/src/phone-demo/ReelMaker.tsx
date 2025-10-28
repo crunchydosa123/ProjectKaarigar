@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
-  Video, 
-  Image, 
   Play, 
   Loader2, 
   CheckCircle, 
@@ -16,30 +13,38 @@ import {
   ArrowLeft,
   Clock,
   FileVideo,
-  ImageIcon,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon
 } from 'lucide-react';
-import { mediaAPI, reelAPI, type MediaItem, type ReelGenerationRequest, type GeneratedReel } from '@/lib/api';
+import { mediaAPI, reelGeneratorAPI, imageGenAPI, type GeneratedReel, type MediaItem } from '@/lib/api';
+import { usePage } from '@/contexts/PageContext';
 
 interface ReelMakerProps {
   onBack: () => void;
   onComplete?: () => void;
 }
 
+interface CombinedImageItem extends MediaItem {
+  type: 'uploaded' | 'edited';
+}
+
 const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
-  const [userImages, setUserImages] = useState<MediaItem[]>([]);
+  const { user } = usePage();
+  const [userImages, setUserImages] = useState<CombinedImageItem[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [durationSeconds, setDurationSeconds] = useState(4);
   const [generating, setGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [generationMessage, setGenerationMessage] = useState('');
   const [generatedReels, setGeneratedReels] = useState<GeneratedReel[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
-  const [loadingReels, setLoadingReels] = useState(true);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  
+  // AI Script Suggestion states
+  const [suggestingScript, setSuggestingScript] = useState(false);
+  const [scriptSuggestions, setScriptSuggestions] = useState<string[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Load user images and generated reels on component mount
   useEffect(() => {
@@ -49,55 +54,194 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
 
   const loadUserImages = async () => {
     try {
+      console.log('🔄 Starting to load user images...');
       setLoadingImages(true);
-      const response = await mediaAPI.listMediaByType('images');
-      if (response.success) {
-        setUserImages(response.media);
-        console.log(`📁 Loaded ${response.media.length} user images`);
-      } else {
-        console.error('Failed to load user images:', response.error);
+      
+      // Load both regular images and edited images
+      const [imagesResponse, editedImagesResponse] = await Promise.all([
+        mediaAPI.listMediaByType('images'),
+        imageGenAPI.getGeneratedImages()
+      ]);
+      
+      console.log('📡 Media API response (images):', imagesResponse);
+      console.log('📡 Media API response (edited images):', editedImagesResponse);
+      
+      const allImages: CombinedImageItem[] = [];
+      
+      // Add regular images
+      if (imagesResponse.success) {
+        const regularImages: CombinedImageItem[] = imagesResponse.media.map((img: MediaItem) => ({
+          ...img,
+          type: 'uploaded' as const
+        }));
+        allImages.push(...regularImages);
+        console.log(`📁 Loaded ${regularImages.length} regular images`);
       }
+      
+      // Add edited images
+      if (editedImagesResponse.success) {
+        const editedImages: CombinedImageItem[] = editedImagesResponse.images.map((img: any) => ({
+          ...img,
+          type: 'edited' as const
+        }));
+        allImages.push(...editedImages);
+        console.log(`🎨 Loaded ${editedImages.length} edited images`);
+      }
+      
+      setUserImages(allImages);
+      console.log(`📁 Successfully loaded ${allImages.length} total images (${allImages.filter(img => img.type === 'uploaded').length} uploaded + ${allImages.filter(img => img.type === 'edited').length} edited):`, allImages);
+      
     } catch (error) {
-      console.error('Error loading user images:', error);
+      console.error('❌ Error loading user images:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      setUserImages([]);
     } finally {
       setLoadingImages(false);
+      console.log('✅ Finished loading user images');
     }
   };
 
   const loadGeneratedReels = async () => {
+    if (!user?.userId) {
+      console.log('❌ No user ID available for loading reels');
+      return;
+    }
+    
     try {
-      setLoadingReels(true);
-      const response = await reelAPI.getGeneratedReels();
+      console.log('🔄 Starting to load generated reels for user:', user.userId);
+      const response = await reelGeneratorAPI.getUserReels(user.userId);
+      console.log('📡 Reel Generator API response:', response);
+      
       if (response.success) {
         setGeneratedReels(response.reels);
-        console.log(`🎬 Loaded ${response.reels.length} generated reels`);
+        console.log(`🎬 Successfully loaded ${response.reels.length} generated reels:`, response.reels);
       } else {
-        console.error('Failed to load generated reels:', response.error);
+        console.error('❌ Failed to load generated reels:', response.error);
+        setGeneratedReels([]);
       }
     } catch (error) {
-      console.error('Error loading generated reels:', error);
+      console.error('❌ Error loading generated reels:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      setGeneratedReels([]);
     } finally {
-      setLoadingReels(false);
+      console.log('✅ Finished loading generated reels');
     }
   };
 
   const handleImageSelect = (imageId: string) => {
-    setSelectedImageIds(prev => 
-      prev.includes(imageId) 
+    console.log('🖼️ Image selection changed:', imageId);
+    console.log('Current selected IDs:', selectedImageIds);
+    
+    setSelectedImageIds(prev => {
+      const newSelection = prev.includes(imageId) 
         ? prev.filter(id => id !== imageId)
-        : [...prev, imageId]
-    );
+        : [...prev, imageId];
+      
+      console.log('New selection:', newSelection);
+      return newSelection;
+    });
   };
 
   const handleSelectAll = () => {
+    console.log('🔄 Select all triggered');
+    console.log('Current selection:', selectedImageIds);
+    console.log('Available images:', userImages.length);
+    
     if (selectedImageIds.length === userImages.length) {
+      console.log('📤 Deselecting all images');
       setSelectedImageIds([]);
     } else {
+      console.log('📥 Selecting all images');
       setSelectedImageIds(userImages.map(img => img.id));
     }
   };
 
+
+  const handleSuggestScript = async () => {
+    if (!user?.userId) {
+      setGenerationStatus('error');
+      setGenerationMessage('Please log in to use AI suggestions');
+      return;
+    }
+
+    if (!prompt.trim()) {
+      setGenerationStatus('error');
+      setGenerationMessage('Please enter a prompt first');
+      return;
+    }
+
+    try {
+      setSuggestingScript(true);
+      setGenerationStatus('idle');
+      setGenerationMessage('');
+
+      console.log('🤖 Starting AI script suggestion process...');
+      console.log('📝 Prompt:', prompt);
+      console.log('🖼️ Selected image IDs:', selectedImageIds);
+      console.log('👤 User ID:', user.userId);
+
+      console.log('🔄 Getting image URLs for selected images...');
+      const selectedImages = userImages.filter(img => selectedImageIds.includes(img.id));
+      const imageUrls = selectedImages.map(img => img.public_url);
+      console.log('🔗 Image URLs:', imageUrls);
+
+      console.log('📡 Calling reelGeneratorAPI.suggestScript...');
+      const response = await reelGeneratorAPI.suggestScript({
+        prompt: prompt.trim(),
+        imageUrls: imageUrls
+      }, user.userId);
+
+      console.log('📡 Reel Generator API response:', response);
+
+      if (response.success) {
+        setScriptSuggestions(response.suggestions);
+        setShowSuggestions(true);
+        setGenerationStatus('success');
+        setGenerationMessage(`Generated ${response.suggestions.length} AI script suggestions!`);
+        console.log('✅ Script suggestions generated successfully:', response.suggestions);
+      } else {
+        setGenerationStatus('error');
+        setGenerationMessage(response.error || 'Failed to generate script suggestions');
+        console.error('❌ Script suggestion failed:', response.error);
+      }
+    } catch (error) {
+      console.error('❌ Script suggestion error:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      setGenerationStatus('error');
+      setGenerationMessage(error instanceof Error ? error.message : 'Script suggestion failed');
+    } finally {
+      setSuggestingScript(false);
+      console.log('✅ Finished script suggestion process');
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    setSelectedSuggestion(suggestion);
+    setPrompt(suggestion);
+    setShowSuggestions(false);
+    console.log('✅ Selected suggestion:', suggestion);
+  };
+
   const handleGenerateReel = async () => {
+    if (!user?.userId) {
+      setGenerationStatus('error');
+      setGenerationMessage('Please log in to generate reels');
+      return;
+    }
+
     if (selectedImageIds.length === 0) {
       setGenerationStatus('error');
       setGenerationMessage('Please select at least one image');
@@ -110,29 +254,28 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       return;
     }
 
-    if (!title.trim()) {
-      setGenerationStatus('error');
-      setGenerationMessage('Please enter a title');
-      return;
-    }
-
     try {
       setGenerating(true);
       setGenerationStatus('idle');
       setGenerationMessage('');
 
-      console.log('🎬 Starting reel generation...');
-      console.log('Selected images:', selectedImageIds);
-      console.log('Prompt:', prompt);
-      console.log('Title:', title);
+      console.log('🎬 Starting reel generation process...');
+      console.log('📝 Prompt:', prompt);
+      console.log('🖼️ Selected image IDs:', selectedImageIds);
+      console.log('👤 User ID:', user.userId);
 
-      const response = await reelAPI.generateReel({
-        selected_image_ids: selectedImageIds,
+      console.log('🔄 Getting image URLs for selected images...');
+      const selectedImages = userImages.filter(img => selectedImageIds.includes(img.id));
+      const imageUrls = selectedImages.map(img => img.public_url);
+      console.log('🔗 Image URLs:', imageUrls);
+
+      console.log('📡 Calling reelGeneratorAPI.generateReel...');
+      const response = await reelGeneratorAPI.generateReel({
         prompt: prompt.trim(),
-        title: title.trim(),
-        description: description.trim(),
-        duration_seconds: durationSeconds
-      });
+        imageUrls: imageUrls
+      }, user.userId);
+
+      console.log('📡 Reel Generator API response:', response);
 
       if (response.success) {
         setGenerationStatus('success');
@@ -140,16 +283,18 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
         console.log('✅ Reel generated successfully:', response);
         
         // Refresh the generated reels list
+        console.log('🔄 Refreshing generated reels list...');
         loadGeneratedReels();
         
         // Reset form
         setSelectedImageIds([]);
         setPrompt('');
-        setTitle('');
-        setDescription('');
+        setSelectedSuggestion(null);
+        console.log('🔄 Form reset completed');
         
         // Call onComplete if provided
         if (onComplete) {
+          console.log('🔄 Calling onComplete callback...');
           setTimeout(() => {
             onComplete();
           }, 2000);
@@ -160,11 +305,18 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
         console.error('❌ Reel generation failed:', response.error);
       }
     } catch (error) {
+      console.error('❌ Reel generation error:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
       setGenerationStatus('error');
       setGenerationMessage(error instanceof Error ? error.message : 'Reel generation failed');
-      console.error('❌ Reel generation error:', error);
     } finally {
       setGenerating(false);
+      console.log('✅ Finished reel generation process');
     }
   };
 
@@ -207,33 +359,25 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Title Input */}
+            {/* Image Selection */}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Reel Title *
+                Select Images from Media *
               </label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter reel title"
-                disabled={generating}
+              <Button
+                onClick={() => setIsImageModalOpen(true)}
+                variant="outline"
                 className="w-full"
-              />
-            </div>
-
-            {/* Description Input */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Description
-              </label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter reel description (optional)"
-                rows={2}
                 disabled={generating}
-                className="w-full"
-              />
+              >
+                <ImageIcon className="w-4 h-4 mr-2" />
+                {selectedImageIds.length === 0 ? 'Choose Images' : `${selectedImageIds.length} Images Selected`}
+              </Button>
+              {selectedImageIds.length > 0 && (
+                <div className="mt-2 text-sm text-gray-600">
+                  Selected {selectedImageIds.length} image(s) from your media
+                </div>
+              )}
             </div>
 
             {/* Prompt Input */}
@@ -251,26 +395,57 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
               />
             </div>
 
-            {/* Duration Input */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Duration per Image (seconds)
-              </label>
-              <Input
-                type="number"
-                value={durationSeconds}
-                onChange={(e) => setDurationSeconds(parseInt(e.target.value) || 4)}
-                min="1"
-                max="10"
-                disabled={generating}
-                className="w-full"
-              />
-            </div>
+            {/* AI Script Suggestion Button */}
+            <Button
+              onClick={handleSuggestScript}
+              disabled={suggestingScript || !prompt.trim()}
+              variant="outline"
+              className="w-full"
+            >
+              {suggestingScript ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating AI Suggestions...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Suggest AI Script
+                </>
+              )}
+            </Button>
+
+            {/* AI Script Suggestions */}
+            {showSuggestions && scriptSuggestions.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  AI Script Suggestions:
+                </label>
+                {scriptSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSuggestionSelect(suggestion)}
+                    className={`w-full p-3 text-left border rounded-md transition-all ${
+                      selectedSuggestion === suggestion
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <div className="text-sm font-medium text-gray-900 mb-1">
+                      Suggestion {index + 1}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {suggestion}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Generate Button */}
             <Button
               onClick={handleGenerateReel}
-              disabled={generating || selectedImageIds.length === 0 || !prompt.trim() || !title.trim()}
+              disabled={generating || selectedImageIds.length === 0 || !prompt.trim()}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white"
             >
               {generating ? (
@@ -280,7 +455,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                 </>
               ) : (
                 <>
-                  <Video className="w-4 h-4 mr-2" />
+                  <Sparkles className="w-4 h-4 mr-2" />
                   Generate Reel
                 </>
               )}
@@ -299,60 +474,6 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                   <XCircle className="w-4 h-4" />
                 )}
                 {generationMessage}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Image Selection */}
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Image className="w-5 h-5 text-purple-600" />
-                Selected Images ({selectedImageIds.length})
-              </div>
-              <Button
-                onClick={() => setIsImageModalOpen(true)}
-                variant="outline"
-                size="sm"
-              >
-                <Image className="w-4 h-4 mr-1" />
-                Choose Images
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedImageIds.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <ImageIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>No images selected. Click "Choose Images" to select images for your reel.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 mb-3">
-                  {selectedImageIds.length} image{selectedImageIds.length !== 1 ? 's' : ''} selected
-                </p>
-                <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
-                  {selectedImageIds.map((imageId) => {
-                    const image = userImages.find(img => img.id === imageId);
-                    return image ? (
-                      <div key={imageId} className="relative">
-                        <img
-                          src={image.public_url}
-                          alt={image.title || image.filename}
-                          className="w-full h-16 object-cover rounded border"
-                        />
-                        <button
-                          onClick={() => handleImageSelect(imageId)}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ) : null;
-                  })}
-                </div>
               </div>
             )}
           </CardContent>
@@ -390,11 +511,11 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatDate(reel.generated_at)}
+                        {formatDate(reel.created_at)}
                       </div>
                       <div className="flex items-center gap-1">
-                        <Image className="w-3 h-3" />
-                        {reel.selected_image_ids.length} images
+                        <ImageIcon className="w-3 h-3" />
+                        {reel.images_count} images
                       </div>
                     </div>
                     
@@ -421,7 +542,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Image className="w-5 h-5 text-purple-600" />
+              <ImageIcon className="w-5 h-5 text-purple-600" />
               Choose Images for Reel Generation
             </DialogTitle>
           </DialogHeader>
@@ -439,9 +560,17 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">
-                    Select images to include in your reel ({selectedImageIds.length} selected)
-                  </p>
+                  <div className="text-sm text-gray-600">
+                    <p>Select images to include in your reel ({selectedImageIds.length} selected)</p>
+                    <div className="flex gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">
+                        {userImages.filter(img => img.type === 'uploaded').length} Uploaded
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {userImages.filter(img => img.type === 'edited').length} AI Edited
+                      </Badge>
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       onClick={handleSelectAll}
@@ -479,6 +608,18 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                         <p className="text-xs font-medium text-gray-900 truncate">
                           {image.title || image.original_filename}
                         </p>
+                        <div className="flex items-center gap-1 mt-1">
+                          {image.type === 'edited' && (
+                            <Badge variant="secondary" className="text-xs px-1 py-0">
+                              AI Edited
+                            </Badge>
+                          )}
+                          {image.type === 'uploaded' && (
+                            <Badge variant="outline" className="text-xs px-1 py-0">
+                              Uploaded
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -493,3 +634,4 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
 };
 
 export default ReelMaker;
+
