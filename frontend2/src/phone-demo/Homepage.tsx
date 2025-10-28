@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Lightbulb, Store, Upload, User } from 'lucide-react';
 import { Camera } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
@@ -5,16 +6,31 @@ import { LogOut } from 'lucide-react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePage } from '@/contexts/PageContext';
+import { productAPI } from '@/lib/api';
+import type { ProductItem } from '@/lib/api';
 
 const Homepage = () => {
-  const { setCurrentPage, user, logout } = usePage();
+  const { setCurrentPage, user, logout, setSelectedProductId } = usePage();
   
-  const products = [
-    { name: "Product 1", image: "/product1.png" },
-    { name: "Product 2", image: "/product2.png" },
-    { name: "Product 3", image: "/product3.png" },
-    { name: "Product 4", image: "/product4.png" },
-  ];
+  const [products, setProducts] = useState<ProductItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const resp = await productAPI.list();
+        if (resp && resp.success && mounted) {
+          setProducts(resp.products || []);
+        }
+      } catch (err) {
+        console.error('Failed to load products:', err);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   return (
     <div
       className="w-full h-full bg-cover bg-center flex flex-col p-3"
@@ -105,22 +121,32 @@ const Homepage = () => {
         
 
         <div className='flex space-x-3 overflow-x-auto pb-2 hide-scrollbar'>
-          {products.map((product, index) => (
-            <Card
-              key={index}
-              className='min-w-[160px] h-24 flex-shrink-0 relative p-0 overflow-hidden rounded-lg cursor-pointer'
-            >
-              <div
-                className='absolute inset-0 bg-cover bg-center'
-                style={{ backgroundImage: `url(${product.image})` }}
-              ></div>
+          {products.map((product, index) => {
+            const imageUrl = (product.image_urls && product.image_urls.length > 0)
+              ? product.image_urls[0]
+              : '/product1.png';
 
-              <div className='absolute inset-0 bg-black/30'></div>
-              <div className='absolute bottom-2 left-2 text-white font-bold text-sm'>
-                {product.name}
-              </div>
-            </Card>
-          ))}
+            return (
+              <Card
+                key={product.id || index}
+                className='min-w-[160px] h-24 flex-shrink-0 relative p-0 overflow-hidden rounded-lg cursor-pointer'
+                onClick={() => {
+                  setSelectedProductId(product.id || null);
+                  setCurrentPage('product-detail');
+                }}
+              >
+                <div
+                  className='absolute inset-0 bg-cover bg-center'
+                  style={{ backgroundImage: `url(${imageUrl})` }}
+                ></div>
+
+                <div className='absolute inset-0 bg-black/30'></div>
+                <div className='absolute bottom-2 left-2 text-white font-bold text-sm'>
+                  {product.name}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
