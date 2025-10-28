@@ -2,7 +2,7 @@
 """
 Image(s) to Veo Reel Converter (interactive fallback)
 
-- Accepts multiple images (paths, glob or directory)
+- Accepts multiple images (paths, URLs, glob or directory)
 - If images or prompt are omitted on the command line, asks interactively
 - Uses ffmpeg only to stitch clips (no moviepy anywhere)
 
@@ -10,6 +10,7 @@ Enhancements added in this version:
 - Support producing multiple segments per image (useful when only 1 image is provided to make a multi-shot reel)
 - Support text captions applied to clips (single caption, per-image captions, or per-segment captions)
 - Support generating a video purely from text (no images) using Veo
+- Support for image URLs (HTTP/HTTPS including Google Cloud Storage)
 - New CLI flags: --segments, --captions, --captions-file, --text-only
 - Better error handling and logging
 - API helper function for Flask integration
@@ -30,6 +31,9 @@ from typing import List, Optional, Dict
 import subprocess
 import json
 from datetime import datetime
+import logging
+import requests
+from io import BytesIO
 
 # Google GenAI imports
 from google import genai
@@ -45,6 +49,10 @@ client = genai.Client(
     project=PROJECT_ID,
     location=LOCATION
 )
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Logging helper
 def log_event(event_type: str, message: str, details: Optional[Dict] = None) -> None:
@@ -95,13 +103,74 @@ def _check_ffmpeg_available() -> bool:
         return False
 
 
+def _is_url(path: str) -> bool:
+    """Check if path is a URL"""
+    return path.startswith('http://') or path.startswith('https://')
+
+
+def _download_image_from_url(url: str, tmp_dir: str) -> Optional[str]:
+    """Download image from URL to temporary directory
+    
+    Args:
+        url: HTTP(S) URL of the image
+        tmp_dir: Temporary directory for download
+        
+    Returns:
+        Path to downloaded file or None if failed
+    """
+    try:
+        log_event("DOWNLOAD", f"Downloading image from URL", {"url": url[:80] + "..."})
+        response = requests.get(url, timeout=30, stream=True)
+        response.raise_for_status()
+        
+        # Detect file extension from URL or content-type
+        content_type = response.headers.get('content-type', '').lower()
+        if 'jpeg' in content_type or 'jpg' in content_type:
+            ext = '.jpg'
+        elif 'png' in content_type:
+            ext = '.png'
+        elif 'webp' in content_type:
+            ext = '.webp'
+        else:
+            # Try to extract from URL
+            if url.lower().endswith(('.jpg', '.jpeg')):
+                ext = '.jpg'
+            elif url.lower().endswith('.png'):
+                ext = '.png'
+            elif url.lower().endswith('.webp'):
+                ext = '.webp'
+            else:
+                ext = '.jpg'  # Default
+        
+        # Create unique filename
+        filename = f"downloaded_{os.urandom(6).hex()}{ext}"
+        filepath = os.path.join(tmp_dir, filename)
+        
+        # Download with progress
+        with open(filepath, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        file_size_kb = os.path.getsize(filepath) / 1024
+        log_event("SUCCESS", f"Image downloaded", {"file": filename, "size_kb": f"{file_size_kb:.1f}"})
+        
+        return filepath
+        
+    except requests.RequestException as e:
+        log_event("ERROR", f"Failed to download image", {"url": url[:80], "error": str(e)})
+        return None
+    except Exception as e:
+        log_event("ERROR", f"Unexpected error downloading image", {"url": url[:80], "error": str(e)})
+        return None
+
+
 # -------------------- Gemini prompt optimizer --------------------
-def optimize_prompt_with_gemini(user_prompt: str, image_path: Optional[str] = None) -> str:
+def optimize_prompt_with_gemini(user_prompt: str, image_input: Optional[str] = None) -> str:
     """Optimize prompt using Gemini 2.5 Flash for video generation
     
     Args:
         user_prompt: Original user prompt
-        image_path: Optional path to image for context
+        image_input: Optional path or URL to image for context
         
     Returns:
         Optimized prompt string
@@ -121,15 +190,10 @@ def optimize_prompt_with_gemini(user_prompt: str, image_path: Optional[str] = No
         """
         contents.append(gemini_prompt)
         
-        if image_path:
-            if not os.path.exists(image_path):
-                log_event("WARN", f"Image not found for context", {"path": image_path})
-            else:
-                with open(image_path, "rb") as f:
-                    image_bytes = f.read()
-                file_ext = Path(image_path).suffix.lower()
-                mime_type = "image/jpeg" if file_ext in ['.jpg', '.jpeg'] else "image/png"
-                contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
+        if image_input:
+            image_part = _process_image_for_gemini(image_input)
+            if image_part:
+                contents.append(image_part)
                 log_event("INFO", "Image attached to Gemini for context optimization")
 
         response = client.models.generate_content(
@@ -151,13 +215,68 @@ def optimize_prompt_with_gemini(user_prompt: str, image_path: Optional[str] = No
         return fallback_prompt
 
 
+def _process_image_for_gemini(image_input: str) -> Optional[types.Part]:
+    """Process image from local path or URL for Gemini
+    
+    Args:
+        image_input: Local file path or HTTP(S) URL
+        
+    Returns:
+        types.Part object or None if failed
+    """
+    try:
+        if _is_url(image_input):
+            # Download image from URL
+            log_event("INFO", f"Fetching image for Gemini context")
+            response = requests.get(image_input, timeout=30)
+            response.raise_for_status()
+            image_bytes = response.content
+            
+            # Detect mime type
+            content_type = response.headers.get('content-type', '').lower()
+            if 'jpeg' in content_type or 'jpg' in content_type:
+                mime_type = "image/jpeg"
+            elif 'png' in content_type:
+                mime_type = "image/png"
+            elif 'webp' in content_type:
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"  # Default
+            
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+        else:
+            # Load from local file
+            if not os.path.exists(image_input):
+                log_event("WARN", f"Image not found for context", {"path": image_input})
+                return None
+            
+            with open(image_input, "rb") as f:
+                image_bytes = f.read()
+            
+            file_ext = Path(image_input).suffix.lower()
+            if file_ext in ['.jpg', '.jpeg']:
+                mime_type = "image/jpeg"
+            elif file_ext == '.png':
+                mime_type = "image/png"
+            elif file_ext == '.webp':
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"
+                
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            
+    except Exception as e:
+        log_event("ERROR", f"Failed to process image for Gemini", {"error": str(e)})
+        return None
+
+
 # -------------------- Video generation --------------------
-def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_seconds: int, 
+def generate_clip_for_image(image_input: str, optimized_prompt: str, duration_seconds: int, 
                            tmp_dir: str, idx: int) -> str:
     """Generate video clip from image using Veo 3.1
     
     Args:
-        image_path: Path to input image
+        image_input: Path or URL to input image (supports gs:// and https:// URLs)
         optimized_prompt: Optimized text prompt
         duration_seconds: Clip duration in seconds
         tmp_dir: Temporary directory for output
@@ -170,23 +289,91 @@ def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_sec
         RuntimeError: If generation fails
     """
     try:
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image not found: {image_path}")
+        # Handle different input types
+        if _is_url(image_input):
+            # For URLs (both https:// and gs://)
+            image_name = f"url_image_{idx}"
+            display_url = image_input[:80] + "..." if len(image_input) > 80 else image_input
+            log_event("GENERATE", f"Starting image-to-video generation from URL", 
+                     {"duration": f"{duration_seconds}s", "url": display_url})
+            
+            out_name = Path(tmp_dir) / f"{idx:03d}_{image_name}_veo.mp4"
+            
+            # Detect mime type from URL
+            if image_input.lower().endswith('.png'):
+                mime_type = "image/png"
+            elif image_input.lower().endswith('.webp'):
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"  # Default
+            
+            # Check if it's a GCS URI or HTTPS URL
+            if image_input.startswith('gs://'):
+                # Direct GCS URI - use as-is
+                log_event("INFO", "Using GCS URI directly")
+                image_for_veo = types.Image(
+                    gcs_uri=image_input,
+                    mime_type=mime_type
+                )
+            else:
+                # HTTPS URL - need to download and save to temp file OR upload to GCS
+                # For now, we'll download and save locally, then use from_file
+                log_event("DOWNLOAD", "Downloading image from HTTPS URL")
+                try:
+                    response = requests.get(image_input, timeout=30)
+                    response.raise_for_status()
+                    image_bytes = response.content
+                    
+                    # Update mime type from response headers
+                    content_type = response.headers.get('content-type', '').lower()
+                    if 'jpeg' in content_type or 'jpg' in content_type:
+                        ext = '.jpg'
+                        mime_type = "image/jpeg"
+                    elif 'png' in content_type:
+                        ext = '.png'
+                        mime_type = "image/png"
+                    elif 'webp' in content_type:
+                        ext = '.webp'
+                        mime_type = "image/webp"
+                    else:
+                        ext = '.jpg'
+                        mime_type = "image/jpeg"
+                    
+                    log_event("SUCCESS", f"Image downloaded ({len(image_bytes) / 1024:.1f} KB)")
+                    
+                    # Save to temporary file
+                    temp_image_path = os.path.join(tmp_dir, f"temp_image_{idx}{ext}")
+                    with open(temp_image_path, 'wb') as f:
+                        f.write(image_bytes)
+                    
+                    log_event("INFO", f"Image saved to temp file", {"path": temp_image_path})
+                    
+                    # Use from_file for local temp file
+                    image_for_veo = types.Image.from_file(location=temp_image_path)
+                    
+                except Exception as download_error:
+                    raise RuntimeError(f"Failed to download/save image from URL: {download_error}")
+            
+        else:
+            # Local file path
+            if not os.path.exists(image_input):
+                raise FileNotFoundError(f"Image not found: {image_input}")
+            
+            image_name = Path(image_input).stem
+            out_name = Path(tmp_dir) / f"{idx:03d}_{image_name}_veo.mp4"
+            
+            file_size_kb = os.path.getsize(image_input) / 1024
+            log_event("GENERATE", f"Starting image-to-video generation", 
+                     {"image": image_name, "size_kb": f"{file_size_kb:.1f}", "duration": f"{duration_seconds}s"})
+            
+            # Use from_file for local images
+            image_for_veo = types.Image.from_file(location=image_input)
         
-        image_name = Path(image_path).stem
-        out_name = Path(tmp_dir) / f"{idx:03d}_{image_name}_veo.mp4"
-        
-        with open(image_path, "rb") as f:
-            img_bytes = f.read()
-        
-        file_size_kb = len(img_bytes) / 1024
-        log_event("GENERATE", f"Starting image-to-video generation", 
-                 {"image": image_name, "size_kb": f"{file_size_kb:.1f}", "duration": f"{duration_seconds}s"})
-        
+        # Generate video using Veo (same for all input types)
         operation = client.models.generate_videos(
             model="veo-3.1-generate-preview",
             prompt=optimized_prompt,
-            image=types.Image.from_file(location=image_path),
+            image=image_for_veo,
             config=types.GenerateVideosConfig(
                 aspect_ratio="9:16",
                 number_of_videos=1,
@@ -198,17 +385,23 @@ def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_sec
             ),
         )
         
-        log_event("INFO", "Video generation started...")
+        log_event("INFO", "Video generation operation started...")
+        
+        # Poll for completion (like your working example)
         poll_count = 0
         while not operation.done:
             time.sleep(10)
-            operation = client.operations.get(operation)
+            operation = client.operations.get(operation)  # Refresh operation status
             poll_count += 1
             if poll_count % 3 == 0:  # Log every 30 seconds
                 log_event("PROGRESS", f"Still generating ({poll_count * 10}s elapsed)")
         
-        if not operation.response:
-            raise RuntimeError("No response from video generation operation")
+        # Check for errors
+        if operation.error:
+            raise RuntimeError(f"Veo operation failed: {operation.error}")
+        
+        if not operation.result:
+            raise RuntimeError("No result from video generation operation")
         
         result = operation.result
         if not result.generated_videos:
@@ -217,6 +410,7 @@ def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_sec
         generated = result.generated_videos[0]
         video_bytes = generated.video.video_bytes
         
+        # Save video to local file
         with open(out_name, "wb") as f:
             f.write(video_bytes)
         
@@ -227,10 +421,11 @@ def generate_clip_for_image(image_path: str, optimized_prompt: str, duration_sec
         return str(out_name)
         
     except Exception as e:
-        log_event("ERROR", f"Failed to generate clip for image", {"image": image_path, "error": str(e)})
-        raise RuntimeError(f"Failed to generate clip for {image_path}: {e}")
-
-
+        error_input = image_input[:100] + "..." if len(image_input) > 100 else image_input
+        log_event("ERROR", f"Failed to generate clip for image", {"image": error_input, "error": str(e)})
+        raise RuntimeError(f"Failed to generate clip for {error_input}: {e}")
+    
+          
 def generate_clip_for_text(optimized_prompt: str, duration_seconds: int, 
                           tmp_dir: str, idx: int) -> str:
     """Generate video clip from text-only prompt using Veo 3.1
@@ -386,15 +581,28 @@ def stitch_clips(clips: List[str], final_output: str, keep_temp: bool = False) -
 def collect_image_paths(inputs: List[str]) -> List[str]:
     """Collect and deduplicate image paths from various input formats
     
+    Supports:
+    - Local file paths
+    - HTTP(S) URLs (including Google Cloud Storage)
+    - Directories
+    - Glob patterns
+    
     Args:
-        inputs: List of file paths, directories, or glob patterns
+        inputs: List of file paths, URLs, directories, or glob patterns
         
     Returns:
-        Deduplicated list of valid image paths
+        Deduplicated list of valid image paths/URLs
     """
     paths = []
     
     for item in inputs:
+        # Check if it's a URL
+        if _is_url(item):
+            display_url = item[:80] + "..." if len(item) > 80 else item
+            log_event("INFO", f"Adding image URL", {"url": display_url})
+            paths.append(item)
+            continue
+        
         item = os.path.expanduser(item)
         
         if os.path.isdir(item):
@@ -439,9 +647,10 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
     - Multiple segments per image
     - Text captions on clips
     - Text-only generation (no images)
+    - Image URLs (HTTP/HTTPS including Google Cloud Storage)
     
     Args:
-        image_inputs: List of image paths (can be empty for text-only)
+        image_inputs: List of image paths or URLs (can be empty for text-only)
         user_prompt: Text prompt for video generation
         output_name: Output MP4 filename (auto-generated if None)
         clip_duration: Duration per clip in seconds
@@ -487,7 +696,7 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
     if text_only:
         total_segments = max(1, segments)
 
-    # Normalize captions list
+    # Normalize captions list (kept for future use)
     caption_sequence = []
     if captions:
         if len(captions) == 1:
@@ -506,7 +715,7 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
 
         if text_only and not image_paths:
             log_event("INFO", f"Generating text-only content with {total_segments} segment(s)")
-            optimized_prompt_base = optimize_prompt_with_gemini(user_prompt, image_path=None)
+            optimized_prompt_base = optimize_prompt_with_gemini(user_prompt, image_input=None)
             
             for s in range(total_segments):
                 variation = motion_variations[s % len(motion_variations)]
@@ -514,28 +723,36 @@ def convert_images_to_reel(image_inputs: List[str], user_prompt: str, output_nam
                 try:
                     clip_path = generate_clip_for_text(optimized_prompt, duration_seconds=clip_duration, 
                                                       tmp_dir=tmp_dir, idx=clip_idx)
-                    # Skip text overlay
                     generated_clips.append(clip_path)
                     clip_idx += 1
                 except Exception as e:
                     log_event("WARN", f"Skipped segment", {"index": clip_idx, "error": str(e)})
                     
         else:
-            for img_idx, img in enumerate(image_paths, start=1):
+            for img_idx, img_input in enumerate(image_paths, start=1):
                 num_this_image = segments if segments > 0 else 1
-                log_event("INFO", f"Processing image [{img_idx}/{len(image_paths)}]", 
-                         {"image": Path(img).name, "segments": num_this_image})
                 
-                optimized_prompt_base = optimize_prompt_with_gemini(user_prompt, img)
+                # Get display name (filename for local, shortened URL for remote)
+                if _is_url(img_input):
+                    display_name = img_input.split('/')[-1][:50]
+                    if len(img_input.split('/')[-1]) > 50:
+                        display_name += "..."
+                else:
+                    display_name = Path(img_input).name
+                
+                log_event("INFO", f"Processing image [{img_idx}/{len(image_paths)}]", 
+                         {"image": display_name, "segments": num_this_image})
+                
+                optimized_prompt_base = optimize_prompt_with_gemini(user_prompt, img_input)
 
                 for s in range(num_this_image):
                     variation = motion_variations[s % len(motion_variations)]
                     optimized_prompt = f"{optimized_prompt_base}. {variation}"
 
                     try:
-                        clip_path = generate_clip_for_image(img, optimized_prompt, duration_seconds=clip_duration, 
+                        clip_path = generate_clip_for_image(img_input, optimized_prompt, 
+                                                           duration_seconds=clip_duration, 
                                                            tmp_dir=tmp_dir, idx=clip_idx)
-                        # Skip text overlay
                         generated_clips.append(clip_path)
                         clip_idx += 1
                     except Exception as e:
@@ -617,7 +834,7 @@ def parse_args_with_fallback():
     p = argparse.ArgumentParser(
         description="Convert images/text to Veo-generated 9:16 vertical reel with optional captions"
     )
-    p.add_argument("images", nargs="*", help="Image files, directories, or glob patterns")
+    p.add_argument("images", nargs="*", help="Image files, URLs, directories, or glob patterns")
     p.add_argument("-p", "--prompt", required=False, help="Text prompt for video generation")
     p.add_argument("-o", "--output", default=None, help="Output MP4 filename")
     p.add_argument("-d", "--duration", type=int, default=4, help="Duration per clip in seconds (default: 4)")
@@ -633,7 +850,7 @@ def parse_args_with_fallback():
     if not args.images:
         if not args.text_only:
             try:
-                user_in = input("Images (paths/glob/dir) or 'text' for text-only, or Enter to cancel: ").strip()
+                user_in = input("Images (paths/URLs/glob/dir) or 'text' for text-only, or Enter to cancel: ").strip()
             except EOFError:
                 user_in = ""
             

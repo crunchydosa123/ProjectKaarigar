@@ -5,10 +5,17 @@ Generates creative ideas for reels using Gemini AI
 
 import re
 import json
+import logging
 from google import genai
 from google.genai import types
 from typing import List, Dict, Optional
 from pathlib import Path
+import requests
+from io import BytesIO
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuration
 PROJECT_ID = "useful-figure-475210-g7"
@@ -27,6 +34,7 @@ class ReelIdeasGenerator:
     
     def __init__(self):
         self.model = "gemini-2.5-flash"
+        logger.info(f"🤖 ReelIdeasGenerator initialized with model: {self.model}")
     
     def generate_ideas(self, initial_prompt: str, image_path: Optional[str] = None, 
                       num_ideas: int = 3) -> Dict:
@@ -35,7 +43,7 @@ class ReelIdeasGenerator:
         
         Args:
             initial_prompt: User's initial prompt/description
-            image_path: Optional path to image for context
+            image_path: Optional local path or URL to image for context
             num_ideas: Number of ideas to generate (default: 3)
             
         Returns:
@@ -71,18 +79,14 @@ class ReelIdeasGenerator:
             
             contents.append(gemini_prompt)
             
-            # Attach image if provided
+            # Attach image if provided (support both local files and URLs)
             if image_path:
-                image_file = Path(image_path)
-                if image_file.exists():
-                    with open(image_path, "rb") as f:
-                        image_bytes = f.read()
-                    file_ext = image_file.suffix.lower()
-                    mime_type = "image/jpeg" if file_ext in ['.jpg', '.jpeg'] else "image/png"
-                    contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-                    print(f"📸 Image attached for context: {image_file.name}")
+                image_part = self._process_image(image_path)
+                if image_part:
+                    contents.append(image_part)
+                    logger.info(f"📸 Image attached for context")
                 else:
-                    print(f"⚠️  Image not found: {image_path}")
+                    logger.warning(f"⚠️  Failed to process image: {image_path}")
             
             # Generate ideas
             response = client.models.generate_content(
@@ -96,10 +100,10 @@ class ReelIdeasGenerator:
             ideas = self._parse_json_ideas(response_text)
             
             if not ideas:
-                print(f"⚠️  Failed to parse JSON response, using fallback parsing")
+                logger.warning(f"⚠️  Failed to parse JSON response, using fallback parsing")
                 ideas = [line.strip().strip('"\'') for line in response_text.split('\n') if line.strip()]
             
-            print(f"✅ Generated {len(ideas)} ideas")
+            logger.info(f"✅ Generated {len(ideas)} ideas")
             
             return {
                 "success": True,
@@ -109,7 +113,7 @@ class ReelIdeasGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Error generating ideas: {str(e)}")
+            logger.error(f"❌ Error generating ideas: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -165,7 +169,7 @@ class ReelIdeasGenerator:
             refined_idea = response.text.strip()
             word_count = len(refined_idea.split())
             
-            print(f"✅ Idea refined successfully ({word_count} words)")
+            logger.info(f"✅ Idea refined successfully ({word_count} words)")
             
             return {
                 "success": True,
@@ -176,7 +180,7 @@ class ReelIdeasGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Error refining idea: {str(e)}")
+            logger.error(f"❌ Error refining idea: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -232,10 +236,10 @@ class ReelIdeasGenerator:
             ideas = self._parse_json_ideas(response_text)
             
             if not ideas:
-                print(f"⚠️  Failed to parse JSON response, using fallback parsing")
+                logger.warning(f"⚠️  Failed to parse JSON response, using fallback parsing")
                 ideas = [line.strip().strip('"\'') for line in response_text.split('\n') if line.strip()]
             
-            print(f"✅ Regenerated {len(ideas)} new ideas")
+            logger.info(f"✅ Regenerated {len(ideas)} new ideas")
             
             return {
                 "success": True,
@@ -245,7 +249,7 @@ class ReelIdeasGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Error regenerating ideas: {str(e)}")
+            logger.error(f"❌ Error regenerating ideas: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -278,12 +282,13 @@ class ReelIdeasGenerator:
             
             The prompt should:
             - Include specific visual descriptions
-            - Mention camera movements (zoom, pan, dolly)
+            - Mention camera movements (zoom, pan, dolly, tracking)
             - Describe lighting, mood, and atmosphere
             - Include timing/pacing suggestions
             - Be optimized for AI video generation
             - Be a single paragraph
             - NOT exceed 150 words
+            - Be specific and actionable
             
             Return ONLY the optimized script/prompt, no additional commentary.
             """
@@ -296,7 +301,7 @@ class ReelIdeasGenerator:
             script = response.text.strip()
             word_count = len(script.split())
             
-            print(f"✅ Video script generated successfully ({word_count} words)")
+            logger.info(f"✅ Video script generated successfully ({word_count} words)")
             
             return {
                 "success": True,
@@ -307,7 +312,7 @@ class ReelIdeasGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Error generating script: {str(e)}")
+            logger.error(f"❌ Error generating script: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -334,7 +339,7 @@ class ReelIdeasGenerator:
             
             results = []
             for idx, prompt in enumerate(prompts, 1):
-                print(f"\n🔄 Processing prompt {idx}/{len(prompts)}")
+                logger.info(f"🔄 Processing prompt {idx}/{len(prompts)}")
                 idea_result = self.generate_ideas(prompt, num_ideas=num_ideas)
                 results.append({
                     "prompt": prompt,
@@ -349,7 +354,7 @@ class ReelIdeasGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Error in batch generation: {str(e)}")
+            logger.error(f"❌ Error in batch generation: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -357,6 +362,108 @@ class ReelIdeasGenerator:
             }
     
     # -------------------- Helper Methods --------------------
+    
+    def _process_image(self, image_input: str) -> Optional[types.Part]:
+        """
+        Process image from local file path or URL
+        
+        Args:
+            image_input: Local file path or HTTP(S) URL
+            
+        Returns:
+            types.Part object or None if failed
+        """
+        try:
+            # Check if it's a URL
+            if image_input.startswith('http://') or image_input.startswith('https://'):
+                return self._process_image_from_url(image_input)
+            else:
+                return self._process_image_from_file(image_input)
+        except Exception as e:
+            logger.error(f"❌ Error processing image: {str(e)}")
+            return None
+    
+    def _process_image_from_url(self, url: str) -> Optional[types.Part]:
+        """
+        Download and process image from URL
+        
+        Args:
+            url: HTTP(S) URL of the image
+            
+        Returns:
+            types.Part object or None if failed
+        """
+        try:
+            logger.info(f"📥 Downloading image from URL: {url}")
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            image_bytes = response.content
+            
+            # Detect mime type from URL or content
+            content_type = response.headers.get('content-type', '').lower()
+            if 'jpeg' in content_type or 'jpg' in content_type:
+                mime_type = "image/jpeg"
+            elif 'png' in content_type:
+                mime_type = "image/png"
+            elif 'webp' in content_type:
+                mime_type = "image/webp"
+            else:
+                # Fallback based on URL extension
+                if url.lower().endswith(('.jpg', '.jpeg')):
+                    mime_type = "image/jpeg"
+                elif url.lower().endswith('.png'):
+                    mime_type = "image/png"
+                elif url.lower().endswith('.webp'):
+                    mime_type = "image/webp"
+                else:
+                    mime_type = "image/jpeg"  # Default
+            
+            logger.info(f"✅ Image downloaded successfully ({len(image_bytes)} bytes, {mime_type})")
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            
+        except requests.RequestException as e:
+            logger.error(f"❌ Failed to download image from URL: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error processing image from URL: {str(e)}")
+            return None
+    
+    def _process_image_from_file(self, file_path: str) -> Optional[types.Part]:
+        """
+        Process image from local file path
+        
+        Args:
+            file_path: Path to local image file
+            
+        Returns:
+            types.Part object or None if failed
+        """
+        try:
+            image_file = Path(file_path)
+            if not image_file.exists():
+                logger.error(f"❌ Image file not found: {file_path}")
+                return None
+            
+            with open(file_path, "rb") as f:
+                image_bytes = f.read()
+            
+            file_ext = image_file.suffix.lower()
+            if file_ext in ['.jpg', '.jpeg']:
+                mime_type = "image/jpeg"
+            elif file_ext == '.png':
+                mime_type = "image/png"
+            elif file_ext == '.webp':
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"  # Default
+            
+            logger.info(f"✅ Image loaded from file: {image_file.name} ({mime_type})")
+            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing image from file: {str(e)}")
+            return None
     
     def _parse_json_ideas(self, response_text: str) -> List[str]:
         """
@@ -369,8 +476,14 @@ class ReelIdeasGenerator:
             List of ideas or empty list if parsing fails
         """
         try:
+            # Remove markdown code blocks if present
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith('```'):
+                cleaned_text = re.sub(r'^```(?:json)?\s*', '', cleaned_text)
+                cleaned_text = re.sub(r'\s*```$', '', cleaned_text)
+            
             # Try to find JSON object in response
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            json_match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group()
                 result = json.loads(json_str)
@@ -380,9 +493,9 @@ class ReelIdeasGenerator:
                 if isinstance(ideas, list) and all(isinstance(idea, str) for idea in ideas):
                     return ideas
         except json.JSONDecodeError as e:
-            print(f"⚠️  JSON parse error: {str(e)}")
+            logger.warning(f"⚠️  JSON parse error: {str(e)}")
         except Exception as e:
-            print(f"⚠️  Unexpected error in JSON parsing: {str(e)}")
+            logger.warning(f"⚠️  Unexpected error in JSON parsing: {str(e)}")
         
         return []
     
