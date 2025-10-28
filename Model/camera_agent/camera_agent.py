@@ -349,13 +349,27 @@ def apply_clahe_color(img: np.ndarray) -> np.ndarray:
 
 
 def overlay_direction_arrows(frame: np.ndarray) -> Tuple[np.ndarray, int]:
-    """Overlay simple arrows pointing to the side that is brighter and return which side (0=left,1=center,2=right)."""
+    """Overlay simple arrows pointing to the side that is brighter and return which side (0=left,1=center,2=right).
+
+    If lighting is already balanced (center is brightest and side difference small), the function will *not* draw arrows
+    and instead annotate that lighting looks balanced.
+    """
     h, w = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     thirds = [gray[:, :w//3], gray[:, w//3:2*w//3], gray[:, 2*w//3:]]
     side_means = [np.mean(t) for t in thirds]
     best_idx = int(np.argmax(side_means))
-    # draw arrow from center towards that side
+    diff = float(max(side_means) - min(side_means))
+    mean_brightness = float(np.mean(gray))
+
+    # Decide whether arrows are needed: if center is best and differences are small and overall brightness is reasonable,
+    # do not draw arrows (lighting is good).
+    if best_idx == 1 and diff < 20 and 80 < mean_brightness < 200:
+        label = "Lighting looks balanced"
+        cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 0), 2)
+        return frame, best_idx
+
+    # otherwise draw directional guidance
     center = (w // 2, h // 2)
     if best_idx == 0:
         dest = (w // 6, h // 2)
@@ -554,7 +568,6 @@ class VoiceControlledRecorder:
                 stop_timestamp = None
 
         # probe durations to be safe and compute fallback
-        # get video duration
         def probe_duration(path):
             try:
                 cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path]
@@ -569,7 +582,6 @@ class VoiceControlledRecorder:
 
         # If Gemini detected timestamp, cap it to both durations
         if stop_timestamp is not None:
-            # cap to durations
             if video_dur is not None and stop_timestamp > video_dur:
                 print(f"Gemini timestamp {stop_timestamp}s > video duration {video_dur}s, capping to video duration.")
                 stop_timestamp = video_dur
@@ -584,7 +596,6 @@ class VoiceControlledRecorder:
             elif audio_dur is not None:
                 stop_timestamp = max(0.0, audio_dur - fallback_trim)
             else:
-                # no durations known -> use full files (no trimming)
                 stop_timestamp = None
 
         # Prepare trimmed filenames
@@ -595,10 +606,11 @@ class VoiceControlledRecorder:
         if audio_exists and stop_timestamp is not None:
             trimmed_audio = os.path.join(self.out_dir, f"trimmed_audio_{timestamp_tag}.wav")
             try:
+                # re-encode to ensure clean boundaries
                 cmd_audio = [
                     'ffmpeg', '-loglevel', 'error', '-y', '-i', self.audio_filename,
                     '-to', str(stop_timestamp),
-                    '-c:a', 'copy', trimmed_audio
+                    '-c:a', 'pcm_s16le', trimmed_audio
                 ]
                 subprocess.run(cmd_audio, check=True)
                 print(f"Trimmed audio to {stop_timestamp}s -> {trimmed_audio}")
@@ -610,10 +622,11 @@ class VoiceControlledRecorder:
         if video_exists and stop_timestamp is not None:
             trimmed_video = os.path.join(self.out_dir, f"trimmed_video_{timestamp_tag}.avi")
             try:
+                # re-encode trimmed video to ensure correct timestamps/pts
                 cmd_video = [
                     'ffmpeg', '-loglevel', 'error', '-y', '-i', self.video_filename,
                     '-to', str(stop_timestamp),
-                    '-c:v', 'copy', trimmed_video
+                    '-c:v', 'libx264', '-preset', 'veryfast', trimmed_video
                 ]
                 subprocess.run(cmd_video, check=True)
                 print(f"Trimmed video to {stop_timestamp}s -> {trimmed_video}")
@@ -625,16 +638,20 @@ class VoiceControlledRecorder:
         audio_to_merge = trimmed_audio if (trimmed_audio and os.path.exists(trimmed_audio)) else (self.audio_filename if audio_exists else None)
         video_to_merge = trimmed_video if (trimmed_video and os.path.exists(trimmed_video)) else self.video_filename
 
-        # If audio present merge, else just move/rename video
+        # Improved merge step to re-encode video with proper pts, which helps with A/V sync issues.
         if audio_to_merge:
             cmd_merge = [
-                'ffmpeg', '-loglevel', 'error', '-y', '-i', video_to_merge, '-i', audio_to_merge,
-                '-c:v', 'copy', '-c:a', 'aac', '-shortest', output_file
+                'ffmpeg', '-loglevel', 'error', '-y', '-fflags', '+genpts', '-r', str(int(self.fps or 25)),
+                '-i', video_to_merge, '-i', audio_to_merge,
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                '-c:a', 'aac', '-b:a', '128k',
+                '-map', '0:v:0', '-map', '1:a:0',
+                '-shortest', '-movflags', '+faststart', output_file
             ]
             try:
                 subprocess.run(cmd_merge, check=True)
                 print("Merged trimmed video and audio ->", output_file)
-                # cleanup temp files (video_filename and audio_filename and trimmed ones)
+                # cleanup temp files
                 try:
                     if os.path.exists(self.video_filename):
                         os.remove(self.video_filename)
@@ -648,23 +665,28 @@ class VoiceControlledRecorder:
                     pass
             except Exception as e:
                 print("Merging failed, saving raw files instead:", e)
-                # fallback: if merge failed, keep trimmed video if exists or raw
+                # fallback behavior if merge fails
                 if trimmed_video and os.path.exists(trimmed_video):
-                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.avi")
+                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.mp4")
                     os.rename(trimmed_video, fallback)
                     print("Saved trimmed video without audio to", fallback)
                 elif os.path.exists(self.video_filename):
-                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.avi")
+                    fallback = str(self.out_dir / f"recording_fallback_{timestamp_tag}.mp4")
                     os.rename(self.video_filename, fallback)
                     print("Saved raw video to", fallback)
         else:
             # no audio to merge: just save/rename video
             try:
-                final_path = str(self.out_dir / f"recording_{timestamp_tag}.avi")
-                # if trimmed_video exists, move it; else move original
+                final_path = str(self.out_dir / f"recording_{timestamp_tag}.mp4")
                 src = trimmed_video if (trimmed_video and os.path.exists(trimmed_video)) else self.video_filename
                 if src and os.path.exists(src):
-                    os.rename(src, final_path)
+                    # re-encode to mp4/container for compatibility
+                    cmd_wrap = [
+                        'ffmpeg', '-loglevel', 'error', '-y', '-fflags', '+genpts', '-i', src,
+                        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                        '-movflags', '+faststart', final_path
+                    ]
+                    subprocess.run(cmd_wrap, check=True)
                     print("Saved video to", final_path)
                 else:
                     print("No usable video file found to save.")
