@@ -17,6 +17,7 @@ import EditContent from './EditContent';
 import UploadMedia from './UploadMedia';
 import ListProduct from './ListProducts';
 import ListProducts from './ListProducts';
+import ProductDetail from './ProductDetail';
 
 
 const PhoneDemo = () => {
@@ -61,6 +62,8 @@ const PhoneDemo = () => {
       {currentPage === "upload-media" && <UploadMedia />}
 
       {currentPage.startsWith("list-products") ? <ListProducts /> : null}
+      
+      {currentPage === "product-detail" && <ProductDetail />}
     </PhoneLayout>
   )
 }

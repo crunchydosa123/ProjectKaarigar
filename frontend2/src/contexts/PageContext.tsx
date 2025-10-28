@@ -12,6 +12,8 @@ type PageContextType = {
   loading: boolean;
   selectedVideo: any;
   setSelectedVideo: (video: any) => void;
+  selectedProductId: string | null;
+  setSelectedProductId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -31,6 +33,7 @@ export const PageProvider: React.FC<PageProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   // Check session on app start
   useEffect(() => {
@@ -142,6 +145,8 @@ export const PageProvider: React.FC<PageProviderProps> = ({ children }) => {
       loading,
       selectedVideo,
       setSelectedVideo,
+      selectedProductId,
+      setSelectedProductId,
       login,
       signup,
       logout,

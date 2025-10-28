@@ -28,7 +28,7 @@ const ListProducts = () => {
 export default ListProducts;
 
 const ListContentMain = () => {
-  const { setCurrentPage } = usePage();
+  const { setCurrentPage, setSelectedProductId } = usePage();
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
 
@@ -82,7 +82,15 @@ const ListContentMain = () => {
             <div className="text-sm text-gray-500 px-2 py-3">No products yet. Click Add Product to create one.</div>
           )}
           {products.map((p) => (
-            <Button key={p.id} className="bg-white text-black w-full flex justify-between h-15" variant={"outline"}>
+            <Button 
+              key={p.id} 
+              className="bg-white text-black w-full flex justify-between h-15" 
+              variant={"outline"}
+              onClick={() => {
+                setSelectedProductId(p.id);
+                setCurrentPage('product-detail');
+              }}
+            >
               <div className="flex items-center gap-2">
                 {/* Thumbnail: first image url if present */}
                 <img src={(p.image_urls && p.image_urls[0]) || "pot.webp"} className="h-10 w-10 rounded-md object-cover" />
@@ -91,7 +99,7 @@ const ListContentMain = () => {
                   {p.price ? <div className="text-xs">{p.currency || 'INR'} {p.price}</div> : null}
                 </div>
               </div>
-              <Button variant={"secondary"}>
+              <Button variant={"secondary"} onClick={(e) => { e.stopPropagation(); /* TODO: Edit inline */ }}>
                 <Pencil />
               </Button>
             </Button>
