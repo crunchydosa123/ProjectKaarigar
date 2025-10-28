@@ -10,6 +10,7 @@ from routes.image_generation import image_gen_bp
 from routes.image_editing import image_edit_bp
 from routes.video_editing import video_edit_bp
 from routes.reel_generator import reel_gen_bp
+from routes.product import product_bp
 
 app = Flask(__name__)
 CORS(app, origins=['*'], supports_credentials=True)
@@ -32,6 +33,7 @@ app.register_blueprint(image_gen_bp, url_prefix="/api/image-gen")
 app.register_blueprint(image_edit_bp, url_prefix="/api/image-edit")
 app.register_blueprint(video_edit_bp, url_prefix="/api/video-edit")
 app.register_blueprint(reel_gen_bp, url_prefix="/api/reel-generator")
+app.register_blueprint(product_bp, url_prefix="/api/product")
 
 @app.route('/')
 def home():

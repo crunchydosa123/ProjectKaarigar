@@ -1174,3 +1174,97 @@ class ReelGeneratorAPI {
 export const reelGeneratorAPI = new ReelGeneratorAPI();
 
 // Force reload - Logo Generation API ready
+
+// ==================== PRODUCT API ====================
+
+export interface ProductVariant {
+  description?: string;
+  color?: string;
+  size?: string;
+  price?: string | number;
+  stock?: string | number;
+  image_url?: string;
+  video_url?: string;
+}
+
+export interface CreateProductRequest {
+  name: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  currency?: string;
+  variants?: ProductVariant[];
+  image_ids?: string[];
+  video_ids?: string[];
+  image_urls?: string[];
+  video_urls?: string[];
+}
+
+export interface CreateProductResponse {
+  success: boolean;
+  message: string;
+  product_id?: string;
+  error?: string;
+}
+
+export interface ProductItem {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  image_urls?: string[];
+  video_urls?: string[];
+  created_at?: string;
+}
+
+export interface ProductListResponse {
+  success: boolean;
+  products: ProductItem[];
+  count: number;
+  error?: string;
+}
+
+export interface ProductMediaResponse {
+  success: boolean;
+  images: { id: string; title: string; public_url: string; filename?: string }[];
+  videos: { id: string; title: string; public_url: string; filename?: string }[];
+  images_count: number;
+  videos_count: number;
+  error?: string;
+}
+
+class ProductAPI {
+  private baseURL = 'http://localhost:5000/api/product';
+
+  private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    const options: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    };
+    if (data) options.body = JSON.stringify(data);
+    const resp = await fetch(url, options);
+    const json = await resp.json();
+    if (!resp.ok) {
+      throw new Error(json.error || `HTTP ${resp.status}`);
+    }
+    return json;
+  }
+
+  list(): Promise<ProductListResponse> {
+    return this.request<ProductListResponse>('/list');
+  }
+
+  media(): Promise<ProductMediaResponse> {
+    return this.request<ProductMediaResponse>('/media');
+  }
+
+  create(payload: CreateProductRequest): Promise<CreateProductResponse> {
+    return this.request<CreateProductResponse>('/create', 'POST', payload);
+  }
+}
+
+export const productAPI = new ProductAPI();
