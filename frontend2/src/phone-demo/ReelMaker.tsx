@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { mediaAPI, reelGeneratorAPI, imageGenAPI, type GeneratedReel, type MediaItem } from '@/lib/api';
 import { usePage } from '@/contexts/PageContext';
+import { Input } from '@/components/ui/input';
 
 interface ReelMakerProps {
   onBack: () => void;

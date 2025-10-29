@@ -35,7 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 const CreateContent = () => {
-  const { currentPage } = usePage();
+  const { setCurrentPage, currentPage } = usePage();
 
   // Handle subroutes
   switch (currentPage) {
@@ -44,7 +44,7 @@ const CreateContent = () => {
     case 'create-content/logos':
       return <CreateLogo />;
     case 'create-content/videos':
-      return <CreateVideo />;
+      return <ReelMaker onBack={()=> setCurrentPage('create-content')} />;
     case 'create-content/videos2':
       return <CreateVideo2 />;
     case 'create-content/images':
