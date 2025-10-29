@@ -1142,7 +1142,8 @@ class ReelGeneratorAPI {
   async getGeneratedReels(userId: string): Promise<{ success: boolean; reels: any[]; total: number; error?: string }> {
     console.log(`\n🎬 ===== GET GENERATED REELS REQUEST =====`);
     console.log(`👤 User ID: ${userId}`);
-    console.log(`🔄 Calling request method...`);
+    console.log(`🔄 Calling request method (Cloud Run)...`);
+    // Use Cloud Run service for listing generated reels
     return this.request(`/api/reel-generator/generated-reels?user_id=${userId}`, 'GET');
   }
 
@@ -1158,11 +1159,43 @@ class ReelGeneratorAPI {
   }
 
   async deleteVideo(videoId: string, userId: string, cloudPath?: string): Promise<{ success: boolean; message: string; error?: string }> {
-    return this.request('/api/reel-generator/delete-video', 'DELETE', {
-      video_id: videoId,
-      user_id: userId,
-      cloud_path: cloudPath
-    });
+    console.log(`\n🗑️ ===== DELETE VIDEO REQUEST =====`);
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`🎬 Video ID: ${videoId}`);
+    console.log(`🔄 Using local backend for delete video...`);
+    
+    // Use local backend for this endpoint
+    const localBaseURL = 'http://localhost:5000';
+    const url = `${localBaseURL}/api/reel-generator/delete-video`;
+    
+    console.log(`🌐 URL: ${url}`);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          video_id: videoId,
+          user_id: userId,
+          cloud_path: cloudPath
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      console.log(`✅ Request completed successfully`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Request failed:`, error);
+      throw error;
+    }
   }
 
   async healthCheck(): Promise<{ status: string; service: string; bucket: string; brand_id: string }> {
