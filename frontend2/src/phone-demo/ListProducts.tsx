@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { usePage } from "@/contexts/PageContext";
-import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send, Upload, X, Check, Trash, SkipBack, Undo2 } from "lucide-react";
+import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send, Upload, X, Check, Trash, SkipBack, Undo2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { productAPI, mediaAPI, type CreateProductRequest } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -125,6 +125,17 @@ const ListContentMain = () => {
         <Button variant={"outline"} className="flex justify-center gap-2">
           <img src="reels.png" className="h-5 w-5" />
           Post an Instagram Reel
+        </Button>
+      </div>
+
+      {/* Marketplace Listings */}
+      <div className="px-4 mt-6">
+        <Button 
+          className="w-full flex justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+          onClick={() => setCurrentPage('marketplace-listings')}
+        >
+          <ExternalLink className="h-4 w-4" />
+          View Marketplace Listings
         </Button>
       </div>
 

@@ -19,6 +19,10 @@ import ListProduct from './ListProducts';
 import ListProducts from './ListProducts';
 import ProductDetail from './ProductDetail';
 import YouTubeShorts from './YouTubeShorts';
+import AmazonListing from './AmazonListing';
+import FlipkartListing from './FlipkartListing';
+import MyntraListing from './MyntraListing';
+import MarketplaceListings from './MarketplaceListings';
 
 
 const PhoneDemo = () => {
@@ -67,6 +71,11 @@ const PhoneDemo = () => {
       {currentPage === "product-detail" && <ProductDetail />}
       
       {currentPage === "youtube-shorts" && <YouTubeShorts />}
+      
+      {currentPage === "marketplace-listings" && <MarketplaceListings />}
+      {currentPage === "amazon-listing" && <AmazonListing />}
+      {currentPage === "flipkart-listing" && <FlipkartListing />}
+      {currentPage === "myntra-listing" && <MyntraListing />}
     </PhoneLayout>
   )
 }

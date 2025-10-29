@@ -361,8 +361,85 @@ const ProductDetail: React.FC = () => {
     }
   };
 
-  const handleListOnMarketplace = (marketplace: string) => {
-    alert(`List on ${marketplace} - Integration coming soon!\n\nThis will allow you to automatically list your product on ${marketplace} with all images, descriptions, and variants.`);
+  const handleListOnMarketplace = async (marketplace: string) => {
+    console.log('🔵 [Marketplace] Starting listing process...');
+    console.log('   Product ID:', productId);
+    console.log('   Marketplace:', marketplace);
+    console.log('   Product object:', product);
+    console.log('   Product exists:', !!product);
+    console.log('   ProductId exists:', !!productId);
+    
+    if (!product || !productId) {
+      console.error('❌ [Marketplace] Product not found');
+      console.error('   Product:', product);
+      console.error('   ProductId:', productId);
+      alert('Product not found');
+      return;
+    }
+
+    if (!product.image_urls || product.image_urls.length === 0) {
+      console.error('❌ [Marketplace] No images found');
+      alert('Product must have at least one image to list on marketplace');
+      return;
+    }
+
+    console.log('✅ [Marketplace] Validation passed');
+    console.log('   Product name:', product.name);
+    console.log('   Images:', product.image_urls.length);
+
+    const confirmed = confirm(`List "${product.name}" on ${marketplace}?\n\nThis will generate an optimized listing using AI.`);
+    if (!confirmed) {
+      console.log('⚠️ [Marketplace] User cancelled');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const apiUrl = 'http://localhost:5000/api/marketplace/generate';
+      const requestBody = {
+        product_id: productId,
+        marketplace: marketplace.toLowerCase()
+      };
+
+      console.log('🚀 [Marketplace] Calling API...');
+      console.log('   URL:', apiUrl);
+      console.log('   Method: POST');
+      console.log('   Body:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('📡 [Marketplace] Response received');
+      console.log('   Status:', response.status);
+      console.log('   Status Text:', response.statusText);
+      console.log('   OK:', response.ok);
+
+      const data = await response.json();
+      console.log('📄 [Marketplace] Response data:', JSON.stringify(data, null, 2));
+
+      if (data.success) {
+        console.log('✅ [Marketplace] Listing created successfully!');
+        alert(`✅ Successfully listed on ${marketplace}!\n\nYou can now view it in Marketplace Listings.`);
+        setShowListDialog(false);
+        // Optionally redirect to marketplace listings
+        setCurrentPage('marketplace-listings');
+      } else {
+        console.error('❌ [Marketplace] API returned failure:', data);
+        throw new Error(data.error || 'Failed to list product');
+      }
+    } catch (err: any) {
+      console.error('❌ [Marketplace] Error occurred:');
+      console.error('   Message:', err.message);
+      console.error('   Full error:', err);
+      alert('Failed to list product: ' + (err.message || err));
+    } finally {
+      setLoading(false);
+      console.log('🏁 [Marketplace] Process completed');
+    }
   };
 
   const handleGenerateAI = async () => {

@@ -1,9 +1,17 @@
+# -*- coding: utf-8 -*-
 import os
 import re
 import sys
 import json
 import textwrap
 from typing import List, Dict, Tuple, Optional
+
+# Configure UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    # Set UTF-8 for stdout and stderr to handle Unicode characters
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 try:
     import requests
@@ -348,27 +356,41 @@ def collect_images_interactively() -> Tuple[List[str], List[str]]:
     local_paths: List[str] = []
     urls: List[str] = []
 
-    # Explicit file paths only
-    print("\nProvide image file paths (Windows style) separated by commas, or leave blank.")
+    print("\n=== IMAGE INPUT ===")
+    print("You can provide:")
+    print("  1. Local file paths (e.g., C:\\path\\img.jpg)")
+    print("  2. URLs including Google Cloud Storage (e.g., https://storage.googleapis.com/...)")
+    print("  3. Mix of both, separated by commas")
+    print("\nThe script will automatically detect whether each input is a local path or URL.\n")
+    
+    # Single input field that accepts both paths and URLs
     p = read_user_input(
-        "> Local image paths (e.g., C:\\path\\img1.jpg, C:\\path\\img2.png): "
+        "> Enter image paths or URLs (comma-separated): "
     )
+    
     if p.strip():
         for token in p.split(","):
-            path = normalize_whitespace(token).strip('"')
-            if path:
-                local_paths.append(path)
+            item = normalize_whitespace(token).strip('"').strip()
+            if item:
+                # Check if it's a URL or local path
+                if item.startswith(('http://', 'https://')):
+                    urls.append(item)
+                    print(f"  → Detected URL: {item[:60]}...")
+                else:
+                    local_paths.append(item)
+                    print(f"  → Detected local path: {os.path.basename(item)}")
 
-    # Optional image URLs
-    print("\nOptionally provide image URLs separated by commas, or leave blank.")
+    # Optional: Additional URLs if user wants to add more
+    print("\nAdd more image URLs (optional), or press Enter to continue.")
     u = read_user_input(
-        "> Image URLs (e.g., https://example.com/img.jpg, ...): "
+        "> Additional image URLs: "
     )
     if u.strip():
         for token in u.split(","):
-            url = normalize_whitespace(token)
-            if url:
+            url = normalize_whitespace(token).strip()
+            if url and url.startswith(('http://', 'https://')):
                 urls.append(url)
+                print(f"  → Added URL: {url[:60]}...")
 
     return local_paths, urls
 
@@ -510,15 +532,37 @@ def detect_mime_for_bytes(data: bytes) -> str:
 
 def read_image_bytes(paths: List[str], urls: List[str]) -> List[Tuple[str, bytes]]:
     blobs: List[Tuple[str, bytes]] = []
-    # local files only
+    
+    # Read local files
     for p in paths:
         try:
             with open(p, "rb") as f:
                 b = f.read()
                 blobs.append((p, b))
-        except Exception:
+                print(f"✓ Loaded local file: {os.path.basename(p)}")
+        except Exception as e:
+            print(f"✗ Failed to load local file {p}: {str(e)}")
             continue
-    # URL fetching removed; only local paths are supported now
+    
+    # Fetch images from URLs (including Google Cloud Storage)
+    if requests is not None:
+        for url in urls:
+            try:
+                print(f"⬇ Downloading from URL: {url[:60]}...")
+                response = requests.get(url, timeout=30)
+                if response.status_code == 200:
+                    b = response.content
+                    blobs.append((url, b))
+                    print(f"✓ Downloaded from URL: {url[:60]}...")
+                else:
+                    print(f"✗ Failed to download {url}: HTTP {response.status_code}")
+            except Exception as e:
+                print(f"✗ Failed to download {url}: {str(e)}")
+                continue
+    else:
+        if urls:
+            print("⚠ requests library not available, skipping URL downloads")
+    
     return blobs
 
 
@@ -650,26 +694,68 @@ def main() -> None:
     if client is None:
         raise RuntimeError("GOOGLE_API_KEY not set or Gemini client unavailable. Set GOOGLE_API_KEY and retry.")
 
+    # Load images from both local paths AND URLs
+    print("\n[1/4] Loading images from all sources...")
     image_blobs = read_image_bytes(local_paths, urls)
-    # Live updates path-only flow
-    print("\n[1/4] Reading local image bytes...")
-    image_blobs = read_image_bytes(local_paths, [])
     if not image_blobs:
-        print("No readable images found. Exiting.")
+        print("❌ No readable images found. Please check your paths/URLs. Exiting.")
         return
     
-    # Interactive image editing
+    print(f"✓ Successfully loaded {len(image_blobs)} image(s)")
+    
+    # Interactive image editing (only for local files, URLs are used as-is)
     print("\n[2/4] Interactive Image Editing...")
-    edited_paths = interactive_image_editing(client, local_paths)
+    if local_paths:
+        edited_paths = interactive_image_editing(client, local_paths)
+    else:
+        edited_paths = []
+        print("No local images to edit. Using URLs directly.")
     
     # Final confirmation before listing generation
     print("\n=== READY FOR LISTING GENERATION ===")
     print("All images have been processed. Press Enter to start generating the listing...")
     input("Press Enter to continue: ")
     
-    # Analyze images (use edited versions if available)
+    # Analyze images (use edited versions for local, blobs for URLs)
     print("\n[3/4] Analyzing images with Gemini...")
-    image_descriptions = analyze_images_with_gemini(client, edited_paths)
+    # Combine edited local paths with URL blobs
+    all_image_sources = edited_paths if edited_paths else []
+    
+    # For URLs, we need to pass the blobs directly to Gemini
+    if urls:
+        print("Analyzing images from URLs...")
+        image_descriptions = []
+        # Analyze local edited images
+        if all_image_sources:
+            image_descriptions.extend(analyze_images_with_gemini(client, all_image_sources))
+        # Analyze URL images from blobs
+        for name, blob in image_blobs:
+            if name.startswith(('http://', 'https://')):
+                try:
+                    print(f"Analyzing URL image: {name[:60]}...")
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[
+                            types.Part.from_bytes(
+                                data=blob,
+                                mime_type='image/jpeg',
+                            ),
+                            "Describe this product image: materials, craftsmanship, style, use-cases, and unique selling points."
+                        ],
+                        config=types.GenerateContentConfig(
+                            max_output_tokens=300,
+                            thinking_config=types.ThinkingConfig(thinking_budget=0)
+                        )
+                    )
+                    if response.candidates and response.candidates[0].content.parts:
+                        description = response.candidates[0].content.parts[0].text
+                        image_descriptions.append(description)
+                        print(f"✓ Analyzed. Summary: {description[:100]}...")
+                except Exception as e:
+                    print(f"✗ Failed to analyze {name[:60]}: {str(e)}")
+                    image_descriptions.append("Image analysis failed")
+    else:
+        image_descriptions = analyze_images_with_gemini(client, all_image_sources)
     
     # Build product info and single listing
     product_info = {
@@ -762,7 +848,8 @@ def main() -> None:
             "platform_selected": platform_choice,
             "user_price": user_price,
             "images": {
-                "local_paths": edited_paths,  # Use edited paths
+                "local_paths": edited_paths if edited_paths else local_paths,  # Use edited paths or original local
+                "urls": urls,  # Include URLs used
             },
             "inferred_keywords": inferred_keywords,
         },
