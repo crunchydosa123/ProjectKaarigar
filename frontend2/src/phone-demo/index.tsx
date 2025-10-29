@@ -18,6 +18,7 @@ import UploadMedia from './UploadMedia';
 import ListProduct from './ListProducts';
 import ListProducts from './ListProducts';
 import ProductDetail from './ProductDetail';
+import YouTubeShorts from './YouTubeShorts';
 
 
 const PhoneDemo = () => {
@@ -64,6 +65,8 @@ const PhoneDemo = () => {
       {currentPage.startsWith("list-products") ? <ListProducts /> : null}
       
       {currentPage === "product-detail" && <ProductDetail />}
+      
+      {currentPage === "youtube-shorts" && <YouTubeShorts />}
     </PhoneLayout>
   )
 }

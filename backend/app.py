@@ -11,6 +11,7 @@ from routes.image_editing import image_edit_bp
 from routes.video_editing import video_edit_bp
 from routes.reel_generator import reel_gen_bp
 from routes.product import product_bp
+from routes.youtube import youtube_bp
 
 app = Flask(__name__)
 CORS(app, origins=['*'], supports_credentials=True)
@@ -34,6 +35,11 @@ app.register_blueprint(image_edit_bp, url_prefix="/api/image-edit")
 app.register_blueprint(video_edit_bp, url_prefix="/api/video-edit")
 app.register_blueprint(reel_gen_bp, url_prefix="/api/reel-generator")
 app.register_blueprint(product_bp, url_prefix="/api/product")
+app.register_blueprint(youtube_bp, url_prefix="/api/youtube")
+
+print("\n📋 Registered Blueprints:")
+for blueprint_name, blueprint_obj in app.blueprints.items():
+    print(f"   ✅ {blueprint_name}: {blueprint_obj.url_prefix}")
 
 @app.route('/')
 def home():

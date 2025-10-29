@@ -118,7 +118,7 @@ const ListContentMain = () => {
           <img src="WhatsApp.webp" className="h-7 w-7" />
           Run a Message Campaign
         </Button>
-        <Button variant={"outline"} className="flex justify-center gap-2">
+        <Button variant={"outline"} className="flex justify-center gap-2" onClick={() => setCurrentPage('youtube-shorts')}>
           <img src="yt_shorts.png" className="h-5 w-auto" />
           Post a YouTube Short
         </Button>

@@ -1,0 +1,3 @@
+# Ignore all token files
+*.pickle
+user_*_token.pickle
