@@ -1,60 +1,51 @@
 from flask import Flask, request, jsonify, send_file, after_this_request
 from flask_cors import CORS
-import os
-import io
-import json
+import os, io, json, tempfile, logging, base64, requests, gc, uuid
 from werkzeug.utils import secure_filename
 from gcs_video_editor import GCSVideoEditor, TRENDING_SONGS
-import tempfile
-import logging
-import gc
-import base64
 
 # ----------------------------
-# Flask App & Logging Setup
+# Flask Setup
 # ----------------------------
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# Configuration
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-port = int(os.environ.get("PORT", 8080))  # Cloud Run PORT
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
+port = int(os.environ.get("PORT", 8080))
 
-# Allowed file extensions
+video_editor = GCSVideoEditor()
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'}
 
-# Initialize the video editor
-video_editor = GCSVideoEditor()
-
-
 # ----------------------------
-# Utility Functions
+# Utilities
 # ----------------------------
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-
 def decode_base64_file(file_data):
-    """Decode base64 string to bytes and reset stream position"""
-    import base64
-    if isinstance(file_data, str):
-        try:
-            decoded = base64.b64decode(file_data)
-            logging.info("Decoded base64 file data, size=%d bytes", len(decoded))
-            return io.BytesIO(decoded)
-        except Exception as e:
-            logging.exception("Failed to decode base64 file data")
-            raise ValueError("Invalid base64 file data")
-    elif isinstance(file_data, bytes):
-        return io.BytesIO(file_data)
-    else:
-        raise ValueError("File data must be bytes or base64 string")
+    """Decode base64 string to BytesIO stream"""
+    try:
+        decoded = base64.b64decode(file_data)
+        return io.BytesIO(decoded)
+    except Exception as e:
+        raise ValueError("Invalid base64 file data")
 
+def get_video_stream_from_input(data):
+    """Handle both base64 and video_url inputs"""
+    if 'file' in data:
+        logging.info("📦 Decoding video from base64 data")
+        return decode_base64_file(data['file'])
+    elif 'video_url' in data:
+        video_url = data['video_url']
+        logging.info(f"🌐 Downloading video from URL: {video_url}")
+        response = requests.get(video_url, stream=True)
+        if response.status_code != 200:
+            raise ValueError(f"Failed to download video (HTTP {response.status_code})")
+        return io.BytesIO(response.content)
+    else:
+        raise ValueError("Either 'file' or 'video_url' must be provided")
 
 # ----------------------------
 # Routes
@@ -62,370 +53,236 @@ def decode_base64_file(file_data):
 @app.route('/')
 def home():
     return jsonify({
-        "message": "GCS Video Editor API",
-        "version": "1.0.0",
+        "message": "GCS Video Editor API (URL-Compatible)",
+        "version": "2.0.0",
         "endpoints": {
-            "POST /upload": "Upload a video file for editing",
-            "POST /edit": "Apply edits to a video",
-            "GET /trending-songs": "Get list of trending songs",
-            "GET /edited-videos": "List all edited videos",
-            "POST /video-info": "Get video information",
+            "POST /upload": "Get video info using file or URL",
+            "POST /edit": "Edit video (file or URL)",
+            "POST /add-trending-audio": "Add trending audio (file or URL)",
+            "POST /video-info": "Get video metadata (file or URL)",
             "POST /save-video": "Save edited video to GCS",
-            "GET /download/<blob_name>": "Download video",
+            "GET /trending-songs": "List trending songs",
+            "GET /edited-videos": "List all edited videos",
+            "GET /download/<blob_name>": "Download a GCS video",
             "GET /health": "Health check"
         }
     })
 
-
+# ----------------------------
+# Upload
+# ----------------------------
 @app.route('/upload', methods=['POST'])
 def upload_video():
-    """Upload a video file for editing"""
+    """Upload or fetch a video for metadata extraction"""
     try:
-        if 'file' not in request.files:
-            logging.warning("No file provided in /upload")
-            return jsonify({"error": "No file provided"}), 400
+        if request.files.get('file'):
+            # traditional upload
+            file = request.files['file']
+            if file.filename == '' or not allowed_file(file.filename):
+                return jsonify({"error": "Invalid file"}), 400
+            video_stream = io.BytesIO(file.read())
+            filename = secure_filename(file.filename)
+        else:
+            # new URL-based method
+            data = request.get_json()
+            if not data or 'video_url' not in data:
+                return jsonify({"error": "Missing video_url"}), 400
+            video_stream = get_video_stream_from_input(data)
+            filename = data['video_url'].split('/')[-1]
 
-        file = request.files['file']
-        if file.filename == '':
-            logging.warning("Empty filename in /upload")
-            return jsonify({"error": "No file selected"}), 400
-
-        if not allowed_file(file.filename):
-            logging.warning("File type not allowed: %s", file.filename)
-            return jsonify({"error": "File type not allowed"}), 400
-
-        # Read file
-        file_data = file.read()
-        logging.info("Received file /upload: %s, size=%d bytes", file.filename, len(file_data))
-        video_stream = io.BytesIO(file_data)
-
-        # Get video info
         video_info = video_editor.get_video_info_from_memory(video_stream)
         if not video_info.get("success"):
-            return jsonify({"error": f"Could not process video: {video_info.get('error')}"}), 400
+            return jsonify({"error": "Failed to process video"}), 400
 
-        # Generate session ID
-        import uuid
         session_id = str(uuid.uuid4())
-        logging.info("Generated session_id=%s", session_id)
-
         return jsonify({
             "success": True,
             "session_id": session_id,
-            "filename": secure_filename(file.filename),
-            "video_info": video_info,
-            "message": "Video uploaded successfully"
+            "filename": filename,
+            "video_info": video_info
         })
 
     except Exception as e:
-        logging.exception("Unhandled error in /upload")
+        logging.exception("Error in /upload")
         return jsonify({"error": str(e)}), 500
 
-
+# ----------------------------
+# Edit
+# ----------------------------
 @app.route('/edit', methods=['POST'])
 def edit_video():
-    """Apply edits to a video"""
-    video_stream = None
-    edited_stream = None
-    updated_info = None
-    saved_url = None
-
+    """Apply edit prompt to video (supports file or URL)"""
     try:
         data = request.get_json()
-        logging.info("Received /edit request, JSON present=%s", bool(data))
+        if not data or 'edit_prompt' not in data:
+            return jsonify({"error": "Missing edit_prompt"}), 400
 
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        # Validate required fields
-        for field in ['file', 'edit_prompt']:
-            if field not in data:
-                logging.error("Missing required field: %s", field)
-                return jsonify({"error": f"Missing required field: {field}"}), 400
-
-        file_data = data['file']
-        edit_prompt = data['edit_prompt']
-        topic = data.get('topic', 'default')
-        save_name = data.get('save_name')
-
-        # Decode file
-        video_stream = decode_base64_file(file_data)
-
-        # Apply edit
-        logging.info("Applying edit prompt: %s", edit_prompt)
-        edited_stream = video_editor.apply_edit(video_stream, edit_prompt)
+        video_stream = get_video_stream_from_input(data)
+        edited_stream = video_editor.apply_edit(video_stream, data['edit_prompt'])
         if not edited_stream:
-            logging.error("apply_edit returned None")
             return jsonify({"error": "Edit operation failed"}), 500
 
-        # Get updated info
-        edited_stream.seek(0)
         updated_info = video_editor.get_video_info_from_memory(edited_stream)
-        logging.info("Edited video info retrieved")
-
-        # Save to GCS if requested
+        save_name = data.get('save_name')
+        saved_url = None
         if save_name:
-            blob_name = f"edited_videos/{topic}/{save_name}"
-            if not blob_name.endswith(".mp4"):
-                blob_name += ".mp4"
+            topic = data.get('topic', 'default')
+            blob_name = f"edited_videos/{topic}/{save_name}.mp4"
             saved_url = video_editor.upload_video_from_memory(blob_name, edited_stream)
-            logging.info("Uploaded edited video to GCS: %s", saved_url)
 
-        # Return edited video as base64
         edited_stream.seek(0)
         edited_base64 = base64.b64encode(edited_stream.read()).decode("utf-8")
-        logging.info("Returning edited video base64, length=%d", len(edited_base64))
-
-    except Exception as e:
-        logging.exception("Unhandled error in /edit")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        try:
-            if 'video_stream' in locals() and video_stream:
-                video_stream.close()
-                del video_stream
-            if 'edited_stream' in locals() and edited_stream:
-                edited_stream.close()
-                del edited_stream
-            import gc
-            gc.collect()
-            logging.info("Memory cleared after edit")
-        except Exception as e:
-            logging.warning("Memory cleanup failed: %s", e)
 
         return jsonify({
             "success": True,
             "video_info": updated_info,
             "saved_url": saved_url,
-            "message": "Edit applied successfully"
         })
-    
+
+    except Exception as e:
+        logging.exception("Error in /edit")
+        return jsonify({"error": str(e)}), 500
+
+# ----------------------------
+# Add Trending Audio
+# ----------------------------
 @app.route('/add-trending-audio', methods=['POST'])
 def add_trending_audio():
-    """Apply edits to a video"""
-    video_stream = None
-    edited_stream = None
-    updated_info = None
-    saved_url = None
-
+    """Add trending audio to video (file or URL)"""
     try:
         data = request.get_json()
-        logging.info("Received /add-trending-audio request, JSON present=%s", bool(data))
+        if not data or 'song_id' not in data:
+            return jsonify({"error": "Missing song_id"}), 400
 
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        # Validate required fields
-        for field in ['file', 'song_id']:
-            if field not in data:
-                logging.error("Missing required field: %s", field)
-                return jsonify({"error": f"Missing required field: {field}"}), 400
-
-        file_data = data['file']
-        song_id = data['song_id']
-        topic = data.get('topic', 'default')
-        save_name = data.get('save_name')
-
-        # Decode file
-        video_stream = decode_base64_file(file_data)
-
-        # Apply edit
-        logging.info("Applying song id: %s", song_id)
-        edited_stream = video_editor.add_trending_audio(video_stream, song_id)
+        video_stream = get_video_stream_from_input(data)
+        edited_stream = video_editor.add_trending_audio(video_stream, data['song_id'])
         if not edited_stream:
-            logging.error("apply_edit returned None")
-            return jsonify({"error": "Edit operation failed"}), 500
+            return jsonify({"error": "Audio addition failed"}), 500
 
-        # Get updated info
-        edited_stream.seek(0)
         updated_info = video_editor.get_video_info_from_memory(edited_stream)
-        logging.info("Edited video info retrieved")
-
-        # Save to GCS if requested
+        save_name = data.get('save_name')
+        saved_url = None
         if save_name:
-            blob_name = f"edited_videos/{topic}/{save_name}"
-            if not blob_name.endswith(".mp4"):
-                blob_name += ".mp4"
+            topic = data.get('topic', 'default')
+            blob_name = f"edited_videos/{topic}/{save_name}.mp4"
             saved_url = video_editor.upload_video_from_memory(blob_name, edited_stream)
-            logging.info("Uploaded edited (added trending audio) video to GCS: %s", saved_url)
 
-        # Return edited video as base64
         edited_stream.seek(0)
-        edited_base64 = base64.b64encode(edited_stream.read()).decode("utf-8")
-        logging.info("Returning edited (added trending audio) video base64, length=%d", len(edited_base64))
+        encoded = base64.b64encode(edited_stream.read()).decode("utf-8")
 
         return jsonify({
             "success": True,
             "video_info": updated_info,
             "saved_url": saved_url,
-            "message": "Edit applied successfully"
         })
 
     except Exception as e:
-        logging.exception("Unhandled error in /edit")
+        logging.exception("Error in /add-trending-audio")
         return jsonify({"error": str(e)}), 500
 
-    finally:
-        try:
-            if 'video_stream' in locals() and video_stream:
-                video_stream.close()
-                del video_stream
-            if 'edited_stream' in locals() and edited_stream:
-                edited_stream.close()
-                del edited_stream
-            import gc
-            gc.collect()
-            logging.info("Memory cleared after edit")
-        except Exception as e:
-            logging.warning("Memory cleanup failed: %s", e)
-    
-
-@app.route('/trending-songs', methods=['GET'])
-def get_trending_songs():
+# ----------------------------
+# Video Info
+# ----------------------------
+@app.route('/video-info', methods=['POST'])
+def get_video_info():
     try:
-        return jsonify({
-            "success": True,
-            "songs": TRENDING_SONGS
-        })
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing JSON data"}), 400
+        video_stream = get_video_stream_from_input(data)
+        video_info = video_editor.get_video_info_from_memory(video_stream)
+        return jsonify({"success": True, "video_info": video_info})
     except Exception as e:
-        logging.exception("Error in /trending-songs")
+        logging.exception("Error in /video-info")
         return jsonify({"error": str(e)}), 500
 
+# ----------------------------
+# Save Video
+# ----------------------------
+@app.route('/save-video', methods=['POST'])
+def save_video():
+    try:
+        data = request.get_json()
+        if not data or 'save_name' not in data:
+            return jsonify({"error": "Missing save_name"}), 400
+
+        video_stream = get_video_stream_from_input(data)
+        topic = data.get('topic', 'default')
+        blob_name = f"edited_videos/{topic}/{data['save_name']}.mp4"
+
+        saved_url = video_editor.upload_video_from_memory(blob_name, video_stream)
+        return jsonify({"success": True, "saved_url": saved_url, "blob_name": blob_name})
+    except Exception as e:
+        logging.exception("Error in /save-video")
+        return jsonify({"error": str(e)}), 500
+
+# ----------------------------
+# Misc
+# ----------------------------
+@app.route('/trending-songs', methods=['GET'])
+def trending_songs():
+    return jsonify({"success": True, "songs": TRENDING_SONGS})
 
 @app.route('/edited-videos', methods=['GET'])
 def get_edited_videos():
     try:
         topic = request.args.get('topic')
         videos = video_editor.list_edited_videos(prefix=topic)
-        return jsonify({
-            "success": True,
-            "videos": videos,
-            "count": len(videos)
-        })
+        return jsonify({"success": True, "videos": videos})
     except Exception as e:
         logging.exception("Error in /edited-videos")
         return jsonify({"error": str(e)}), 500
-
-
-@app.route('/video-info', methods=['POST'])
-def get_video_info():
-    try:
-        data = request.get_json()
-        if not data or 'file' not in data:
-            return jsonify({"error": "No file data provided"}), 400
-
-        video_stream = decode_base64_file(data['file'])
-        video_info = video_editor.get_video_info_from_memory(video_stream)
-
-        if not video_info.get("success"):
-            return jsonify({"error": f"Could not get video info: {video_info.get('error')}"}), 400
-
-        return jsonify({"success": True, "video_info": video_info})
-
-    except Exception as e:
-        logging.exception("Error in /video-info")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/save-video', methods=['POST'])
-def save_video():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        for field in ['file', 'topic', 'save_name']:
-            if field not in data:
-                return jsonify({"error": f"Missing required field: {field}"}), 400
-
-        video_stream = decode_base64_file(data['file'])
-        topic = data['topic']
-        save_name = data['save_name']
-
-        blob_name = f"edited_videos/{topic}/{save_name}"
-        if not blob_name.endswith(".mp4"):
-            blob_name += ".mp4"
-
-        saved_url = video_editor.upload_video_from_memory(blob_name, video_stream)
-        if not saved_url:
-            return jsonify({"error": "Failed to save video to GCS"}), 500
-
-        logging.info("Saved video to GCS: %s", saved_url)
-        return jsonify({
-            "success": True,
-            "saved_url": saved_url,
-            "blob_name": blob_name,
-            "message": "Video saved successfully"
-        })
-
-    except Exception as e:
-        logging.exception("Error in /save-video")
-        return jsonify({"error": str(e)}), 500
-
 
 @app.route('/download/<path:blob_name>', methods=['GET'])
 def download_video(blob_name):
     try:
         video_stream = video_editor.download_video_to_memory(blob_name)
         if not video_stream:
-            return jsonify({"error": "Video not found"}), 404
-
+            return jsonify({"error": "Not found"}), 404
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         video_stream.seek(0)
-        temp_file.write(video_stream.getvalue())
+        temp_file.write(video_stream.read())
         temp_file.close()
 
         @after_this_request
-        def cleanup_temp_file(response):
-            try:
-                os.remove(temp_file.name)
-            except Exception as e:
-                logging.warning("Failed to delete temp file: %s", e)
+        def cleanup(response):
+            os.remove(temp_file.name)
             return response
 
-        return send_file(
-            temp_file.name,
-            as_attachment=True,
-            download_name=blob_name.split('/')[-1],
-            mimetype='video/mp4'
-        )
-
+        return send_file(temp_file.name, as_attachment=True, download_name=os.path.basename(blob_name))
     except Exception as e:
         logging.exception("Error in /download")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({
-        "status": "healthy",
-        "message": "GCS Video Editor API is running"
-    })
+    return jsonify({"status": "healthy"})
 
+@app.before_request
+def log_request_info():
+    logging.info(f"➡️ Incoming {request.method} request to {request.path}")
+    if request.is_json:
+        try:
+            logging.info(f"📦 Request JSON: {json.dumps(request.get_json(), indent=2)[:500]}")  # truncate long JSON
+        except Exception:
+            logging.warning("⚠️ Unable to parse request JSON")
 
-# ----------------------------
-# Error Handlers
-# ----------------------------
-@app.errorhandler(413)
-def too_large(e):
-    return jsonify({"error": "File too large. Maximum size is 500MB."}), 413
+@app.after_request
+def log_response_info(response):
+    logging.info(f"⬅️ Response {response.status_code} for {request.path}")
+    return response
 
-
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({"error": "Endpoint not found"}), 404
-
-
-@app.errorhandler(500)
-def internal_error(e):
-    return jsonify({"error": "Internal server error"}), 500
-
+@app.teardown_request
+def teardown_request_logging(exception=None):
+    if exception:
+        logging.error(f"💥 Exception during request: {exception}")
+    else:
+        logging.info(f"✅ Request completed for {request.path}")
+    gc.collect()
 
 # ----------------------------
 # Startup
 # ----------------------------
 if __name__ == '__main__':
-    logging.info("🎬 Starting GCS Video Editor Flask API...")
-    logging.info("📋 Listening on port %d", port)
+    logging.info("🚀 Starting GCS Video Editor API (URL-Compatible)")
     app.run(debug=True, host='0.0.0.0', port=port)
