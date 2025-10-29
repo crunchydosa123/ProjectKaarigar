@@ -42,7 +42,7 @@ class Veo3ReelGenerator:
             location: Google Cloud region
         """
         # Use the same project ID as reel_model.py
-        self.project_id = project_id or "useful-figure-475210-g7"
+        self.project_id = project_id or "karigar-475215"
         self.location = location
         
         # Initialize client with same configuration as reel_model.py

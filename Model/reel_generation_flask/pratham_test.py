@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 import tempfile
 
 # Cloud Run URL
-BASE_URL = "https://reels-editor-298842469563.asia-south1.run.app"
+BASE_URL = "https://reels-editor-557742533869.asia-south1.run.app"
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -176,7 +176,7 @@ def test_3_generate_ideas_with_image():
     print_info(f"Testing endpoint: POST {BASE_URL}/api/reel-generation/ideas (with image_url)")
 
     # Example image URL (replace or extend this list as needed)
-    image_url = "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg"
+    image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
 
     data = {
         'initial_prompt': 'Create a video showcasing this magical diary',
@@ -376,7 +376,7 @@ def test_9_generate_images_to_video():
     # Test 9a: Single image URL
     print_info("Test 9a: Single image URL test...")
 
-    single_image_url = "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg"
+    single_image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
 
     data = {
         "prompt": "Transform this magical diary into an enchanting video",
@@ -411,8 +411,8 @@ def test_9_generate_images_to_video():
     print_info("\nTest 9b: Multiple image URLs test...")
 
     multiple_image_urls = [
-        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg",
-        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(2).jpeg"
+        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg",
+        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(2).jpeg"
     ]
 
     data = {
