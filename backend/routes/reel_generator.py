@@ -24,7 +24,7 @@ storage_client = storage.Client()
 db = firestore.Client()
 
 # Configuration
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 BRAND_ID = "BRAND_123"
 
 def upload_to_gcs(file_path, cloud_path):

@@ -61,7 +61,7 @@ class Veo3ReelGenerator:
         self.storage_client = storage.Client()
         
         # Use same bucket configuration as reel_model.py
-        self.video_bucket = "gs://all_in_one_bucket/reels"
+        self.video_bucket = "gs://all_in_one_bucket1/reels"
         self.local_dir = "./segments"
         os.makedirs(self.local_dir, exist_ok=True)
     

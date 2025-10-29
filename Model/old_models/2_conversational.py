@@ -60,7 +60,7 @@ ENABLE_NOISE_FILTERING = False  # Set to False to disable noise filtering comple
 
 # Choose if you want to use VertexAI or Gemini Developer API
 use_vertexai = True  # Set to True for Vertex AI, False for Gemini Developer API (Google AI Studio API_KEY)
-PROJECT_ID = 'useful-figure-475210-g7'  # set this value with proper Project ID if you plan to use Vertex AI
+PROJECT_ID = 'karigar-475215'  # set this value with proper Project ID if you plan to use Vertex AI
 
 # System prompt for Karigar information collection
 SYSTEM_PROMPT = """You are a professional interviewer conducting a structured interview. Follow these STRICT rules:

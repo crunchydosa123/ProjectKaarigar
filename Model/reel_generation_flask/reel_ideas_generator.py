@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-PROJECT_ID = "useful-figure-475210-g7"
+PROJECT_ID = "karigar-475215"
 LOCATION = "us-central1"
 
 # Initialize client

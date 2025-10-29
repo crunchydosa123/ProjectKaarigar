@@ -22,11 +22,11 @@ from google.genai.types import GenerateImagesConfig
 image_gen_bp = Blueprint('image_gen', __name__)
 
 # Google Cloud Configuration
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 FIRESTORE_AVAILABLE = True
 
 # Configuration for image generation
-PROJECT_ID = "useful-figure-475210-g7"
+PROJECT_ID = "karigar-475215"
 LOCATION = "us-central1"
 
 # Initialize GenAI client for image generation

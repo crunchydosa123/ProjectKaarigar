@@ -4,7 +4,7 @@ from google.genai.types import GenerateImagesConfig
 # Use Vertex AI instead of API key
 client = genai.Client(
     vertexai=True,
-    project="useful-figure-475210-g7",
+    project="karigar-475215",
     location="us-central1"
 )
 

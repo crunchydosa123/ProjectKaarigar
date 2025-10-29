@@ -39,7 +39,7 @@ def main() -> None:
         "category": "Pottery",
         "location": "Jaipur, RJ, IN",
         "summary": "Handmade terracotta pots",
-        "brandDocUri": "gs://all_in_one_bucket/brands/BRAND_123/profile/brand.json",
+        "brandDocUri": "gs://all_in_one_bucket1/brands/BRAND_123/profile/brand.json",
     })
 
     # conversations
@@ -58,8 +58,8 @@ def main() -> None:
     db.collection("videos").document("VID_1").set({
         "kaarigarId": "KR_1",
         "brandId": "BRAND_123",
-        "sourceUri": "gs://all_in_one_bucket/media/BRAND_123/uploads/videos/VID_1/source.mp4",
-        "finalUri": "gs://all_in_one_bucket/media/BRAND_123/processed/videos/VID_1/final.mp4",
+        "sourceUri": "gs://all_in_one_bucket1/media/BRAND_123/uploads/videos/VID_1/source.mp4",
+        "finalUri": "gs://all_in_one_bucket1/media/BRAND_123/processed/videos/VID_1/final.mp4",
     })
 
     # products
@@ -70,7 +70,7 @@ def main() -> None:
         "price": 799,
         "currency": "INR",
         "imageUris": [
-            "gs://all_in_one_bucket/products/BRAND_123/PROD_1/images/IMG_1.jpg"
+            "gs://all_in_one_bucket1/products/BRAND_123/PROD_1/images/IMG_1.jpg"
         ],
         "videoIds": ["VID_1"],
     })
@@ -85,7 +85,7 @@ def main() -> None:
         "price": 799,
         "currency": "INR",
         "imageUris": [
-            "gs://all_in_one_bucket/products/BRAND_123/PROD_1/images/IMG_1.jpg"
+            "gs://all_in_one_bucket1/products/BRAND_123/PROD_1/images/IMG_1.jpg"
         ],
         "videoIds": ["VID_1"],
         "contentJson": {

@@ -20,7 +20,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize managers
 cloud_manager = CloudStorageManager(
-    bucket_name="all_in_one_bucket",
+    bucket_name="all_in_one_bucket1",
     brand_id="BRAND_123"
 )
 

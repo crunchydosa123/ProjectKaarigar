@@ -24,8 +24,8 @@ except ImportError as e:
     sys.exit(1)
 
 # Configuration
-PROJECT_ID = "useful-figure-475210-g7"
-BUCKET_NAME = "all_in_one_bucket"
+PROJECT_ID = "karigar-475215"
+BUCKET_NAME = "all_in_one_bucket1"
 
 class DatabaseReorganizer:
     def __init__(self, project_id: str, bucket_name: str):

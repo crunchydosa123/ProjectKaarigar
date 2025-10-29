@@ -41,7 +41,7 @@ from google.genai import types
 # ---------------------------
 # Gemini / GenAI
 GENAI_API_KEY = os.environ.get("GENAI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")  # set your key or leave empty for offline mode
-VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "useful-figure-475210-g7")   # optional Vertex project
+VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "karigar-475215")   # optional Vertex project
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")  # default location
 
 TWILIO_ACCOUNT_SID = "ACe7815acf39a739898e084fb8f61f3edc"

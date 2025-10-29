@@ -23,7 +23,7 @@ except ImportError as e:
 auth_bp = Blueprint('auth_bp', __name__)
 
 # Configuration
-PROJECT_ID = "useful-figure-475210-g7"
+PROJECT_ID = "karigar-475215"
 COLLECTION_NAME = "users"
 
 # Initialize Firestore client

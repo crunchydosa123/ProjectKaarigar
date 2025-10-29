@@ -30,7 +30,7 @@ conversational_bp = Blueprint('conversational_bp', __name__)
 
 # Configuration
 PROJECT_ID = "useful-figure-475210-g7"
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 COLLECTION_NAME = "kaarigars"  # Changed to match user requirement
 
 # Initialize clients

@@ -160,7 +160,7 @@ def test_2_generate_ideas_with_image():
     print_info(f"Testing endpoint: POST {BASE_URL}/api/reel-generation/ideas (with image)")
     
     # Use the provided image URL
-    image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
+    image_url = "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg"
     
     # Test with different prompts
     test_prompts = [
@@ -219,7 +219,7 @@ def test_3_generate_images_to_video():
     
     # Test with single image first
     print_info("Test 3a: Single image test...")
-    image_url = "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
+    image_url = "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg"
     
     data = {
         'prompt': 'Transform this magical diary into an enchanting video',
@@ -255,8 +255,8 @@ def test_3_generate_images_to_video():
     
     # Using multiple image URLs
     image_urls = [
-        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg",
-        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(2).jpeg"
+        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg",
+        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(2).jpeg"
     ]
     
     print_success(f"Using {len(image_urls)} image URLs for multiple image test")
@@ -303,8 +303,8 @@ def test_3b_specific_two_images_reel():
     
     # Using the two specific image URLs
     image_urls = [
-        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(2).jpeg",
-        "https://storage.googleapis.com/all_in_one_bucket/Trash/image/images%20(1).jpeg"
+        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(2).jpeg",
+        "https://storage.googleapis.com/all_in_one_bucket1/Trash/image/images%20(1).jpeg"
     ]
     
     data = {

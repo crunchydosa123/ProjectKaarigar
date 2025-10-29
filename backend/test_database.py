@@ -22,7 +22,7 @@ def test_firestore_connection():
     print("\n🧪 Testing Firestore Connection...")
     
     try:
-        PROJECT_ID = "useful-figure-475210-g7"
+        PROJECT_ID = "karigar-475215"
         db = firestore.Client(project=PROJECT_ID)
         print(f"✅ Firestore client created successfully")
         print(f"📊 Project ID: {db.project}")

@@ -6,7 +6,7 @@ from google.cloud import storage
 client = storage.Client()
 
 # Replace with your bucket name
-bucket_name = "all_in_one_bucket"
+bucket_name = "all_in_one_bucket1"
 bucket = client.bucket(bucket_name)
 
 # --- Upload a file ---

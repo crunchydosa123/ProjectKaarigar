@@ -17,7 +17,7 @@ import os
 from google.cloud import storage
 
 
-BUCKET_NAME = "all_in_one_bucket"  # keep in sync with googlecloudstorage_object_storage_setup.py
+BUCKET_NAME = "all_in_one_bucket1"  # keep in sync with googlecloudstorage_object_storage_setup.py
 
 
 def upload_bytes(client: storage.Client, bucket_name: str, dest_path: str, data: bytes, content_type: str = "application/octet-stream") -> None:

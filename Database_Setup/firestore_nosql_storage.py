@@ -6,7 +6,7 @@ from google.cloud import firestore
 # ----------------------------
 # Configuration
 # ----------------------------
-PROJECT_ID = "useful-figure-475210-g7"  # Replace with your project ID
+PROJECT_ID = "karigar-475215"  # Replace with your project ID
 COLLECTION_NAME = "users"               # Collection inside the default DB
 
 # ----------------------------

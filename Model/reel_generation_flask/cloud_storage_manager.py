@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class CloudStorageManager:
     """Manages video uploads to Google Cloud Storage"""
     
-    def __init__(self, bucket_name: str = "all_in_one_bucket", brand_id: str = "BRAND_123"):
+    def __init__(self, bucket_name: str = "all_in_one_bucket1", brand_id: str = "BRAND_123"):
         """
         Initialize Cloud Storage Manager
         

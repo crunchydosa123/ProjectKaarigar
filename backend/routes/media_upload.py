@@ -10,7 +10,7 @@ import mimetypes
 media_bp = Blueprint('media', __name__)
 
 # Google Cloud Configuration
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 FIRESTORE_AVAILABLE = True
 
 # Initialize Google Cloud clients

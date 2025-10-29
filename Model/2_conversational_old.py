@@ -37,7 +37,7 @@ ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/
 ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
 
 # Vertex / Imagen defaults (override with env vars)
-VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "useful-figure-475210-g7")
+VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "karigar-475215")
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 IMAGEN_MODEL = os.environ.get("IMAGEN_MODEL", "imagen-4.0-generate-001")
 

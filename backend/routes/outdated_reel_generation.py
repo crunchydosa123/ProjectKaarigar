@@ -27,11 +27,11 @@ optimize_prompt_with_gemini = None
 reel_bp = Blueprint('reel', __name__)
 
 # Google Cloud Configuration
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 FIRESTORE_AVAILABLE = True
 
 # Configuration for reel generation
-PROJECT_ID = "useful-figure-475210-g7"
+PROJECT_ID = "karigar-475215"
 LOCATION = "us-central1"
 
 # Initialize Google Cloud clients

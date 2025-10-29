@@ -6,12 +6,12 @@ import sys # Import sys for better error logging
 # Use Vertex AI instead of API key
 client = genai.Client(
     vertexai=True,
-    project="useful-figure-475210-g7",  # Your Google Cloud project ID
+    project="karigar-475215",  # Your Google Cloud project ID
     location="us-central1"
 )
 
 # Define output location in your GCS bucket
-output_gcs_uri = "gs://all_in_one_bucket/videos/"
+output_gcs_uri = "gs://all_in_one_bucket1/videos/"
 
 print("🚀 Initializing video generation...")
 
@@ -20,7 +20,7 @@ try:
         model="veo-3.1-generate-preview",
         prompt="dog runing on the rain in the forest",
         image=Image(
-            gcs_uri="gs://all_in_one_bucket/images/pexels-photo-1108099.jpeg",
+            gcs_uri="gs://all_in_one_bucket1/images/pexels-photo-1108099.jpeg",
             mime_type="image/jpeg",
         ),
         config=GenerateVideosConfig(

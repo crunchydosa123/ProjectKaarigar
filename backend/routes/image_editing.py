@@ -21,11 +21,11 @@ from google.genai import types
 image_edit_bp = Blueprint('image_edit', __name__)
 
 # Google Cloud Configuration
-BUCKET_NAME = "all_in_one_bucket"
+BUCKET_NAME = "all_in_one_bucket1"
 FIRESTORE_AVAILABLE = True
 
 # Configuration for image editing
-PROJECT_ID = "useful-figure-475210-g7"
+PROJECT_ID = "karigar-475215"
 LOCATION = "us-central1"
 
 # Initialize GenAI client for image analysis and editing

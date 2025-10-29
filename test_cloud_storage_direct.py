@@ -22,8 +22,8 @@ def test_direct_cloud_storage_access():
         from google.cloud import storage
         
         # Configuration
-        PROJECT_ID = "useful-figure-475210-g7"
-        BUCKET_NAME = "all_in_one_bucket"
+        PROJECT_ID = "karigar-475215"
+        BUCKET_NAME = "all_in_one_bucket1"
         
         # Initialize Cloud Storage client
         storage_client = storage.Client(project=PROJECT_ID)
@@ -87,8 +87,8 @@ def test_with_different_paths():
         from google.cloud import storage
         
         # Configuration
-        PROJECT_ID = "useful-figure-475210-g7"
-        BUCKET_NAME = "all_in_one_bucket"
+        PROJECT_ID = "karigar-475215"
+        BUCKET_NAME = "all_in_one_bucket1"
         
         # Initialize Cloud Storage client
         storage_client = storage.Client(project=PROJECT_ID)

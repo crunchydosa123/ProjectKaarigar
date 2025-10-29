@@ -30,8 +30,8 @@ except ImportError as e:
 logo_bp = Blueprint('logo_bp', __name__)
 
 # Configuration
-PROJECT_ID = "useful-figure-475210-g7"
-BUCKET_NAME = "all_in_one_bucket"
+PROJECT_ID = "karigar-475215"
+BUCKET_NAME = "all_in_one_bucket1"
 
 # Initialize clients
 if FIRESTORE_AVAILABLE:
@@ -56,7 +56,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 # Vertex AI configuration for Imagen
-VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "useful-figure-475210-g7")
+VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "karigar-475215")
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 IMAGEN_MODEL = os.environ.get("IMAGEN_MODEL", "imagen-4.0-generate-001")
 

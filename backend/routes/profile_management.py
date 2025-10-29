@@ -30,8 +30,8 @@ except ImportError as e:
 profile_bp = Blueprint('profile_bp', __name__)
 
 # Configuration
-PROJECT_ID = "useful-figure-475210-g7"
-BUCKET_NAME = "all_in_one_bucket"
+PROJECT_ID = "karigar-475215"
+BUCKET_NAME = "all_in_one_bucket1"
 
 # Initialize clients
 if FIRESTORE_AVAILABLE:

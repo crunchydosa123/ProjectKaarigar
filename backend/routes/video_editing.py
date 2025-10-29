@@ -11,8 +11,8 @@ from google.cloud import firestore
 video_edit_bp = Blueprint('video_edit', __name__)
 
 # Google Cloud Configuration
-BUCKET_NAME = "all_in_one_bucket"
-PROJECT_ID = "useful-figure-475210-g7"
+BUCKET_NAME = "all_in_one_bucket1"
+PROJECT_ID = "karigar-475215"
 
 # Initialize Google Cloud clients
 try:
