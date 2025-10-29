@@ -1,0 +1,14 @@
+{
+    "saved_url": "https://storage.googleapis.com/all_in_one_bucket1/edited_videos/my_project/bw_video234.mp4",
+    "success": true,
+    "video_info": {
+        "audio_codec": "aac",
+        "duration": 6.041016,
+        "format": "mov,mp4,m4a,3gp,3g2,mj2",
+        "has_audio": true,
+        "height": 1920,
+        "size": 1507102,
+        "success": true,
+        "width": 1080
+    }
+}

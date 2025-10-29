@@ -258,6 +258,28 @@ def download_video(blob_name):
 def health_check():
     return jsonify({"status": "healthy"})
 
+@app.before_request
+def log_request_info():
+    logging.info(f"➡️ Incoming {request.method} request to {request.path}")
+    if request.is_json:
+        try:
+            logging.info(f"📦 Request JSON: {json.dumps(request.get_json(), indent=2)[:500]}")  # truncate long JSON
+        except Exception:
+            logging.warning("⚠️ Unable to parse request JSON")
+
+@app.after_request
+def log_response_info(response):
+    logging.info(f"⬅️ Response {response.status_code} for {request.path}")
+    return response
+
+@app.teardown_request
+def teardown_request_logging(exception=None):
+    if exception:
+        logging.error(f"💥 Exception during request: {exception}")
+    else:
+        logging.info(f"✅ Request completed for {request.path}")
+    gc.collect()
+
 # ----------------------------
 # Startup
 # ----------------------------
