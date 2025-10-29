@@ -8,13 +8,13 @@ import { useState, useEffect } from 'react';
 import { logoAPI, profileAPI } from '@/lib/api';
 
 // Define the interfaces locally to avoid import issues
-interface LogoInfo {
+/*interface LogoInfo {
   logo_url?: string;
   brand_name?: string;
   logo_prompt?: string;
   logo_generated_at?: string;
   has_logo: boolean;
-}
+}*/
 
 interface ProfileData {
   name: string;
@@ -38,7 +38,9 @@ const ProfilePage = () => {
   const [logoInfo, setLogoInfo] = useState({
     logo_url: "/ai_gen_logo.jpeg",
     brand_name: "Your Brand",
-    has_logo: false
+    has_logo: false,
+    logo_prompt: "",
+    logo_generated_at: ""
   });
   const [profileData, setProfileData] = useState<ProfileData>({
     name: "",
@@ -71,16 +73,16 @@ const ProfilePage = () => {
           console.log("🔄 Getting fresh profile data from Cloud Storage...");
           const profileResponse = await profileAPI.getProfileData();
           console.log("📄 Fresh profile response:", profileResponse);
-          
+
           if (profileResponse.success && profileResponse.profile_data) {
             setProfileData(profileResponse.profile_data);
             console.log("✅ Loaded fresh profile data:", profileResponse.profile_data);
-            
+
             // Update brand name if available in the response
             if (profileResponse.brand_info && profileResponse.brand_info.brand_name) {
               setLogoInfo(prev => ({
                 ...prev,
-                brand_name: profileResponse.brand_info.brand_name
+                brand_name: profileResponse.brand_info?.brand_name ?? prev.brand_name,
               }));
               console.log("🏷️ Updated brand name from profile:", profileResponse.brand_info.brand_name);
             }
@@ -89,7 +91,7 @@ const ProfilePage = () => {
             // Fallback to saved profile
             const savedResponse = await profileAPI.getSavedProfile();
             console.log("📄 Saved profile response:", savedResponse);
-            
+
             if (savedResponse.success && savedResponse.profile_data) {
               setProfileData(savedResponse.profile_data);
               console.log("✅ Loaded saved profile:", savedResponse.profile_data);
@@ -106,7 +108,13 @@ const ProfilePage = () => {
         console.log("🔄 Fetching logo info...");
         const logoResponse = await logoAPI.getLogo();
         if (logoResponse.success && logoResponse.logo_info) {
-          setLogoInfo(logoResponse.logo_info);
+          setLogoInfo({
+            logo_url: logoResponse.logo_info.logo_url ?? "",
+            has_logo: logoResponse.logo_info.has_logo,
+            logo_generated_at: logoResponse.logo_info.logo_generated_at ?? "",
+            logo_prompt: logoResponse.logo_info.logo_prompt ?? "",
+            brand_name: logoResponse.logo_info.brand_name ?? "",
+          });
           console.log("✅ Logo info loaded:", logoResponse.logo_info);
         } else {
           console.log("⚠️ No logo info found, using defaults");
@@ -114,7 +122,9 @@ const ProfilePage = () => {
           setLogoInfo({
             logo_url: "/ai_gen_logo.jpeg",
             brand_name: "Your Brand",
-            has_logo: false
+            has_logo: false,
+            logo_prompt: "",
+            logo_generated_at: ""
           });
         }
       } catch (error) {
@@ -137,7 +147,7 @@ const ProfilePage = () => {
       success: success
     });
   };
-  
+
   // Make debug function available globally for console access
   (window as any).debugProfileData = debugProfileData;
 
@@ -167,7 +177,7 @@ const ProfilePage = () => {
       console.log("🔄 Saving profile data to profiles collection...");
       const response = await profileAPI.saveProfile(profileData);
       console.log("📄 Save profile response:", response);
-      
+
       if (response.success) {
         setSuccess("Profile saved successfully!");
         console.log("✅ Profile saved successfully to profiles collection");
@@ -180,7 +190,7 @@ const ProfilePage = () => {
       }
     } catch (err) {
       console.error("❌ Save profile error:", err);
-      setError(`Failed to save profile: ${err.message || 'Please check your connection and try again.'}`);
+      setError(`Failed to save profile: ${(err as any).message || 'Please check your connection and try again.'}`);
     } finally {
       setSaving(false);
     }
@@ -204,11 +214,11 @@ const ProfilePage = () => {
           </div>
         </div>
       )}
-      
+
       {!loading && profileData.name && (
         <div className="mx-4 mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
           <div className="text-sm text-green-800">
-            ✅ Profile data loaded successfully! 
+            ✅ Profile data loaded successfully!
             <br />
             <span className="text-xs">
               Auto-filled: Name, Occupation ({profileData.occupation}), Bio, Materials, Aspirations, Craft Details
@@ -217,7 +227,7 @@ const ProfilePage = () => {
           </div>
         </div>
       )}
-      
+
       {!loading && !profileData.name && (
         <div className="mx-4 mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
           <div className="text-sm text-orange-800">
@@ -233,53 +243,53 @@ const ProfilePage = () => {
             <Label className='mt-2'>Loading profile data...</Label>
           </div>
         ) : (
-        <div className='flex flex-col justify-center items-center rounded-md'>
-            <img 
-              src={logoInfo.logo_url} 
-              alt="Brand Logo" 
-              className='h-30 w-30 rounded-lg object-contain' 
+          <div className='flex flex-col justify-center items-center rounded-md'>
+            <img
+              src={logoInfo.logo_url}
+              alt="Brand Logo"
+              className='h-30 w-30 rounded-lg object-contain'
             />
-          <Label className='mt-2'>Your Brand Logo</Label>
+            <Label className='mt-2'>Your Brand Logo</Label>
             {logoInfo.has_logo && (
               <div className="text-xs text-green-600 mt-1">✓ AI Generated</div>
             )}
-        </div>
+          </div>
         )}
 
         <div className='my-4'>
           <Label className='mb-1'>Your Brand's Name</Label>
-                 <Input 
-                   type='text' 
-                   value={logoInfo.brand_name} 
-                   onChange={(e) => {
-                     const newBrandName = e.target.value;
-                     setLogoInfo({...logoInfo, brand_name: newBrandName});
-                     
-                     // Auto-save brand name changes
-                     if (newBrandName && newBrandName !== "Your Brand") {
-                       console.log("🔄 Auto-saving brand name:", newBrandName);
-                       profileAPI.updateBrand(newBrandName, logoInfo.logo_url).catch(err => {
-                         console.warn("⚠️ Auto-save brand failed:", err);
-                       });
-                     }
-                   }}
-                   className='text-sm'
-                   placeholder="Enter your brand name"
-                   disabled={loading}
-                 />
-                 {logoInfo.brand_name && logoInfo.brand_name !== "Your Brand" && (
-                   <div className="text-xs text-green-600 mt-1">
-                     ✓ Brand name will be saved automatically
-                   </div>
-                 )}
+          <Input
+            type='text'
+            value={logoInfo.brand_name}
+            onChange={(e) => {
+              const newBrandName = e.target.value;
+              setLogoInfo({ ...logoInfo, brand_name: newBrandName });
+
+              // Auto-save brand name changes
+              if (newBrandName && newBrandName !== "Your Brand") {
+                console.log("🔄 Auto-saving brand name:", newBrandName);
+                profileAPI.updateBrand(newBrandName, logoInfo.logo_url).catch(err => {
+                  console.warn("⚠️ Auto-save brand failed:", err);
+                });
+              }
+            }}
+            className='text-sm'
+            placeholder="Enter your brand name"
+            disabled={loading}
+          />
+          {logoInfo.brand_name && logoInfo.brand_name !== "Your Brand" && (
+            <div className="text-xs text-green-600 mt-1">
+              ✓ Brand name will be saved automatically
+            </div>
+          )}
         </div>
 
         <div className=''>
           <Label className='mb-1'>Your Name</Label>
-          <Input 
-            type='text' 
-            value={profileData.name} 
-            onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+          <Input
+            type='text'
+            value={profileData.name}
+            onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
             className='text-sm'
             placeholder={loading ? "Loading..." : "Enter your name"}
             disabled={loading}
@@ -293,10 +303,10 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Your Email</Label>
-          <Input 
-            type='email' 
-            value={profileData.email} 
-            onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+          <Input
+            type='email'
+            value={profileData.email}
+            onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
             className='text-sm'
             placeholder="Enter your email"
             disabled={loading}
@@ -305,10 +315,10 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Occupation</Label>
-          <Input 
-            type='text' 
-            value={profileData.occupation} 
-            onChange={(e) => setProfileData({...profileData, occupation: e.target.value})}
+          <Input
+            type='text'
+            value={profileData.occupation}
+            onChange={(e) => setProfileData({ ...profileData, occupation: e.target.value })}
             className='text-sm'
             placeholder="Enter your occupation"
             disabled={loading}
@@ -317,9 +327,9 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Bio</Label>
-          <Textarea 
-            value={profileData.bio} 
-            onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
+          <Textarea
+            value={profileData.bio}
+            onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
             className='text-sm min-h-[60px]'
             placeholder={loading ? "Loading..." : "Tell us about yourself, your craft, and your story..."}
             rows={3}
@@ -336,10 +346,10 @@ const ProfilePage = () => {
         {profileData.location && (
           <div className='my-4'>
             <Label className='mb-1'>Location</Label>
-            <Input 
-              type='text' 
-              value={profileData.location} 
-              onChange={(e) => setProfileData({...profileData, location: e.target.value})}
+            <Input
+              type='text'
+              value={profileData.location}
+              onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
               className='text-sm'
               placeholder="City, State, Country"
               disabled={loading}
@@ -349,9 +359,9 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Craft Details</Label>
-          <Textarea 
-            value={profileData.craft_details} 
-            onChange={(e) => setProfileData({...profileData, craft_details: e.target.value})}
+          <Textarea
+            value={profileData.craft_details}
+            onChange={(e) => setProfileData({ ...profileData, craft_details: e.target.value })}
             className='text-sm min-h-[50px]'
             placeholder="Describe your craft, techniques, and specialties..."
             rows={2}
@@ -361,10 +371,10 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Materials Used</Label>
-          <Input 
-            type='text' 
-            value={profileData.materials_used} 
-            onChange={(e) => setProfileData({...profileData, materials_used: e.target.value})}
+          <Input
+            type='text'
+            value={profileData.materials_used}
+            onChange={(e) => setProfileData({ ...profileData, materials_used: e.target.value })}
             className='text-sm'
             placeholder="e.g., Clay, Wood, Metal, Traditional techniques..."
             disabled={loading}
@@ -375,10 +385,10 @@ const ProfilePage = () => {
         {profileData.experience_years && (
           <div className='my-4'>
             <Label className='mb-1'>Years of Experience</Label>
-            <Input 
-              type='text' 
-              value={profileData.experience_years} 
-              onChange={(e) => setProfileData({...profileData, experience_years: e.target.value})}
+            <Input
+              type='text'
+              value={profileData.experience_years}
+              onChange={(e) => setProfileData({ ...profileData, experience_years: e.target.value })}
               className='text-sm'
               placeholder="e.g., 5 years, 10+ years, Since childhood..."
               disabled={loading}
@@ -388,9 +398,9 @@ const ProfilePage = () => {
 
         <div className='my-4'>
           <Label className='mb-1'>Aspirations & Goals</Label>
-          <Textarea 
-            value={profileData.aspirations} 
-            onChange={(e) => setProfileData({...profileData, aspirations: e.target.value})}
+          <Textarea
+            value={profileData.aspirations}
+            onChange={(e) => setProfileData({ ...profileData, aspirations: e.target.value })}
             className='text-sm min-h-[50px]'
             placeholder="What are your goals and aspirations for your craft?"
             rows={2}
@@ -402,9 +412,9 @@ const ProfilePage = () => {
         {profileData.challenges && (
           <div className='my-4'>
             <Label className='mb-1'>Challenges</Label>
-            <Textarea 
-              value={profileData.challenges} 
-              onChange={(e) => setProfileData({...profileData, challenges: e.target.value})}
+            <Textarea
+              value={profileData.challenges}
+              onChange={(e) => setProfileData({ ...profileData, challenges: e.target.value })}
               className='text-sm min-h-[50px]'
               placeholder="What challenges do you face in your craft or business?"
               rows={2}
@@ -419,10 +429,10 @@ const ProfilePage = () => {
           <div className='flex flex-col gap-2'>
             <div className='flex justify-start items-center gap-1'>
               <Instagram />
-              <Input 
-                type='text' 
-                value={profileData.instagram || ''} 
-                onChange={(e) => setProfileData({...profileData, instagram: e.target.value})}
+              <Input
+                type='text'
+                value={profileData.instagram || ''}
+                onChange={(e) => setProfileData({ ...profileData, instagram: e.target.value })}
                 className='text-sm'
                 placeholder="@your_instagram"
                 disabled={loading}
@@ -430,10 +440,10 @@ const ProfilePage = () => {
             </div>
             <div className='flex justify-start items-center gap-1'>
               <Facebook />
-              <Input 
-                type='text' 
-                value={profileData.facebook || ''} 
-                onChange={(e) => setProfileData({...profileData, facebook: e.target.value})}
+              <Input
+                type='text'
+                value={profileData.facebook || ''}
+                onChange={(e) => setProfileData({ ...profileData, facebook: e.target.value })}
                 className='text-sm'
                 placeholder="@your_facebook"
                 disabled={loading}
@@ -441,10 +451,10 @@ const ProfilePage = () => {
             </div>
             <div className='flex justify-start items-center gap-1'>
               <Twitter />
-              <Input 
-                type='text' 
-                value={profileData.twitter || ''} 
-                onChange={(e) => setProfileData({...profileData, twitter: e.target.value})}
+              <Input
+                type='text'
+                value={profileData.twitter || ''}
+                onChange={(e) => setProfileData({ ...profileData, twitter: e.target.value })}
                 className='text-sm'
                 placeholder="@your_twitter"
                 disabled={loading}
@@ -454,7 +464,7 @@ const ProfilePage = () => {
         </div>
 
         {/* Debug Info - Remove this in production */}
-        {process.env.NODE_ENV === 'development' && (
+        {import.meta.env.DEV && (
           <div className="text-xs text-gray-500 mt-2 p-2 bg-gray-50 rounded">
             <div className="font-bold">Debug Info (Working Fields):</div>
             <div>Name: {profileData.name || 'Empty'}</div>
@@ -466,117 +476,130 @@ const ProfilePage = () => {
             <div>Craft Details: {profileData.craft_details ? '✅ Has data' : 'Empty'}</div>
             <div>Challenges: {profileData.challenges ? '✅ Has data' : 'Empty'}</div>
             <div className="text-orange-600 mt-1">Hidden fields: Location, Experience Years (empty)</div>
-                  <div className="mt-2 flex gap-2 flex-wrap">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={async () => {
-                        console.log("🔄 Manual profile fetch...");
-                        setLoading(true);
-                        try {
-                          const response = await profileAPI.getProfileData();
-                          console.log("📄 Manual fetch response:", response);
-                          if (response.success && response.profile_data) {
-                            setProfileData(response.profile_data);
-                            console.log("✅ Manual fetch successful");
-                            setSuccess("Profile data refreshed from Cloud Storage!");
-                          } else {
-                            setError("Failed to fetch profile data");
-                          }
-                        } catch (error) {
-                          console.error("❌ Manual fetch failed:", error);
-                          setError("Failed to fetch profile data");
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                    >
-                      🔄 Refresh Profile
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={async () => {
-                        console.log("🔄 Testing profile API health...");
-                        try {
-                          const response = await profileAPI.healthCheck();
-                          console.log("📄 Health check response:", response);
-                        } catch (error) {
-                          console.error("❌ Health check failed:", error);
-                        }
-                      }}
-                    >
-                      Test API Health
-                    </Button>
-                     <Button 
-                       size="sm" 
-                       variant="outline" 
-                       onClick={async () => {
-                         console.log("🔄 Refreshing logo info...");
-                         try {
-                           const response = await logoAPI.getLogo();
-                           console.log("📄 Logo refresh response:", response);
-                           if (response.success && response.logo_info) {
-                             setLogoInfo(response.logo_info);
-                             console.log("✅ Logo info refreshed:", response.logo_info);
-                           }
-                         } catch (error) {
-                           console.error("❌ Logo refresh failed:", error);
-                         }
-                       }}
-                     >
-                       🔄 Refresh Logo
-                     </Button>
-                     <Button 
-                       size="sm" 
-                       variant="outline" 
-                       onClick={async () => {
-                         console.log("🔄 Updating logo from Cloud Storage...");
-                         try {
-                           const response = await profileAPI.updateLogoFromStorage();
-                           console.log("📄 Logo update response:", response);
-                           if (response.success) {
-                             setSuccess("✅ Logo updated from Cloud Storage!");
-                             // Refresh logo info after update
-                             const logoResponse = await logoAPI.getLogo();
-                             if (logoResponse.success && logoResponse.logo_info) {
-                               setLogoInfo(logoResponse.logo_info);
-                             }
-                           } else {
-                             setError(`❌ Failed to update logo: ${response.error}`);
-                           }
-                         } catch (error) {
-                           console.error("❌ Logo update failed:", error);
-                           setError("❌ Failed to update logo from Cloud Storage");
-                         }
-                       }}
-                     >
-                       🔄 Update from Storage
-                     </Button>
-                     <Button 
-                       size="sm" 
-                       variant="outline" 
-                       onClick={async () => {
-                         console.log("🧪 Testing profile save...");
-                         try {
-                           const response = await profileAPI.saveProfile(profileData);
-                           console.log("📄 Test save response:", response);
-                           if (response.success) {
-                             setSuccess("✅ Test save successful!");
-                           } else {
-                             setError(`❌ Test save failed: ${response.error}`);
-                           }
-                         } catch (error) {
-                           console.error("❌ Test save failed:", error);
-                           setError("❌ Test save failed");
-                         }
-                       }}
-                     >
-                       🧪 Test Save
-                     </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
+            <div className="mt-2 flex gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  console.log("🔄 Manual profile fetch...");
+                  setLoading(true);
+                  try {
+                    const response = await profileAPI.getProfileData();
+                    console.log("📄 Manual fetch response:", response);
+                    if (response.success && response.profile_data) {
+                      setProfileData(response.profile_data);
+                      console.log("✅ Manual fetch successful");
+                      setSuccess("Profile data refreshed from Cloud Storage!");
+                    } else {
+                      setError("Failed to fetch profile data");
+                    }
+                  } catch (error) {
+                    console.error("❌ Manual fetch failed:", error);
+                    setError("Failed to fetch profile data");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                🔄 Refresh Profile
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  console.log("🔄 Testing profile API health...");
+                  try {
+                    const response = await profileAPI.healthCheck();
+                    console.log("📄 Health check response:", response);
+                  } catch (error) {
+                    console.error("❌ Health check failed:", error);
+                  }
+                }}
+              >
+                Test API Health
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  console.log("🔄 Refreshing logo info...");
+                  try {
+                    const response = await logoAPI.getLogo();
+                    console.log("📄 Logo refresh response:", response);
+                    if (response.success && response.logo_info) {
+                      setLogoInfo({
+                        logo_url: response.logo_info.logo_url ?? "",
+                        has_logo: response.logo_info.has_logo,
+                        logo_generated_at: response.logo_info.logo_generated_at ?? "",
+                        logo_prompt: response.logo_info.logo_prompt ?? "",
+                        brand_name: response.logo_info.brand_name ?? "",
+                      });
+                      console.log("✅ Logo info refreshed:", response.logo_info);
+                    }
+                  } catch (error) {
+                    console.error("❌ Logo refresh failed:", error);
+                  }
+                }}
+              >
+                🔄 Refresh Logo
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  console.log("🔄 Updating logo from Cloud Storage...");
+                  try {
+                    const response = await profileAPI.updateLogoFromStorage();
+                    console.log("📄 Logo update response:", response);
+                    if (response.success) {
+                      setSuccess("✅ Logo updated from Cloud Storage!");
+                      // Refresh logo info after update
+                      const logoResponse = await logoAPI.getLogo();
+                      if (logoResponse.success && logoResponse.logo_info) {
+                        console.log("logo info: ", logoResponse)
+                        setLogoInfo({
+                          logo_url: logoResponse.logo_info.logo_url ?? "",
+                          has_logo: logoResponse.logo_info.has_logo,
+                          logo_generated_at: logoResponse.logo_info.logo_generated_at ?? "",
+                          logo_prompt: logoResponse.logo_info.logo_prompt ?? "",
+                          brand_name: logoResponse.logo_info.brand_name ?? "",
+                        });
+                      }
+                    } else {
+                      setError(`❌ Failed to update logo: ${response.error}`);
+                    }
+                  } catch (error) {
+                    console.error("❌ Logo update failed:", error);
+                    setError("❌ Failed to update logo from Cloud Storage");
+                  }
+                }}
+              >
+                🔄 Update from Storage
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  console.log("🧪 Testing profile save...");
+                  try {
+                    const response = await profileAPI.saveProfile(profileData);
+                    console.log("📄 Test save response:", response);
+                    if (response.success) {
+                      setSuccess("✅ Test save successful!");
+                    } else {
+                      setError(`❌ Test save failed: ${response.error}`);
+                    }
+                  } catch (error) {
+                    console.error("❌ Test save failed:", error);
+                    setError("❌ Test save failed");
+                  }
+                }}
+              >
+                🧪 Test Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={async () => {
                   console.log("🔄 Debugging user data...");
                   try {
@@ -590,7 +613,7 @@ const ProfilePage = () => {
                       console.log("🔗 Profile URLs:", response.profile_urls);
                       console.log("📄 Cloud Storage Profile:", response.cloud_storage_profile);
                       console.log("📄 User Data Sample:", response.user_data_sample);
-                      
+
                       // Show in alert for easy viewing
                       alert(`Debug Info:
 User ID: ${response.user_id}
@@ -601,7 +624,7 @@ Cloud Storage Profile: ${JSON.stringify(response.cloud_storage_profile, null, 2)
                     }
                   } catch (error) {
                     console.error("❌ Debug failed:", error);
-                    alert(`Debug failed: ${error.message}`);
+                    alert(`Debug failed: ${(error as any).message}`);
                   }
                 }}
               >
@@ -623,8 +646,8 @@ Cloud Storage Profile: ${JSON.stringify(response.cloud_storage_profile, null, 2)
           </div>
         )}
 
-        <Button 
-          className='w-full mt-3' 
+        <Button
+          className='w-full mt-3'
           onClick={handleSaveProfile}
           disabled={saving}
         >
