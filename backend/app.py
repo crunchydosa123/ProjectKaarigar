@@ -97,8 +97,12 @@ def home():
             },
             "reel_generator": {
                 "POST /api/reel-generator": "Generate reel from selected images and prompt",
-                "POST /api/reel-generator/suggest-script": "Generate AI script suggestions based on prompt and images",
+                "POST /api/reel-generator/generate-video/images": "Generate video from image URLs (JSON)",
                 "GET /api/reel-generator/user-reels": "Get all reels for a specific user",
+                "GET /api/reel-generator/generated-reels": "Get generated reels for a user",
+                "POST /api/reel-generator/suggest-script": "Generate AI script suggestions based on prompt and images",
+                "DELETE /api/reel-generator/delete-video": "Delete video from Cloud Storage and Firestore",
+                "GET /api/reel-generator/proxy-image": "Proxy endpoint to download images from URLs",
                 "GET /api/reel-generator/health": "Reel generator service health check"
             },
             "testing": {
