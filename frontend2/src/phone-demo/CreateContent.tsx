@@ -305,10 +305,10 @@ const CreateContentMain = () => {
         // Modal will be shown in Action Section
         break;
       case 'createReel':
-        setCurrentPage('create-content/reel-maker');
+        setCurrentPage('create-content/videos');
         break;
       default:
-        setCurrentPage('');
+        setCurrentPage('create-content');
         break;
     }
   };

@@ -19,6 +19,7 @@ import {
   Palette
 } from 'lucide-react';
 import { mediaAPI, imageGenAPI, type MediaItem, type ImageGenerationRequest, type GeneratedImage } from '@/lib/api';
+import { usePage } from '@/contexts/PageContext';
 
 interface ImageGeneratorProps {
   onBack: () => void;
@@ -26,6 +27,7 @@ interface ImageGeneratorProps {
 }
 
 const ImageGenerator: React.FC<ImageGeneratorProps> = ({ onBack, onComplete }) => {
+  const {setCurrentPage} = usePage();
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState('');
   const [aspectRatio, setAspectRatio] = useState('1:1');
@@ -223,7 +225,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ onBack, onComplete }) =
       <div className="w-full mt-10 flex justify-start items-center p-3">
         <button
           className="h-10 w-10 bg-gray-500 rounded-md flex justify-center items-center text-white"
-          onClick={onBack}
+          onClick={()=> setCurrentPage('create-content')}
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
