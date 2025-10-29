@@ -953,7 +953,7 @@ export interface NewReelGenerationRequest {
 }
 
 class ReelGeneratorAPI {
-  private baseURL = 'https://reels-editor-298842469563.asia-south1.run.app';
+  private baseURL = 'https://reels-editor-557742533869.asia-south1.run.app';
 
   private async request<T>(
     endpoint: string,

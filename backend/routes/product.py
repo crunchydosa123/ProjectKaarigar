@@ -23,7 +23,7 @@ except Exception as e:
 # GenAI Client for AI generation
 GENAI_CLIENT = None
 try:
-    project_id = os.getenv("VERTEX_PROJECT", "useful-figure-475210-g7")
+    project_id = os.getenv("VERTEX_PROJECT", "karigar-475215")
     location = os.getenv("VERTEX_LOCATION", "us-central1")
     GENAI_CLIENT = genai.Client(vertexai=True, project=project_id, location=location)
     print(f"✅ GenAI client initialized for project: {project_id}, location: {location}")

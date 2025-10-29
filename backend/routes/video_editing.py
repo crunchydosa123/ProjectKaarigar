@@ -27,7 +27,7 @@ except Exception as e:
     db = None
 
 # Your FFmpeg service URL
-FFMPEG_SERVICE_URL = "https://video-editor-298842469563.asia-south1.run.app"
+FFMPEG_SERVICE_URL = "https://ffmpeg-service-557742533869.asia-south1.run.app"
 
 def get_user_from_session():
     """Get user ID from session"""

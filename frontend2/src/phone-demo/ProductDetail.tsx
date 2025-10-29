@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { usePage } from '@/contexts/PageContext';
-import { ChevronLeft, Edit2, Share2, ShoppingBag, Package, Image as ImageIcon, Video, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Edit2, Share2, ShoppingBag, Package, Image as ImageIcon, Video, ExternalLink, Upload, X, Check, Loader2, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { productAPI } from '@/lib/api';
+import { productAPI, mediaAPI } from '@/lib/api';
 
 interface Variant {
   description?: string;
@@ -47,6 +47,19 @@ const ProductDetail: React.FC = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showListDialog, setShowListDialog] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  
+  // Media picker states
+  const [availableImages, setAvailableImages] = useState<{ id: string; title: string; public_url: string }[]>([]);
+  const [availableVideos, setAvailableVideos] = useState<{ id: string; title: string; public_url: string }[]>([]);
+  const [showMediaChoiceDialog, setShowMediaChoiceDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showSelectMediaDialog, setShowSelectMediaDialog] = useState(false);
+  const [currentMediaType, setCurrentMediaType] = useState<'image' | 'video'>('image');
+  const [currentVariantIndexForMedia, setCurrentVariantIndexForMedia] = useState<number>(-1);
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: boolean }>({});
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -54,7 +67,8 @@ const ProductDetail: React.FC = () => {
     description: '',
     price: 0,
     stock: 0,
-    currency: 'INR'
+    currency: 'INR',
+    variants: [] as Variant[],
   });
 
   // Fetch product details
@@ -73,7 +87,8 @@ const ProductDetail: React.FC = () => {
               description: foundProduct.description || '',
               price: foundProduct.price || 0,
               stock: foundProduct.stock || 0,
-              currency: foundProduct.currency || 'INR'
+              currency: foundProduct.currency || 'INR',
+              variants: ((foundProduct as any).variants || []).map((v: Variant) => ({ ...v }))
             });
           } else {
             setError('Product not found');
@@ -97,12 +112,79 @@ const ProductDetail: React.FC = () => {
   };
 
   const handleEdit = () => {
+    setValidationErrors([]); // Clear validation errors when opening edit dialog
     setShowEditDialog(true);
   };
 
+  const validateForm = (): boolean => {
+    const errors: string[] = [];
+
+    // Validate product name
+    if (!editForm.name || editForm.name.trim().length === 0) {
+      errors.push('Product name is required');
+    }
+
+    // Validate price
+    if (editForm.price < 0) {
+      errors.push('Price cannot be negative');
+    }
+
+    // Validate stock
+    if (editForm.stock < 0) {
+      errors.push('Stock cannot be negative');
+    }
+
+    // Validate variants
+    if (editForm.variants && editForm.variants.length > 0) {
+      editForm.variants.forEach((variant, idx) => {
+        const variantNum = idx + 1;
+        
+        // Validate variant price
+        const variantPrice = typeof variant.price === 'string' ? parseFloat(variant.price) : (variant.price || 0);
+        if (variantPrice < 0) {
+          errors.push(`Variant ${variantNum}: Price cannot be negative`);
+        }
+
+        // Validate variant stock
+        const variantStock = typeof variant.stock === 'string' ? parseInt(variant.stock) : (variant.stock || 0);
+        if (variantStock < 0) {
+          errors.push(`Variant ${variantNum}: Stock cannot be negative`);
+        }
+
+        // Validate image URL if provided
+        if (variant.image_url && variant.image_url.trim().length > 0) {
+          try {
+            new URL(variant.image_url);
+          } catch {
+            errors.push(`Variant ${variantNum}: Invalid image URL format`);
+          }
+        }
+
+        // Validate video URL if provided
+        if (variant.video_url && variant.video_url.trim().length > 0) {
+          try {
+            new URL(variant.video_url);
+          } catch {
+            errors.push(`Variant ${variantNum}: Invalid video URL format`);
+          }
+        }
+      });
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
   const handleSaveEdit = async () => {
+    // Validate form before submitting
+    if (!validateForm()) {
+      return; // Validation errors will be shown in UI
+    }
+
     try {
       setLoading(true);
+      setValidationErrors([]); // Clear any previous errors
+      
       // Call backend update route
       if (!productId) throw new Error('Missing product id');
       const payload = {
@@ -110,7 +192,8 @@ const ProductDetail: React.FC = () => {
         description: editForm.description,
         price: editForm.price,
         stock: editForm.stock,
-        currency: editForm.currency
+        currency: editForm.currency,
+        variants: editForm.variants || []
       };
 
       const res = await productAPI.update(productId, payload);
@@ -132,6 +215,122 @@ const ProductDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Variant helpers for edit dialog
+  const handleAddVariant = () => {
+    setEditForm({
+      ...editForm,
+      variants: [
+        ...(editForm.variants || []),
+        { description: '', color: '', size: '', price: 0, stock: 0, image_url: '', video_url: '' }
+      ]
+    });
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    const v = [...(editForm.variants || [])];
+    v.splice(index, 1);
+    setEditForm({ ...editForm, variants: v });
+  };
+
+  const handleVariantChange = (index: number, key: keyof Variant, value: any) => {
+    const v = [...(editForm.variants || [])];
+    v[index] = { ...v[index], [key]: value };
+    setEditForm({ ...editForm, variants: v });
+  };
+
+  // Media selection helpers
+  const loadMediaChoices = async () => {
+    try {
+      const res = await productAPI.media();
+      if (res.success) {
+        setAvailableImages(res.images);
+        setAvailableVideos(res.videos);
+      }
+    } catch (e) {
+      console.error('Failed to load media', e);
+    }
+  };
+
+  const handleChooseMedia = (variantIndex: number, mediaType: 'image' | 'video') => {
+    setCurrentVariantIndexForMedia(variantIndex);
+    setCurrentMediaType(mediaType);
+    setShowMediaChoiceDialog(true);
+    loadMediaChoices();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setUploadingFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleUploadMedia = async () => {
+    if (uploadingFiles.length === 0) return;
+
+    setUploading(true);
+    const newProgress: { [key: string]: boolean } = {};
+
+    try {
+      const uploadedUrls: string[] = [];
+
+      for (const file of uploadingFiles) {
+        newProgress[file.name] = false;
+        setUploadProgress({ ...newProgress });
+
+        const response = await mediaAPI.uploadMedia({
+          file,
+          media_type: currentMediaType,
+          title: file.name
+        });
+
+        if (response.success && response.public_url) {
+          uploadedUrls.push(response.public_url);
+        }
+
+        newProgress[file.name] = true;
+        setUploadProgress({ ...newProgress });
+      }
+
+      // Add uploaded media to variant
+      if (currentVariantIndexForMedia >= 0 && uploadedUrls.length > 0) {
+        const updated = [...(editForm.variants || [])];
+        if (currentMediaType === 'image') {
+          updated[currentVariantIndexForMedia].image_url = uploadedUrls[0];
+        } else {
+          updated[currentVariantIndexForMedia].video_url = uploadedUrls[0];
+        }
+        setEditForm({ ...editForm, variants: updated });
+      }
+
+      // Reload media after upload
+      await loadMediaChoices();
+
+      // Close dialog and reset
+      setShowUploadDialog(false);
+      setUploadingFiles([]);
+      setUploadProgress({});
+    } catch (e) {
+      console.error('Upload failed', e);
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSelectExistingMedia = (mediaUrl: string) => {
+    if (currentVariantIndexForMedia >= 0) {
+      const updated = [...(editForm.variants || [])];
+      if (currentMediaType === 'image') {
+        updated[currentVariantIndexForMedia].image_url = mediaUrl;
+      } else {
+        updated[currentVariantIndexForMedia].video_url = mediaUrl;
+      }
+      setEditForm({ ...editForm, variants: updated });
+    }
+    setShowSelectMediaDialog(false);
+    setShowMediaChoiceDialog(false);
   };
 
   const handleShare = (platform: string) => {
@@ -494,6 +693,19 @@ const ProductDetail: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Edit Product</DialogTitle>
           </DialogHeader>
+
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+              <p className="font-semibold text-red-800 text-sm">Please fix the following errors:</p>
+              <ul className="list-disc list-inside text-red-700 text-sm space-y-1">
+                {validationErrors.map((error, idx) => (
+                  <li key={idx}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="edit-name">Product Name *</Label>
@@ -544,6 +756,110 @@ const ProductDetail: React.FC = () => {
                 onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
                 placeholder="INR"
               />
+            </div>
+            {/* Variants editor */}
+            <div>
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold">Variants</h4>
+                <Button variant="ghost" size="sm" onClick={handleAddVariant}>Add Variant</Button>
+              </div>
+              <div className="space-y-3 mt-3">
+                {editForm.variants && editForm.variants.length > 0 ? (
+                  editForm.variants.map((variant, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Color</Label>
+                          <Input value={variant.color || ''} onChange={(e) => handleVariantChange(idx, 'color', e.target.value)} />
+                        </div>
+                        <div>
+                          <Label>Size</Label>
+                          <Input value={variant.size || ''} onChange={(e) => handleVariantChange(idx, 'size', e.target.value)} />
+                        </div>
+                        <div>
+                          <Label>Price</Label>
+                          <Input type="number" value={variant.price as any || 0} onChange={(e) => handleVariantChange(idx, 'price', parseFloat(e.target.value) || 0)} />
+                        </div>
+                        <div>
+                          <Label>Stock</Label>
+                          <Input type="number" value={variant.stock as any || 0} onChange={(e) => handleVariantChange(idx, 'stock', parseInt(e.target.value) || 0)} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Description</Label>
+                          <Input value={variant.description || ''} onChange={(e) => handleVariantChange(idx, 'description', e.target.value)} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Variant Image</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => handleChooseMedia(idx, 'image')}
+                            className="w-full flex gap-2"
+                          >
+                            <ImagePlus className="w-4 h-4" />
+                            Choose Image
+                          </Button>
+                          {variant.image_url && (
+                            <div className="relative mt-2 w-24">
+                              <img
+                                src={variant.image_url}
+                                alt="variant preview"
+                                className="w-24 h-24 object-cover rounded-md border"
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                type="button"
+                                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                onClick={() => handleVariantChange(idx, 'image_url', '')}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Variant Video</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => handleChooseMedia(idx, 'video')}
+                            className="w-full flex gap-2"
+                          >
+                            <ImagePlus className="w-4 h-4" />
+                            Choose Video
+                          </Button>
+                          {variant.video_url && (
+                            <div className="relative mt-2 w-32">
+                              <video
+                                src={variant.video_url}
+                                className="w-32 h-20 object-cover rounded-md border"
+                                controls
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                type="button"
+                                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                onClick={() => handleVariantChange(idx, 'video_url', '')}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-end mt-2">
+                        <Button variant="destructive" size="sm" onClick={() => handleRemoveVariant(idx)}>Remove</Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No variants added.</p>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -657,6 +973,200 @@ const ProductDetail: React.FC = () => {
           <p className="text-xs text-center text-gray-500">
             🚀 Integration coming soon! This will automatically sync your product to these platforms.
           </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* Media Choice Dialog - Shows "Upload" or "Select Existing" options */}
+      <Dialog open={showMediaChoiceDialog} onOpenChange={setShowMediaChoiceDialog}>
+        <DialogContent className="max-w-[80%]">
+          <DialogHeader>
+            <DialogTitle>Choose {currentMediaType === 'image' ? 'Image' : 'Video'}</DialogTitle>
+            <DialogDescription>
+              Upload a new {currentMediaType} or select from existing {currentMediaType}s
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 p-4">
+            <Button
+              variant="outline"
+              className="h-16 flex items-center justify-center gap-2 text-base"
+              onClick={() => {
+                setShowMediaChoiceDialog(false);
+                setShowUploadDialog(true);
+              }}
+            >
+              <Upload className="w-5 h-5" />
+              Upload New {currentMediaType === 'image' ? 'Image' : 'Video'}
+            </Button>
+
+            <Button
+              variant="outline"
+              className="h-16 flex items-center justify-center gap-2 text-base"
+              onClick={() => {
+                setShowMediaChoiceDialog(false);
+                setShowSelectMediaDialog(true);
+              }}
+            >
+              <ImagePlus className="w-5 h-5" />
+              Select from Existing {currentMediaType === 'image' ? 'Images' : 'Videos'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Select Existing Media Dialog */}
+      <Dialog open={showSelectMediaDialog} onOpenChange={setShowSelectMediaDialog}>
+        <DialogContent className="max-w-[90%] max-h-[80%] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select {currentMediaType === 'image' ? 'Image' : 'Video'}</DialogTitle>
+            <DialogDescription>
+              Choose from your uploaded {currentMediaType}s
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-3 gap-2 p-4">
+            {currentMediaType === 'image' ? (
+              availableImages.length === 0 ? (
+                <div className="col-span-3 text-center text-gray-500 py-8">
+                  No images available. Upload some images first.
+                </div>
+              ) : (
+                availableImages.map(img => (
+                  <button
+                    key={img.id}
+                    onClick={() => handleSelectExistingMedia(img.public_url)}
+                    className="border-2 border-gray-200 rounded-lg p-1 hover:border-blue-500 transition"
+                  >
+                    <img src={img.public_url} alt={img.title} className="w-full h-24 object-cover rounded" />
+                    <div className="text-[10px] mt-1 line-clamp-1">{img.title}</div>
+                  </button>
+                ))
+              )
+            ) : (
+              availableVideos.length === 0 ? (
+                <div className="col-span-3 text-center text-gray-500 py-8">
+                  No videos available. Upload some videos first.
+                </div>
+              ) : (
+                availableVideos.map(vid => (
+                  <button
+                    key={vid.id}
+                    onClick={() => handleSelectExistingMedia(vid.public_url)}
+                    className="border-2 border-gray-200 rounded-lg p-1 hover:border-blue-500 transition"
+                  >
+                    <video src={vid.public_url} className="w-full h-24 object-cover rounded" />
+                    <div className="text-[10px] mt-1 line-clamp-1">{vid.title}</div>
+                  </button>
+                ))
+              )
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Media Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="max-w-[90%] max-h-[80%] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Upload {currentMediaType === 'image' ? 'Images' : 'Videos'}</DialogTitle>
+            <DialogDescription>
+              Select {currentMediaType} files to upload
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 p-4">
+            {/* File Input */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+              <Input
+                type="file"
+                multiple
+                accept={currentMediaType === 'image' ? 'image/*' : 'video/*'}
+                onChange={handleFileSelect}
+                className="mb-2"
+              />
+              <p className="text-sm text-gray-500">
+                Select one or more {currentMediaType} files
+              </p>
+            </div>
+
+            {/* File Preview */}
+            {uploadingFiles.length > 0 && (
+              <div className="space-y-2">
+                <Label>Selected Files ({uploadingFiles.length})</Label>
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                  {uploadingFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {currentMediaType === 'image' ? (
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="w-10 h-10 object-cover rounded"
+                          />
+                        ) : (
+                          <video
+                            src={URL.createObjectURL(file)}
+                            className="w-16 h-10 object-cover rounded"
+                          />
+                        )}
+                        <span className="text-sm truncate">{file.name}</span>
+                      </div>
+                      {uploadProgress[file.name] !== undefined && (
+                        <div className="ml-2">
+                          {uploadProgress[file.name] ? (
+                            <Check className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          )}
+                        </div>
+                      )}
+                      {!uploading && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setUploadingFiles(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowUploadDialog(false);
+                  setUploadingFiles([]);
+                  setUploadProgress({});
+                }}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUploadMedia}
+                disabled={uploadingFiles.length === 0 || uploading}
+                className="flex gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Upload {uploadingFiles.length} file{uploadingFiles.length !== 1 ? 's' : ''}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       </div>
