@@ -8,7 +8,6 @@ import json
 from google.cloud import firestore
 from datetime import datetime
 
-
 def init_firestore():
     """Initialize Firestore client."""
     try:
@@ -118,26 +117,6 @@ def purchase_product_by_id(db, user_id: str, product_id: str, buyer_user_id: str
     """
     Helper function to purchase a product - decreases stock by 1 and increases item_bought count.
     Can be called from routes, webhooks, or other functions.
-    
-    Args:
-        db: Firestore client instance
-        user_id (str): The user ID of the product owner (from products/{user_id}/items/{product_id})
-        product_id (str): The product document ID
-        buyer_user_id (str): The user ID of the buyer
-        variant_id (str, optional): Variant ID if product has variants
-    
-    Returns:
-        dict: {
-            'success': bool,
-            'remaining_stock': int,
-            'total_purchases': int,
-            'variant_id': str (if applicable),
-            'purchase_id': str
-        }
-    
-    Raises:
-        ValueError: If product not found, out of stock, or invalid parameters
-        Exception: For database errors
     """
     if not db:
         raise Exception("Database not available")
@@ -265,6 +244,87 @@ def purchase_product_by_id(db, user_id: str, product_id: str, buyer_user_id: str
     
     return result
 
+
+# ----------------------- NEW FUNCTION -----------------------
+def delete_product(db, user_id: str, product_id: str, hard_delete: bool = False, delete_purchases: bool = False):
+    """
+    Delete or soft-delete a specific product.
+    
+    Args:
+        db: Firestore client
+        user_id: owner of the product (document under products/{user_id}/items/{product_id})
+        product_id: product document id
+        hard_delete: if True, remove the document from Firestore. If False, perform a soft delete
+                     by setting is_active=False and updated_at timestamp.
+        delete_purchases: if True, delete entries in the 'purchases' collection that reference this product_id.
+    
+    Returns:
+        dict: { 'success': bool, 'deleted': bool, 'purchases_deleted': int, 'message': str }
+    """
+    result = {'success': False, 'deleted': False, 'purchases_deleted': 0, 'message': ''}
+
+    if not db:
+        result['message'] = "Database not initialized"
+        return result
+
+    doc_ref = db.collection("products").document(user_id).collection("items").document(product_id)
+
+    try:
+        snapshot = doc_ref.get()
+        if not snapshot.exists:
+            result['message'] = "Product not found"
+            return result
+
+        if not hard_delete:
+            # Soft delete: mark is_active False and update timestamp
+            update_data = {
+                'is_active': False,
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            doc_ref.update(update_data)
+            result['deleted'] = True
+            result['success'] = True
+            result['message'] = "Product soft-deleted (is_active=False)"
+        else:
+            # Hard delete: remove the document
+            # If there are subcollections under the product doc, Firestore requires deleting them separately.
+            # Here we delete the doc itself. (If you have subcollections under the item doc, add code to delete them.)
+            doc_ref.delete()
+            result['deleted'] = True
+            result['success'] = True
+            result['message'] = "Product hard-deleted"
+
+        # Optionally delete purchases referencing this product
+        if delete_purchases:
+            purchases_ref = db.collection("purchases").where("product_id", "==", product_id)
+            to_delete = [d for d in purchases_ref.stream()]
+            count = len(to_delete)
+            if count > 0:
+                # Firestore batch limit is 500
+                batch = db.batch()
+                deleted = 0
+                for idx, d in enumerate(to_delete, start=1):
+                    batch.delete(d.reference)
+                    # commit in chunks
+                    if idx % 500 == 0:
+                        batch.commit()
+                        batch = db.batch()
+                # commit any remaining
+                batch.commit()
+                result['purchases_deleted'] = count
+            else:
+                result['purchases_deleted'] = 0
+
+        return result
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        result['message'] = f"Error deleting product: {e}"
+        return result
+# --------------------- END NEW FUNCTION ---------------------
+
+
 def main():
     """Main function."""
     db = init_firestore()
@@ -275,6 +335,7 @@ def main():
     print("1. View all products for a user")
     print("2. View single product details")
     print("3. Purchase a product (test purchase flow)")
+    print("4. Delete a product (soft or hard delete)")  # NEW
     print("=" * 80)
     
     # Check if command line args provided
@@ -288,9 +349,9 @@ def main():
             product_id = sys.argv[2]
     else:
         # Interactive mode
-        choice = input("\nEnter choice (1-3): ").strip()
+        choice = input("\nEnter choice (1-4): ").strip()
         
-        if choice not in ['1', '2', '3']:
+        if choice not in ['1', '2', '3', '4']:
             print("❌ Invalid choice!")
             sys.exit(1)
         
@@ -448,6 +509,37 @@ def main():
             print(f"\n❌ Purchase failed: {e}")
         except Exception as e:
             print(f"\n❌ Error during purchase: {e}")
+            import traceback
+            traceback.print_exc()
+
+    elif choice == "4":
+        # Delete a product (soft or hard)
+        product_id = input("Enter product ID to delete: ").strip()
+        if not product_id:
+            print("❌ Product ID is required!")
+            sys.exit(1)
+
+        # Ask user whether to hard delete or soft delete
+        hard_choice = input("Hard delete the product? (will remove document) (yes/no) [no]: ").strip().lower()
+        hard_delete = hard_choice in ['yes', 'y']
+
+        # Ask about deleting purchases referencing product
+        purge_choice = input("Also delete purchase logs referencing this product? (yes/no) [no]: ").strip().lower()
+        delete_purchases = purge_choice in ['yes', 'y']
+
+        try:
+            print("\n⚠️ Deleting product...")
+            res = delete_product(db, user_id, product_id, hard_delete=hard_delete, delete_purchases=delete_purchases)
+            if res.get('success'):
+                print("✅ Delete operation completed.")
+                print(f"Message: {res.get('message')}")
+                if 'purchases_deleted' in res:
+                    print(f"Purchases deleted: {res['purchases_deleted']}")
+            else:
+                print("❌ Delete operation failed.")
+                print(f"Message: {res.get('message')}")
+        except Exception as e:
+            print(f"❌ Error deleting product: {e}")
             import traceback
             traceback.print_exc()
 

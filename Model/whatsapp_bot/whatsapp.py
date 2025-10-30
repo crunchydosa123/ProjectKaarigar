@@ -22,6 +22,12 @@ from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
 from werkzeug.utils import secure_filename
 import re
+from io import BytesIO
+from PIL import Image
+import requests
+import time
+import uuid
+import threading
 
 # Google GenAI
 from google import genai
@@ -43,7 +49,7 @@ TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "e1c5d57847356c3517fe2b2
 TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
 ADMIN_WHATSAPP_NUMBER = os.environ.get("ADMIN_WHATSAPP_NUMBER", "whatsapp:+917058642591")
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "verysecret")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://whatsapp-bot-557742533869.asia-south1.run.app")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://marilynn-uncudgeled-potentially.ngrok-free.dev")
 
 # Firestore user id (hardcoded per request)
 FIRESTORE_USER_ID = os.environ.get("FIRESTORE_USER_ID", "user1")
@@ -663,6 +669,86 @@ def generate_image_for_product(product_id: str, prompt_text: str = None) -> str:
     except Exception:
         app.logger.exception("Image generation failed")
         return None
+    
+def generate_image_from_url_for_product(product_id: str, source_image_url: str, prompt_text: str = None) -> str:
+    """
+    Downloads source_image_url, calls genai_client in image-to-image mode (gemini-2.5-flash-image)
+    with [prompt, image] as inputs, saves edited image to disk, updates product image URLs,
+    and returns the public URL of the generated image (or None on failure).
+    """
+    if not genai_client:
+        app.logger.warning("genai client not configured - skipping image-to-image generation")
+        return None
+
+    # Build a sensible default prompt if product exists so simple prompts still get product context
+    p = PRODUCTS.get(product_id) if product_id else None
+    default_prompt = ""
+
+    default_prompt = "Add a sticker in the image for the previous marketing text."
+
+    final_prompt = (prompt_text.strip() + " " + default_prompt) if prompt_text else default_prompt
+
+    # Download the source image
+    try:
+        resp = requests.get(source_image_url, timeout=30)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "")
+        # Try to open with PIL to validate it's an image
+        source_image = Image.open(BytesIO(resp.content))
+        app.logger.info("Downloaded source image from %s; size=%dx%d format=%s content-type=%s",
+                        source_image_url, source_image.width, source_image.height, getattr(source_image, "format", "unknown"), content_type)
+    except Exception:
+        app.logger.exception("Failed to download or open source image for image-to-image generation: %s", source_image_url)
+        return None
+
+    # Call genai (image-to-image)
+    try:
+        # genai_client should already be configured (same style as your example)
+        resp = genai_client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[final_prompt, source_image],
+            config=types.GenerateContentConfig(max_output_tokens=1000)
+        )
+
+        # Parse response: find the inline image bytes in response.candidates[0].content.parts
+        candidate = resp.candidates[0]
+        generated_bytes = None
+        for part in candidate.content.parts:
+            # inline_data is where the binary image bytes are returned in the example
+            if getattr(part, "inline_data", None) is not None and getattr(part.inline_data, "data", None) is not None:
+                generated_bytes = part.inline_data.data
+                break
+
+        if not generated_bytes:
+            app.logger.error("No inline image data found in Gemini response for image-to-image")
+            return None
+
+        # Save generated image to disk
+        filename = f"{product_id or 'gen'}_edited_{int(time.time())}_{uuid.uuid4().hex[:6]}.png"
+        filepath = IMAGES_DIR / filename
+        try:
+            with open(filepath, "wb") as f:
+                f.write(generated_bytes)
+        except Exception:
+            # fallback attempt: try to open with PIL and save
+            try:
+                edited = Image.open(BytesIO(generated_bytes))
+                edited.save(filepath)
+            except Exception:
+                app.logger.exception("Failed to save generated image to disk")
+                return None
+
+        public_url = f"{request_base_url()}/images/{filename}"
+        app.logger.info("Generated (image-to-image) saved: %s (url=%s)", filepath, public_url)
+
+        # Update Firestore product image_urls if db present
+        if product_id and db:
+            append_image_url_to_product(product_id, public_url)
+
+        return public_url
+    except Exception:
+        app.logger.exception("Image-to-image generation failed")
+        return None
 
 # ---------------------------
 # Serve generated images
@@ -926,44 +1012,45 @@ def admin_send_prompt_image():
 
     prompt = (request.form.get("prompt") or request.values.get("prompt") or "").strip()
     product_id = (request.form.get("product_id") or request.values.get("product_id") or "").strip() or None
+    # new: accept image_url param (public URL)
+    source_image_url = (request.form.get("image_url") or request.values.get("image_url") or "").strip() or None
+    # keep file upload compatibility
     file = request.files.get("image")
 
-    # Must have at least one of prompt, product_id, or image
-    if not (prompt or product_id or file):
-        return jsonify({"error": "provide at least one of: prompt, product_id, image"}), 400
+    # Must have at least one of prompt, product_id, source_image_url, or file
+    if not (prompt or product_id or source_image_url or file):
+        return jsonify({"error": "provide at least one of: prompt, product_id, image_url, image file"}), 400
 
     image_url = None
-    if file:
-        filename = secure_filename(file.filename)
-        if not filename or not allowed_file(filename):
-            return jsonify({"error": "invalid image file or extension"}), 400
-        unique = f"upload_{int(time.time())}_{uuid.uuid4().hex[:6]}_{filename}"
-        filepath = IMAGES_DIR / unique
-        file.save(str(filepath))
-        image_url = f"{request_base_url()}/images/{unique}"
-        app.logger.info("Uploaded image saved: %s", filepath)
 
-        # If tied to a product, update that product's image_urls in Firestore so catalog will show it
-        if product_id and db and product_id in PRODUCTS:
-            append_image_url_to_product(product_id, image_url)
-        elif product_id and db:
-            # create basic product doc if not exists
-            product = {"id": product_id, "name": f"Product {product_id}", "description": "", "variants": {}, "image_url": image_url}
-            save_product_to_firestore(product_id, product)
 
-    # If no file uploaded but product_id present, we can optionally generate an image (like add_product)
+    # 2) If an image_url is provided, call new image-to-image generator (preferred for your new use-case)
+    if not image_url and source_image_url:
+        try:
+            generated = generate_image_from_url_for_product(product_id=product_id, source_image_url=source_image_url, prompt_text=prompt)
+            if generated:
+                image_url = generated
+                # also update in-memory PRODUCTS mapping if present
+                if product_id and product_id in PRODUCTS:
+                    PRODUCTS[product_id]["image_url"] = image_url
+        except Exception:
+            app.logger.exception("Image-to-image generation failed for send_prompt_image")
+            image_url = None
+
+    # 3) Fallback: if no file or image_url but product_id present, optionally do text->image (existing behavior)
     if not image_url and product_id and genai_client:
         try:
             image_url = generate_image_for_product(product_id, prompt)
             if image_url and product_id in PRODUCTS:
                 PRODUCTS[product_id]["image_url"] = image_url
         except Exception:
-            app.logger.exception("Image generation failed for send_prompt_image")
+            app.logger.exception("Text->image generation failed for send_prompt_image")
             image_url = None
 
     # Build marketing text using same helpers as add_product
     marketing_text = None
     if product_id:
+        # prefer product-aware marketing (combines product info and prompt)
         if product_id not in PRODUCTS:
             return jsonify({"error": f"product_id {product_id} not found"}), 400
         try:
@@ -972,6 +1059,7 @@ def admin_send_prompt_image():
             app.logger.exception("Gemini generation failed for product")
             marketing_text = f"{PRODUCTS[product_id]['name']} — {PRODUCTS[product_id]['description']}. Reply 'order {product_id}' to buy."
     else:
+        # when no product_id, generate marketing strictly from prompt
         if not prompt:
             return jsonify({"error": "prompt required when product_id not provided"}), 400
         try:
@@ -980,7 +1068,7 @@ def admin_send_prompt_image():
             app.logger.exception("Gemini generation failed for prompt")
             marketing_text = prompt
 
-    # Start async broadcast thread to match /admin/add_product behavior
+    # Start async broadcast thread to match /admin/add_product behavior (sends message + media)
     broadcast_msg = marketing_text
     def do_broadcast():
         sent = 0
@@ -999,6 +1087,7 @@ def admin_send_prompt_image():
         "image_url": image_url,
         "notified_count": len(USERS)
     }), 200
+
 
 # ---------------------------
 # Debug endpoints
