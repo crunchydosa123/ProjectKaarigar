@@ -398,11 +398,20 @@ export interface ProfileData {
   twitter?: string;
 }
 
+export interface BrandInfo {
+  brand_name?: string;
+  logo_url?: string;
+  logo_prompt?: string;
+  logo_generated_at?: string;
+  has_logo?: boolean;
+}
+
 export interface ProfileResponse {
   success: boolean;
   profile_data: ProfileData;
   user_id?: string;
   error?: string;
+  brand_info?: BrandInfo; // ✅ object, not string
 }
 
 export interface SaveProfileResponse {
@@ -494,16 +503,6 @@ export interface ReelGenerationRequest {
   title: string;
   description?: string;
   duration_seconds?: number;
-}
-
-export interface ReelGenerationResponse {
-  success: boolean;
-  message: string;
-  reel_id?: string;
-  public_url?: string;
-  title?: string;
-  file_size?: number;
-  error?: string;
 }
 
 export interface GeneratedReel {
@@ -929,12 +928,13 @@ export interface GeneratedReel {
 export interface ReelGenerationResponse {
   success: boolean;
   message: string;
-  reel_id: string;
-  title: string;
-  public_url: string;
-  cloud_path: string;
-  file_size_mb: number;
-  images_used: number;
+  reel_id?: string;
+  title?: string;
+  public_url?: string;
+  cloud_path?: string;
+  file_size?: number;
+  file_size_mb?: number;
+  images_used?: number;
   error?: string;
 }
 
