@@ -112,9 +112,6 @@ except Exception as e:
     # We proceed — code will guard Firestore usage and keep a local cache fallback.
 
 # Local cache of products for quick reads (kept in sync)
-# Each PRODUCTS[pid] contains:
-# id, name, description, variants (dict keyed by sensible key), variant_order (list), variant_index_map (key->index),
-# image_url, image_urls, video_urls, price, stock, ai_generated_*, created_at, updated_at, raw
 PRODUCTS = {}
 
 def product_doc_ref(pid: str):
@@ -147,14 +144,11 @@ def load_products_from_firestore():
             variant_index_map = {}
 
             if isinstance(variants_data, list):
-                # Each variant is a dict with fields like size, stock, price, image_url, color...
                 for idx, v in enumerate(variants_data, start=0):
                     possible_key = v.get("size") or v.get("color") or v.get("variant") or v.get("name") or v.get("key")
                     key = str(possible_key) if possible_key else f"v{idx+1}"
-                    # avoid duplicate keys by appending index if needed
                     if key in normalized_variants:
                         key = f"{key}_{idx+1}"
-                    # derive numeric price/inventory from variant or top-level
                     try:
                         price = float(v.get("price")) if v.get("price") is not None else (float(top_price) if top_price is not None else 0.0)
                     except Exception:
@@ -167,7 +161,6 @@ def load_products_from_firestore():
                     variant_order.append(key)
                     variant_index_map[key] = idx  # index into Firestore list
             elif isinstance(variants_data, dict):
-                # Often keys -> {price, inventory}
                 for idx, (k, v) in enumerate(variants_data.items(), start=0):
                     try:
                         price = float(v.get("price", 0))
@@ -181,14 +174,12 @@ def load_products_from_firestore():
                     variant_order.append(str(k))
                     variant_index_map[str(k)] = None  # not a list-based storage
             else:
-                # unknown shape, create a default single variant using top-level price/stock
                 price = float(top_price) if top_price is not None else 0.0
                 inventory = int(top_stock) if top_stock is not None else 0
                 normalized_variants["default"] = {"price": price, "inventory": inventory, "raw": {}}
                 variant_order.append("default")
                 variant_index_map["default"] = None
 
-            # Build PRODUCTS cache entry
             PRODUCTS[pid] = {
                 "id": pid,
                 "name": d.get("name") or d.get("title") or f"Product {pid}",
@@ -220,7 +211,6 @@ def save_product_to_firestore(pid: str, product: dict, create_if_missing: bool =
     try:
         doc_ref = product_doc_ref(pid)
         now = datetime.utcnow().isoformat() + "Z"
-        # Build Firestore-friendly document
         doc = {
             "name": product.get("name"),
             "description": product.get("description", ""),
@@ -241,7 +231,6 @@ def save_product_to_firestore(pid: str, product: dict, create_if_missing: bool =
             if product["image_url"] not in doc["image_urls"]:
                 doc["image_urls"].insert(0, product["image_url"])
 
-        # Also set top-level price/stock if provided
         if product.get("price") is not None:
             doc["price"] = product["price"]
         if product.get("stock") is not None:
@@ -346,6 +335,7 @@ def _tx_decrement(transaction, doc_ref, variant_key, list_index, qty):
     transaction.update(doc_ref, {"stock": current - qty, "updated_at": now})
     return True
 
+
 def decrement_inventory_in_firestore(pid: str, variant: str, qty: int) -> bool:
     """Reduce inventory for variant by qty in Firestore and update cache.
        variant may be a key (e.g. '20') or an index-style 'v1' or '1'.
@@ -367,8 +357,6 @@ def decrement_inventory_in_firestore(pid: str, variant: str, qty: int) -> bool:
                 if m:
                     idx = int(m.group(1)) - 1
                     list_index = idx
-                    # but we'll let transaction function validate index bounds for list vs dict
-        # use transactional helper
         transaction = db.transaction()
         success = _tx_decrement(transaction, doc_ref, str(variant), list_index, int(qty))
         if success:
@@ -381,6 +369,169 @@ def decrement_inventory_in_firestore(pid: str, variant: str, qty: int) -> bool:
     except Exception:
         app.logger.exception("Failed to decrement inventory for %s %s", pid, variant)
         return False
+
+# ---------------------------
+# NEW: purchase helper that decrements both top-level stock and variant stock (if applicable)
+# and increments item_bought counters on product and variant. It logs a purchase document.
+# ---------------------------
+def purchase_product_by_id(db, user_id: str, product_id: str, buyer_user_id: str, variant_id: str = None, qty: int = 1):
+    """
+    Atomic purchase operation: decrements stock (both variant and top-level if present),
+    increments item_bought counters and logs a purchase record in 'purchases' collection.
+
+    Returns a dict similar to earlier helper:
+      { 'success': True, 'remaining_stock': int, 'total_purchases': int, 'variant_id': str (if any), 'variant_stock': int (if any), 'purchase_id': str }
+
+    Raises ValueError for problems like out-of-stock or missing product.
+    """
+    if not db:
+        raise Exception("Database not available")
+    if not user_id or not product_id or not buyer_user_id:
+        raise ValueError("user_id, product_id, and buyer_user_id are required")
+
+    doc_ref = db.collection("products").document(user_id).collection("items").document(product_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def purchase_tx(transaction, doc_ref, variant_id, qty):
+        snapshot = doc_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError(f"Product {product_id} not found for user {user_id}")
+        data = snapshot.to_dict() or {}
+
+        if not data.get("is_active", True):
+            raise ValueError("Product is not available for purchase")
+
+        variants = data.get("variants", [])
+        now = datetime.utcnow().isoformat() + "Z"
+
+        # Helper to bump top-level item_bought and optionally decrement top-level stock
+        def bump_top_level_and_update(extra_updates):
+            top_bought = int(data.get("item_bought", 0)) + qty
+            updates = {"item_bought": top_bought, "updated_at": now}
+            # reduce top-level stock if present
+            if isinstance(data.get("stock"), int) or isinstance(data.get("stock"), float):
+                try:
+                    current_top = int(data.get("stock", 0))
+                    updates["stock"] = current_top - qty
+                except Exception:
+                    pass
+            updates.update(extra_updates)
+            transaction.update(doc_ref, updates)
+            return updates
+
+        # VARIANTS as LIST
+        if isinstance(variants, list) and variants:
+            # try to resolve variant index
+            list_idx = None
+            # if user provided mapping available in cache, use it
+            if product_id in PRODUCTS:
+                idx_map = PRODUCTS[product_id].get("variant_index_map", {})
+                if variant_id in idx_map and idx_map[variant_id] is not None:
+                    list_idx = idx_map[variant_id]
+            # if variant_id looks like vN or numeric
+            if list_idx is None and variant_id:
+                m = re.match(r"^v?(\d+)$", str(variant_id))
+                if m:
+                    cand = int(m.group(1)) - 1
+                    if 0 <= cand < len(variants):
+                        list_idx = cand
+            # if still None and variant_id might be a field value, try match
+            if list_idx is None and variant_id:
+                for i, v in enumerate(variants):
+                    if str(v.get("size")) == str(variant_id) or str(v.get("color")) == str(variant_id) or str(v.get("variant")) == str(variant_id) or str(v.get("name")) == str(variant_id) or str(v.get("key")) == str(variant_id):
+                        list_idx = i
+                        break
+
+            if list_idx is None:
+                raise ValueError(f"Variant '{variant_id}' not found")
+
+            current_stock = int(variants[list_idx].get("stock") or variants[list_idx].get("inventory") or data.get("stock") or 0)
+            if current_stock < qty:
+                raise ValueError(f"Variant '{variant_id}' is out of stock")
+
+            # Update variant stock and item_bought at variant level
+            updated_variants = list(variants)
+            updated_variant = dict(updated_variants[list_idx])
+            updated_variant["stock"] = current_stock - qty
+            updated_variant["item_bought"] = int(updated_variant.get("item_bought", 0)) + qty
+            updated_variants[list_idx] = updated_variant
+
+            # Persist changes: write updated variants and bump top-level counters
+            transaction.update(doc_ref, {"variants": updated_variants, "updated_at": now})
+            # Also bump product-level item_bought and optionally top-level stock
+            bump_top_level_and_update({})
+
+            return {
+                "remaining_stock": updated_variant.get("stock"),
+                "total_purchases": int(data.get("item_bought", 0)) + qty,
+                "variant_id": str(list_idx),
+                "variant_stock": updated_variant.get("stock")
+            }
+
+        # VARIANTS as DICT
+        if isinstance(variants, dict) and variants:
+            vkey = variant_id
+            if vkey not in variants:
+                raise ValueError(f"Variant '{variant_id}' not found")
+            current = int(variants[vkey].get("inventory", 0))
+            if current < qty:
+                raise ValueError(f"Variant '{variant_id}' is out of stock")
+            updated_variants = dict(variants)
+            new_variant = dict(updated_variants[vkey])
+            new_variant["inventory"] = current - qty
+            new_variant["item_bought"] = int(new_variant.get("item_bought", 0)) + qty
+            updated_variants[vkey] = new_variant
+
+            transaction.update(doc_ref, {"variants": updated_variants, "updated_at": now})
+            bump_top_level_and_update({})
+            return {
+                "remaining_stock": new_variant.get("inventory"),
+                "total_purchases": int(data.get("item_bought", 0)) + qty,
+                "variant_id": vkey,
+                "variant_stock": new_variant.get("inventory")
+            }
+
+        # NO VARIANTS - update top-level stock
+        current_top = int(data.get("stock", 0))
+        if current_top < qty:
+            raise ValueError("Product is out of stock")
+
+        updates = {"stock": current_top - qty, "item_bought": int(data.get("item_bought", 0)) + qty, "updated_at": now}
+        transaction.update(doc_ref, updates)
+        return {"remaining_stock": updates["stock"], "total_purchases": updates["item_bought"]}
+
+    # Execute transaction
+    result = purchase_tx(transaction, doc_ref, variant_id, int(qty))
+
+    # Log purchase
+    try:
+        purchase_log_ref = db.collection("purchases").document()
+        purchase_data = {
+            "purchase_id": purchase_log_ref.id,
+            "product_id": product_id,
+            "product_owner_user_id": user_id,
+            "buyer_user_id": buyer_user_id,
+            "variant_id": result.get("variant_id"),
+            "purchased_at": datetime.utcnow().isoformat() + "Z",
+            "quantity": qty,
+            "remaining_stock": result.get("remaining_stock")
+        }
+        purchase_log_ref.set(purchase_data)
+        result["purchase_id"] = purchase_log_ref.id
+        result["success"] = True
+    except Exception:
+        app.logger.exception("Failed to log purchase")
+        result["purchase_id"] = None
+        result["success"] = True
+
+    # Refresh local cache
+    try:
+        load_products_from_firestore()
+    except Exception:
+        app.logger.exception("Failed to refresh product cache after purchase")
+
+    return result
 
 # Load products at startup
 if db:
@@ -439,18 +590,15 @@ def format_catalog():
         block_lines = []
         header = f"🔹 {p['id']}: {p['name']}"
         block_lines.append(header)
-        # include AI-generated title if present (short)
         if p.get("ai_generated_title"):
             block_lines.append(f"🏷️ {p.get('ai_generated_title')}")
         if p.get("description"):
             block_lines.append(p["description"])
-        # top-level price/stock if present
         if p.get("price") is not None:
             if p.get("stock") is not None:
                 block_lines.append(f"💰 Price: ₹{p['price']:.2f}  |  Stock: {p['stock']}")
             else:
                 block_lines.append(f"💰 Price: ₹{p['price']:.2f}")
-        # variants summary (enumerated)
         for i, key in enumerate(p.get("variant_order", list(p["variants"].keys())), start=1):
             info = p["variants"].get(key, {})
             try:
@@ -458,9 +606,7 @@ def format_catalog():
             except Exception:
                 price_str = f"₹{info.get('price')}"
             inventory = info.get("inventory", 0)
-            # show both enumeration and underlying key (helpful when keys are sizes/colors)
             block_lines.append(f" • Variant {i} (key: {key}) — {price_str} (stock: {inventory})")
-        # images/videos counts
         if p.get("image_urls"):
             block_lines.append(f"🖼️ Images: {len(p['image_urls'])} — view: {p.get('image_url')}")
         if p.get("video_urls"):
@@ -486,17 +632,14 @@ def format_product_full(pid):
         lines.append(f"💰 Price: ₹{p['price']:.2f}")
     if p.get("stock") is not None:
         lines.append(f"📦 Stock: {p['stock']}")
-    # Images
     if p.get("image_urls"):
         lines.append("\n📷 Images:")
         for idx, url in enumerate(p["image_urls"], start=1):
             lines.append(f"  {idx}. {url}")
-    # Videos
     if p.get("video_urls"):
         lines.append("\n🎥 Videos:")
         for idx, url in enumerate(p["video_urls"], start=1):
             lines.append(f"  {idx}. {url}")
-    # Variants: show enumerated variants and raw details
     if p.get("variants"):
         lines.append("\n🔀 Variants:")
         for i, key in enumerate(p.get("variant_order", list(p["variants"].keys())), start=1):
@@ -512,7 +655,6 @@ def format_product_full(pid):
                         detail_items.append(f"{k}: {raw.get(k)}")
                 if detail_items:
                     lines.append("    " + " | ".join(detail_items))
-    # timestamps
     if p.get("created_at"):
         lines.append(f"\nCreated: {p.get('created_at')}")
     if p.get("updated_at"):
@@ -878,10 +1020,18 @@ def bot():
             resp.message(f"Only {info['inventory']} available for variant {chosen_variant}. Reduce quantity.")
             return str(resp)
 
-        # Attempt to decrement inventory in Firestore
-        ok = decrement_inventory_in_firestore(pid, chosen_variant, qty)
-        if not ok:
-            resp.message(f"Failed to place order: insufficient stock or error. Try again.")
+        # Attempt to perform atomic purchase (decrement top-level stock, variant stock and bump item_bought)
+        try:
+            purchase_result = purchase_product_by_id(db, FIRESTORE_USER_ID, pid, from_number, variant_id=chosen_variant, qty=qty)
+            if not purchase_result.get("success"):
+                resp.message("Failed to place order: insufficient stock or error. Try again.")
+                return str(resp)
+        except ValueError as e:
+            resp.message(f"Failed to place order: {e}")
+            return str(resp)
+        except Exception:
+            app.logger.exception("Error during purchase")
+            resp.message("Failed to place order due to server error.")
             return str(resp)
 
         oid = new_order_id()
@@ -965,7 +1115,7 @@ def admin_add_product():
             product["image_url"] = f"{request_base_url()}/images/{unique}"
             app.logger.info("Saved product image for %s: %s", pid, filepath)
 
-    # If generate_image_flag and genai available and no uploaded image, create an image and attach (overrides if none provided)
+    # If generate_image_flag and genai available and not uploaded image, create an image and attach
     if generate_image_flag and genai_client and not product.get("image_url"):
         try:
             imgurl = generate_image_for_product(pid, prompt)
