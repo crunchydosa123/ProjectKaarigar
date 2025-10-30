@@ -49,7 +49,7 @@ TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "e1c5d57847356c3517fe2b2
 TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
 ADMIN_WHATSAPP_NUMBER = os.environ.get("ADMIN_WHATSAPP_NUMBER", "whatsapp:+917058642591")
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "verysecret")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://marilynn-uncudgeled-potentially.ngrok-free.dev")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://whatsapp-bot-557742533869.asia-south1.run.app")
 
 # Firestore user id (hardcoded per request)
 FIRESTORE_USER_ID = os.environ.get("FIRESTORE_USER_ID", "user1")
