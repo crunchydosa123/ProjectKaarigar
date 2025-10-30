@@ -17,7 +17,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from flask import Flask, request, jsonify, render_template_string, render_template, send_from_directory
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
 from werkzeug.utils import secure_filename
@@ -672,32 +672,6 @@ def serve_image(filename):
 # ---------------------------
 # Payment templates & routes (unchanged)
 # ---------------------------
-PAY_PAGE_TEMPLATE = """
-<!doctype html>
-<html>
-  <head><meta charset="utf-8"><title>Pay Order {{order_id}}</title></head>
-  <body>
-    <h2>Pay Order {{order_id}}</h2>
-    <pre>{{summary}}</pre>
-    <form method="post" action="/pay/{{order_id}}/confirm">
-      <button type="submit" style="padding:12px 20px; font-size:16px;">Pay ₹{{amount}}</button>
-    </form>
-  </body>
-</html>
-"""
-
-PAID_PAGE_TEMPLATE = """
-<!doctype html>
-<html>
-  <head><meta charset="utf-8"><title>Payment Complete</title></head>
-  <body>
-    <h2>Payment successful</h2>
-    <p>Thank you — payment for order {{order_id}} completed.</p>
-    <p>You should receive a WhatsApp confirmation shortly.</p>
-  </body>
-</html>
-"""
-
 ORDERS = {}
 SESSIONS = {}
 
@@ -706,8 +680,24 @@ def pay_page(order_id):
     order = ORDERS.get(order_id)
     if not order:
         return "Order not found", 404
-    summary = "".join([f"{d['quantity']} x {d['product_name']} ({d['variant']}) - ₹{d['price']:.2f}\n" for d in order['details']])
-    return render_template_string(PAY_PAGE_TEMPLATE, order_id=order_id, summary=summary, amount=f"{order['total']:.2f}")
+    
+    # Build Tailwind-styled HTML summary for order details
+    summary_html = ""
+    for d in order['details']:
+        summary_html += f"""
+        <div class="flex items-start justify-between py-3 border-b border-gray-200 last:border-0">
+            <div class="flex-1">
+                <p class="text-sm font-medium text-gray-900">{d['quantity']} × {d['product_name']}</p>
+                <p class="text-xs text-gray-500 mt-0.5">Variant: {d['variant']}</p>
+            </div>
+            <div class="text-sm font-semibold text-gray-900">₹{d['price']:.2f}</div>
+        </div>
+        """
+    
+    return render_template('pay_order.html', 
+                         order_id=order_id, 
+                         summary_html=summary_html, 
+                         amount=f"{order['total']:.2f}")
 
 @app.route("/pay/<order_id>/confirm", methods=["POST"])
 def pay_confirm(order_id):
@@ -715,12 +705,14 @@ def pay_confirm(order_id):
     if not order:
         return "Order not found", 404
     if order.get("status") == "paid":
-        return render_template_string(PAID_PAGE_TEMPLATE, order_id=order_id)
+        return render_template('payment_success.html', order_id=order_id)
+    
     order["status"] = "paid"
     order["paid_at"] = datetime.utcnow().isoformat() + "Z"
     to_whatsapp = order["user"]
     send_whatsapp_message(to_whatsapp, f"✅ Payment received for Order #{order_id}. Thank you!\n\n{order_summary_text(order)}")
-    return render_template_string(PAID_PAGE_TEMPLATE, order_id=order_id)
+    
+    return render_template('payment_success.html', order_id=order_id)
 
 # ---------------------------
 # Twilio webhook for incoming user messages (unchanged logic but uses Firestore-backed PRODUCTS)
