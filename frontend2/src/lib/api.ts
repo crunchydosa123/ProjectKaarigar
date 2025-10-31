@@ -1371,3 +1371,54 @@ class WhatsAppAPI {
 }
 
 export const whatsappAPI = new WhatsAppAPI();
+
+// AI Insights API
+export interface AIInsight {
+  title: string;
+  text: string;
+  image_url: string | null;
+}
+
+export interface AIInsightsResponse {
+  success: boolean;
+  insights: AIInsight[];
+  links?: Record<string, any>;
+  generated_at?: string;
+  from_cache?: boolean;
+  message?: string;
+  error?: string;
+}
+
+class AIInsightsAPI {
+  private baseURL = 'http://localhost:5000/api/ai-insights';
+
+  private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    const options: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    };
+    if (data) options.body = JSON.stringify(data);
+    const resp = await fetch(url, options);
+    const json = await resp.json();
+    if (!resp.ok) {
+      throw new Error(json.error || `HTTP ${resp.status}`);
+    }
+    return json;
+  }
+
+  getInsights(): Promise<AIInsightsResponse> {
+    return this.request<AIInsightsResponse>('/get-insights', 'GET');
+  }
+
+  generateInsights(): Promise<AIInsightsResponse> {
+    return this.request<AIInsightsResponse>('/generate-insights', 'POST');
+  }
+
+  healthCheck(): Promise<{ status: string; service: string }> {
+    return this.request('/health', 'GET');
+  }
+}
+
+export const aiInsightsAPI = new AIInsightsAPI();
