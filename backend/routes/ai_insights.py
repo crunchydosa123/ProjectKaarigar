@@ -45,7 +45,7 @@ MAX_SEARCH_QUERIES = 4
 RESULTS_PER_QUERY = 3
 REQUEST_TIMEOUT = 10
 
-# Multiple image generation API keys for rate limiting
+# Multiple image generation API keys for rate limiting (rotate every 2 images)
 IMAGE_API_KEYS = [
     "AIzaSyAbVS0doSEnxphnOS3jNiAZ7bwwbsvAjrw",
     "AIzaSyCVcL7IcwHvlpBUVvNktl0Jj_aU9LHVSKw",
@@ -218,28 +218,32 @@ def call_gemini_for_insights(profile: dict) -> dict:
         return {"insights": []}
 
 def generate_image_for_insight(title: str, index: int, user_id: str) -> str:
-    """Generate image using Vertex AI Imagen and upload to GCS"""
+    """Generate image using google.genai library and upload to GCS
+    
+    Rotates between 3 API keys (2 images per key) to avoid rate limits.
+    """
     try:
-        client = genai.Client(
-            vertexai=True,
-            project=PROJECT_ID,
-            location="us-central1"
-        )
+        # Select API key based on index (rotate every 2 images)
+        api_key_index = (index // 2) % len(IMAGE_API_KEYS)
+        selected_api_key = IMAGE_API_KEYS[api_key_index]
+        print(f"🔑 Using API key {api_key_index + 1} for image {index + 1}")
+        
+        # Create client with selected API key
+        client = genai.Client(api_key=selected_api_key)
         
         prompt = f"High-quality, evocative illustration representing: {title}. Clean composition, clear subject, 1:1 aspect ratio."
         
-        image = client.models.generate_images(
+        response = client.models.generate_images(
             model="imagen-4.0-generate-001",
             prompt=prompt,
             config=GenerateImagesConfig(
                 number_of_images=1,
-                aspect_ratio="1:1",
             ),
         )
         
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-            image.generated_images[0].image.save(tmp.name)
+            response.generated_images[0].image.save(tmp.name)
             tmp_path = tmp.name
         
         # Upload to GCS
@@ -258,6 +262,7 @@ def generate_image_for_insight(title: str, index: int, user_id: str) -> str:
         
     except Exception as e:
         print(f"⚠️ Image generation failed for '{title}': {e}")
+        traceback.print_exc()
         return None
 
 def save_insights_to_firestore(user_id: str, insights_data: dict):
