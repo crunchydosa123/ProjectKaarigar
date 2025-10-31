@@ -1,13 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { usePage } from "@/contexts/PageContext";
 import { Facebook, House, Pencil, Plus, ImagePlus, Loader2, Send, Upload, X, Check, Trash, SkipBack, Undo2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { productAPI, mediaAPI, type CreateProductRequest } from "@/lib/api";
+import { productAPI, mediaAPI, whatsappAPI, type CreateProductRequest } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const ListProducts = () => {
@@ -185,28 +185,178 @@ const WhatsappCampaign = () => {
 
   const [prompt, setPrompt] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [selectedProductData, setSelectedProductData] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [generatedMessage, setGeneratedMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [localImageFile, setLocalImageFile] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const usersCount = 47; // placeholder for how many users will receive messages
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [availableImages, setAvailableImages] = useState<{ id: string; title: string; public_url: string }[]>([]);
+  const [showImageSelector, setShowImageSelector] = useState(false);
+  const [sentResult, setSentResult] = useState<{ notified_count: number; status: string; message: string } | null>(null);
 
-  const handleGenerateMessage = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setGeneratedMessage(
-        `🌿 Check out our new ${selectedProduct || "product"}!\n\n${prompt || "Beautiful handcrafted items available now!"}\n\nOrder now and get 10% off!`
-      );
-      setIsGenerating(false);
-    }, 1500);
+  // Load products on mount
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      const res = await productAPI.list();
+      if (res.success) setProducts(res.products);
+    } catch (e) {
+      console.error('Failed to load products', e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSendMessage = () => {
-    setIsSending(true);
-    setTimeout(() => {
-      alert("Messages sent successfully to all users!");
+  // Load media images
+  const loadMedia = async () => {
+    try {
+      const res = await productAPI.media();
+      if (res.success) setAvailableImages(res.images);
+    } catch (e) {
+      console.error('Failed to load media', e);
+    }
+  };
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useState(() => { loadProducts(); loadMedia(); return undefined; });
+
+  // When product is selected, auto-select first image
+  const handleProductSelect = (productId: string) => {
+    setSelectedProduct(productId);
+    setSentResult(null);
+    const product = products.find(p => p.id === productId);
+    setSelectedProductData(product);
+    
+    // Auto-select first image from product
+    if (product?.image_urls && product.image_urls.length > 0) {
+      setSelectedImage(product.image_urls[0]);
+    } else {
+      setSelectedImage(null);
+    }
+  };
+
+  const handleGenerateMessage = async () => {
+    if (!selectedProduct) {
+      alert("Please select a product first!");
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      const res = await whatsappAPI.generateMessage({
+        product_id: selectedProduct,
+        user_prompt: prompt
+      });
+      
+      if (res.success) {
+        setGeneratedMessage(res.message);
+        setIsCopied(false); // Reset copy state when new message generated
+      } else {
+        alert(`Failed to generate message: ${res.error}`);
+      }
+    } catch (e: any) {
+      console.error('Generate message error:', e);
+      alert(`Error: ${e.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopyMessage = () => {
+    // Copy generated message to the campaign message textarea
+    setPrompt(generatedMessage);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+  };
+
+  const handleLocalImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size should be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      
+      // Upload to media library
+      const uploadedMedia = await mediaAPI.uploadMedia({
+        file: file,
+        media_type: 'image',
+        title: file.name,
+        description: 'Campaign image upload'
+      });
+      
+      // Set the uploaded image as selected
+      setSelectedImage(uploadedMedia.public_url);
+      setLocalImageFile(file);
+      
+      // Refresh media list
+      await loadMedia();
+      
+      alert('✅ Image uploaded successfully!');
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      alert(`Failed to upload image: ${err.message}`);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedProduct) {
+      alert("Please select a product!");
+      return;
+    }
+    if (!selectedImage) {
+      alert("Please select an image!");
+      return;
+    }
+    
+    const messageToSend = generatedMessage || prompt.trim();
+    if (!messageToSend) {
+      alert("Please enter or generate a campaign message!");
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const res = await whatsappAPI.sendCampaign({
+        prompt: messageToSend,
+        product_id: selectedProduct,
+        image_url: selectedImage
+      });
+      
+      if (res.success) {
+        setSentResult({
+          notified_count: res.notified_count,
+          status: res.status,
+          message: res.message
+        });
+        alert(`✅ Campaign sent to ${res.notified_count} users!`);
+      } else {
+        alert(`Failed to send campaign: ${res.error}`);
+      }
+    } catch (e: any) {
+      console.error('Send campaign error:', e);
+      alert(`Error: ${e.message}`);
+    } finally {
       setIsSending(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -226,105 +376,239 @@ const WhatsappCampaign = () => {
       </div>
 
       <div className="flex flex-col gap-4 mt-4 px-4 mb-10">
-        {/* Message Prompt */}
+        {/* Product Selection */}
         <div>
-          <Label>Message Prompt</Label>
-          <Textarea
-            placeholder="Write the tone or theme of your WhatsApp message..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-
-        {/* Product Dropdown */}
-        <div>
-          <Label>Select Product</Label>
-          <Select onValueChange={(value) => setSelectedProduct(value)}>
+          <Label>Select Product *</Label>
+          <Select onValueChange={handleProductSelect} value={selectedProduct}>
             <SelectTrigger className="mt-1">
-              <SelectValue placeholder="Choose a product" />
+              <SelectValue placeholder={loading ? "Loading products..." : "Choose a product"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Earthen Water Pot">Earthen Water Pot</SelectItem>
-              <SelectItem value="Potted Plant Pot">Potted Plant Pot</SelectItem>
-              <SelectItem value="Clay Lamp">Clay Lamp</SelectItem>
+              {products.map((product) => (
+                <SelectItem key={product.id} value={product.id}>
+                  {product.name} {product.price ? `- ₹${product.price}` : ''}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Image Popover */}
+        {/* Campaign Message */}
         <div>
-          <Label>Add an Image</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full mt-1 flex gap-2">
-                <ImagePlus /> {selectedImage ? "Change Image" : "Upload Image"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="p-4 w-60">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const url = URL.createObjectURL(file);
-                    setSelectedImage(url);
-                  }
-                }}
-              />
-            </PopoverContent>
-          </Popover>
-          {selectedImage && (
-            <img
-              src={selectedImage}
-              alt="Selected"
-              className="h-24 w-24 mt-2 rounded-md object-cover border"
-            />
-          )}
+          <Label>Campaign Message (Optional - can be generated by AI)</Label>
+          <Textarea
+            placeholder="E.g., '15% discount on pots for first 100 users'"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="mt-1"
+            rows={3}
+          />
+          <p className="text-xs text-gray-500 mt-1">Enter a hint for AI or leave blank for auto-generation</p>
         </div>
 
-        {/* Generate Message */}
-        <Button onClick={handleGenerateMessage} disabled={isGenerating}>
-          {isGenerating ? (
-            <div className="flex gap-2 items-center">
-              <Loader2 className="animate-spin" /> Generating Message...
-            </div>
-          ) : (
-            "Generate Message"
-          )}
-        </Button>
+        {/* Generate Message Button */}
+        <div>
+          <Button
+            onClick={handleGenerateMessage}
+            disabled={!selectedProduct || isGenerating}
+            className="w-full"
+            variant="outline"
+          >
+            {isGenerating ? (
+              <>
+                <span className="animate-spin mr-2">⏳</span>
+                Generating...
+              </>
+            ) : (
+              '✨ Generate AI Message'
+            )}
+          </Button>
+        </div>
 
-        {/* Generated Message */}
+        {/* Generated Message Preview */}
         {generatedMessage && (
-          <div className="bg-white border rounded-md p-3">
-            <Label className="text-sm text-gray-700">Generated Message</Label>
-            <p className="mt-1 whitespace-pre-line text-sm">{generatedMessage}</p>
+          <div className="border-2 border-green-500 rounded-lg p-4 bg-green-50">
+            <div className="flex justify-between items-center mb-2">
+              <Label className="text-green-700 font-semibold">Generated Campaign Message:</Label>
+              <Button
+                onClick={handleCopyMessage}
+                size="sm"
+                variant="ghost"
+                className="h-8 text-green-700 hover:bg-green-100"
+              >
+                {isCopied ? (
+                  <>
+                    <Check className="h-4 w-4 mr-1" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="h-4 w-4 mr-1" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy
+                  </>
+                )}
+              </Button>
+            </div>
+            <Textarea
+              value={generatedMessage}
+              onChange={(e) => setGeneratedMessage(e.target.value)}
+              className="mt-1 bg-white"
+              rows={4}
+            />
+            <p className="text-xs text-green-600 mt-1">✅ You can edit this message before sending</p>
           </div>
         )}
 
-        {/* Users Count */}
-        <div className="flex justify-between items-center bg-gray-100 border rounded-md p-3 mt-2">
-          <span>Users to receive message:</span>
-          <span className="font-semibold">{usersCount}</span>
+        {/* Image Selection */}
+        <div>
+          <div className="flex justify-between items-center">
+            <Label>Select Campaign Image *</Label>
+            <label htmlFor="local-image-upload">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploadingImage}
+                asChild
+              >
+                <span className="cursor-pointer">
+                  {uploadingImage ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-1" />
+                      Upload Local
+                    </>
+                  )}
+                </span>
+              </Button>
+            </label>
+            <input
+              id="local-image-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleLocalImageUpload}
+              className="hidden"
+            />
+          </div>
+          
+          {/* Product Images */}
+          {selectedProductData?.image_urls && selectedProductData.image_urls.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-gray-600 mb-1">Product Images:</p>
+              <div className="grid grid-cols-3 gap-2">
+                {selectedProductData.image_urls.map((imgUrl: string, idx: number) => (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedImage(imgUrl)}
+                    className={`cursor-pointer rounded-md border-2 overflow-hidden ${
+                      selectedImage === imgUrl ? 'border-blue-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <img src={imgUrl} alt={`Product ${idx + 1}`} className="h-20 w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gallery Images */}
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowImageSelector(!showImageSelector)}
+              className="w-full"
+            >
+              {showImageSelector ? 'Hide' : 'Show'} Gallery Images ({availableImages.length})
+            </Button>
+          </div>
+
+          {showImageSelector && (
+            <div className="mt-2 bg-gray-50 p-2 rounded-md max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-3 gap-2">
+                {availableImages.map((img) => (
+                  <div
+                    key={img.id}
+                    onClick={() => {
+                      setSelectedImage(img.public_url);
+                      setShowImageSelector(false);
+                    }}
+                    className={`cursor-pointer rounded-md border-2 overflow-hidden ${
+                      selectedImage === img.public_url ? 'border-blue-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <img src={img.public_url} alt={img.title} className="h-20 w-full object-cover" />
+                    <p className="text-xs p-1 truncate">{img.title}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Selected Image Preview */}
+          {selectedImage && (
+            <div className="mt-3 bg-white border rounded-md p-2">
+              <Label className="text-xs text-gray-600">Selected Image:</Label>
+              <img
+                src={selectedImage}
+                alt="Selected"
+                className="h-32 w-full mt-1 rounded-md object-contain border"
+              />
+            </div>
+          )}
         </div>
 
-        {/* Send Message Button */}
+        {/* Send Campaign Button */}
         <Button
-          className="mt-2 bg-green-600 hover:bg-green-700 text-white flex gap-2 justify-center items-center"
+          className="mt-4 bg-green-600 hover:bg-green-700 text-white flex gap-2 justify-center items-center h-12"
           onClick={handleSendMessage}
-          disabled={isSending}
+          disabled={isSending || !selectedProduct || !selectedImage || !prompt.trim()}
         >
           {isSending ? (
-            <div className="flex gap-2 items-center">
-              <Loader2 className="animate-spin" /> Sending to all users...
-            </div>
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              Sending Campaign...
+            </>
           ) : (
             <>
-              <Send /> Send Message to All
+              <img src="WhatsApp.webp" className="h-6 w-6" />
+              Send WhatsApp Campaign
             </>
           )}
         </Button>
+
+        {/* Success Result */}
+        {sentResult && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+            <Label className="text-blue-800 text-lg">✅ Campaign Sent Successfully!</Label>
+            <div className="flex justify-between items-center mt-3">
+              <span className="text-sm font-medium">Users Notified:</span>
+              <span className="font-bold text-xl text-blue-600">{sentResult.notified_count}</span>
+            </div>
+            <div className="flex justify-between items-center mt-1">
+              <span className="text-sm font-medium">Status:</span>
+              <span className="font-semibold text-green-600 uppercase">{sentResult.status}</span>
+            </div>
+            {sentResult.message && (
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <p className="text-xs text-gray-600 mb-1">Message sent:</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{sentResult.message}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

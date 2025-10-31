@@ -13,6 +13,7 @@ from routes.reel_generator import reel_gen_bp
 from routes.product import product_bp
 from routes.youtube import youtube_bp
 from routes.marketplace_listing import listing_bp
+from routes.whatsapp import whatsapp_bp
 
 app = Flask(__name__)
 CORS(app, origins=['*'], supports_credentials=True)
@@ -38,6 +39,7 @@ app.register_blueprint(reel_gen_bp, url_prefix="/api/reel-generator")
 app.register_blueprint(product_bp, url_prefix="/api/product")
 app.register_blueprint(youtube_bp, url_prefix="/api/youtube")
 app.register_blueprint(listing_bp, url_prefix="/api/marketplace")
+app.register_blueprint(whatsapp_bp, url_prefix="/api/whatsapp")
 
 print("\n📋 Registered Blueprints:")
 for blueprint_name, blueprint_obj in app.blueprints.items():

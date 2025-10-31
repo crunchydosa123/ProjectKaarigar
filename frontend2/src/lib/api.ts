@@ -1311,3 +1311,63 @@ class ProductAPI {
 }
 
 export const productAPI = new ProductAPI();
+
+// ==================== WHATSAPP API ====================
+
+export interface WhatsAppCampaignRequest {
+  prompt: string;
+  product_id: string;
+  image_url: string;
+}
+
+export interface WhatsAppCampaignResponse {
+  success: boolean;
+  message: string;
+  image_url: string;
+  notified_count: number;
+  status: string;
+  error?: string;
+}
+
+export interface GenerateMessageRequest {
+  product_id: string;
+  user_prompt?: string;
+}
+
+export interface GenerateMessageResponse {
+  success: boolean;
+  message: string;
+  product_name?: string;
+  product_price?: number;
+  error?: string;
+}
+
+class WhatsAppAPI {
+  private baseURL = 'http://localhost:5000/api/whatsapp';
+
+  private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    const options: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    };
+    if (data) options.body = JSON.stringify(data);
+    const resp = await fetch(url, options);
+    const json = await resp.json();
+    if (!resp.ok) {
+      throw new Error(json.error || `HTTP ${resp.status}`);
+    }
+    return json;
+  }
+
+  sendCampaign(payload: WhatsAppCampaignRequest): Promise<WhatsAppCampaignResponse> {
+    return this.request<WhatsAppCampaignResponse>('/send-campaign', 'POST', payload);
+  }
+
+  generateMessage(payload: GenerateMessageRequest): Promise<GenerateMessageResponse> {
+    return this.request<GenerateMessageResponse>('/generate-message', 'POST', payload);
+  }
+}
+
+export const whatsappAPI = new WhatsAppAPI();
