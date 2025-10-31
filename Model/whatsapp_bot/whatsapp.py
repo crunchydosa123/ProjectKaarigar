@@ -806,7 +806,6 @@ def generate_image_for_product(product_id: str, prompt_text: str = None) -> str:
         public_url = f"{request_base_url()}/images/{filename}"
         app.logger.info("Generated image saved: %s (url=%s)", filepath, public_url)
         # Update Firestore product image_urls
-        append_image_url_to_product(product_id, public_url)
         return public_url
     except Exception:
         app.logger.exception("Image generation failed")
@@ -883,9 +882,6 @@ def generate_image_from_url_for_product(product_id: str, source_image_url: str, 
         public_url = f"{request_base_url()}/images/{filename}"
         app.logger.info("Generated (image-to-image) saved: %s (url=%s)", filepath, public_url)
 
-        # Update Firestore product image_urls if db present
-        if product_id and db:
-            append_image_url_to_product(product_id, public_url)
 
         return public_url
     except Exception:
