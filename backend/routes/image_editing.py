@@ -292,6 +292,48 @@ def edit_image_with_prompt(image_path, prompt):
         print(f"❌ Image editing failed: {e}")
         raise RuntimeError(f"Failed to edit image: {e}")
 
+def edit_image_with_reference(image_path, reference_image_path, prompt):
+    """Edit image using Gemini with reference image and prompt"""
+    try:
+        print(f"🎨 Editing image with reference image and prompt: {prompt}")
+        
+        # Load both images
+        main_image = Image.open(image_path)
+        reference_image = Image.open(reference_image_path)
+        print(f"📷 Main image size: {main_image.size}")
+        print(f"📷 Reference image size: {reference_image.size}")
+        
+        # Create enhanced prompt that includes reference image context
+        enhanced_prompt = f"{prompt}. Use the reference image (which is a brand logo or branding element) to enhance the main image while maintaining the overall composition and style."
+        
+        # Generate edited image using Gemini with both images
+        response = genai_client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[enhanced_prompt, main_image, reference_image],
+            config=types.GenerateContentConfig(
+                max_output_tokens=1000
+            )
+        )
+        
+        print("🔄 Processing response...")
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                print(f"📝 Text response: {part.text}")
+            elif part.inline_data is not None:
+                print("💾 Saving edited image...")
+                edited_image_bytes = part.inline_data.data
+                print(f"✅ Image edited successfully with reference")
+                print(f"📊 Size: {len(edited_image_bytes)} bytes")
+                return edited_image_bytes
+            else:
+                print("⚠️ No image data found in response")
+        
+        raise RuntimeError("No image data found in response")
+        
+    except Exception as e:
+        print(f"❌ Image editing with reference failed: {e}")
+        raise RuntimeError(f"Failed to edit image with reference: {e}")
+
 def upload_edited_image_to_storage(image_bytes, user_id, title, original_image_id):
     """Upload edited image to Google Cloud Storage"""
     try:
@@ -559,6 +601,177 @@ def edit_image():
         return jsonify({"error": str(e)}), 401
     except Exception as e:
         print(f"❌ Image editing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+
+@image_edit_bp.route('/edit-image-with-reference', methods=['POST'])
+def edit_image_with_reference_route():
+    """Edit image using provided prompt with optional reference image (for branding)"""
+    try:
+        if not session.get('is_authenticated'):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        user_id = get_user_from_session()
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Get parameters
+        image_url = data.get('image_url', '')
+        prompt = data.get('prompt', '')
+        title = data.get('title', '')
+        original_image_id = data.get('original_image_id', '')
+        reference_image_url = data.get('reference_image_url', '')
+        use_brand_logo = data.get('use_brand_logo', False)
+        
+        if not image_url:
+            return jsonify({"error": "No image URL provided"}), 400
+        
+        if not prompt.strip():
+            return jsonify({"error": "No prompt provided"}), 400
+        
+        if not title.strip():
+            return jsonify({"error": "No title provided"}), 400
+        
+        print(f"🎨 Starting image editing with reference for user: {user_id}")
+        print(f"🖼️ Image URL: {image_url}")
+        print(f"📝 Prompt: {prompt}")
+        print(f"📝 Title: {title}")
+        print(f"🖼️ Reference image URL: {reference_image_url or 'None'}")
+        print(f"🏷️ Use brand logo: {use_brand_logo}")
+        
+        # Get brand logo if use_brand_logo is True
+        final_reference_url = reference_image_url
+        reference_image_type = "user_selected"
+        
+        if use_brand_logo:
+            try:
+                # Fetch brand logo from profile
+                profile_id = f"profile_{user_id}"
+                profile_doc = db.collection("profiles").document(profile_id).get()
+                
+                if profile_doc.exists:
+                    profile_data = profile_doc.to_dict()
+                    brand_logo_url = profile_data.get("brandLogo", "")
+                    
+                    if brand_logo_url:
+                        final_reference_url = brand_logo_url
+                        reference_image_type = "brand_logo"
+                        print(f"🏷️ Using brand logo from profile: {brand_logo_url}")
+                    else:
+                        print("⚠️ No brand logo found in profile, continuing without reference")
+                else:
+                    print("⚠️ Profile not found, continuing without reference")
+            except Exception as e:
+                print(f"⚠️ Error fetching brand logo: {e}, continuing without reference")
+        
+        # Process in memory
+        try:
+            # Download main image
+            main_response = requests.get(image_url, stream=True)
+            main_response.raise_for_status()
+            
+            main_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            main_temp_file.write(main_response.content)
+            main_temp_file.close()
+            main_image_path = main_temp_file.name
+            
+            print(f"✅ Downloaded main image to temp file: {main_image_path}")
+            
+            # Download reference image if provided
+            reference_image_path = None
+            if final_reference_url:
+                try:
+                    ref_response = requests.get(final_reference_url, stream=True)
+                    ref_response.raise_for_status()
+                    
+                    ref_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+                    ref_temp_file.write(ref_response.content)
+                    ref_temp_file.close()
+                    reference_image_path = ref_temp_file.name
+                    
+                    print(f"✅ Downloaded reference image to temp file: {reference_image_path}")
+                except Exception as e:
+                    print(f"⚠️ Failed to download reference image: {e}, continuing without reference")
+                    reference_image_path = None
+            
+            # Edit image with or without reference
+            if reference_image_path:
+                edited_image_bytes = edit_image_with_reference(main_image_path, reference_image_path, prompt)
+            else:
+                edited_image_bytes = edit_image_with_prompt(main_image_path, prompt)
+            
+            if not edited_image_bytes:
+                return jsonify({"error": "Failed to edit image"}), 500
+            
+            # Get file size
+            file_size = len(edited_image_bytes)
+            print(f"📊 Edited image size: {file_size / 1024:.1f} KB")
+            
+            # Upload edited image to Cloud Storage
+            upload_result = upload_edited_image_to_storage(edited_image_bytes, user_id, title, original_image_id)
+            
+            if not upload_result["success"]:
+                return jsonify({"error": f"Failed to upload edited image: {upload_result['error']}"}), 500
+            
+            # Prepare metadata for Firestore
+            image_metadata = {
+                "title": title,
+                "prompt": prompt,
+                "original_image_id": original_image_id,
+                "aspect_ratio": "1:1",
+                "filename": upload_result["filename"],
+                "blob_path": upload_result["blob_path"],
+                "public_url": upload_result["public_url"],
+                "file_size": file_size,
+                "has_reference_image": bool(reference_image_path),
+                "reference_image_type": reference_image_type if reference_image_path else None
+            }
+            
+            # Save metadata to Firestore
+            save_result = save_edited_image_metadata(user_id, image_metadata)
+            
+            if not save_result["success"]:
+                return jsonify({"error": f"Failed to save edited image metadata: {save_result['error']}"}), 500
+            
+            print(f"🎉 Image editing with reference completed successfully!")
+            print(f"   - Image ID: {save_result['image_id']}")
+            print(f"   - Public URL: {upload_result['public_url']}")
+            print(f"   - Reference type: {reference_image_type if reference_image_path else 'None'}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Image edited successfully",
+                "image_id": save_result["image_id"],
+                "public_url": upload_result["public_url"],
+                "title": title,
+                "file_size": file_size,
+                "reference_image_type": reference_image_type if reference_image_path else None
+            })
+            
+        finally:
+            # Clean up temp files
+            try:
+                if 'main_image_path' in locals() and os.path.exists(main_image_path):
+                    os.unlink(main_image_path)
+                    print(f"🧹 Cleaned up main temp image file: {main_image_path}")
+            except Exception as e:
+                print(f"⚠️ Failed to clean up main temp file: {e}")
+            
+            try:
+                if 'reference_image_path' in locals() and reference_image_path and os.path.exists(reference_image_path):
+                    os.unlink(reference_image_path)
+                    print(f"🧹 Cleaned up reference temp image file: {reference_image_path}")
+            except Exception as e:
+                print(f"⚠️ Failed to clean up reference temp file: {e}")
+        
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+    except Exception as e:
+        print(f"❌ Image editing with reference error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
