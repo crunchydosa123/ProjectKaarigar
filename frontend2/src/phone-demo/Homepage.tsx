@@ -166,16 +166,18 @@ const Homepage = () => {
         <button className='bg-white rounded-sm h-10 flex justify-start p-2'>
           <div className="w-6 h-6 bg-cover bg-center mr-2" style={{ backgroundImage: "url('/youtube.png')" }} ></div>
           <div className='flex flex-col items-start justify-center'>
+            <button className='text-left' onClick={()=> setCurrentPage('youtube-shorts')}>
             <div className='text-sm font-bold'>YouTube</div>
             <div className='text-xs'>Videos, Shorts</div>
+            </button>
           </div>
         </button>
 
-        <button className='bg-white rounded-sm h-10 flex justify-start p-2'>
-          <div className="w-6 h-6 bg-cover bg-center mr-2 " style={{ backgroundImage: "url('/instagram.webp')" }} ></div>
+        <button className='bg-white rounded-sm h-10 flex justify-start p-2' onClick={()=> setCurrentPage('list-products/whatsapp-campaign')}>
+          <div className="w-6 h-6 bg-cover bg-center mr-2 " style={{ backgroundImage: "url('/WhatsApp.webp')" }} ></div>
           <div className='flex flex-col items-start justify-center'>
-            <div className='text-sm font-bold'>Instagram</div>
-            <div className='text-xs'>Post, Stories, Reels</div>
+            <div className='text-sm font-bold'>WhatsApp</div>
+            <div className='text-xs'>Message Campaign</div>
           </div>
         </button>
       </div>

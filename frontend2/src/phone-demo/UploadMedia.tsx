@@ -201,7 +201,10 @@ const UploadMedia = () => {
         >
           <House />
         </button>
-        <div className="text-md font-bold ml-3">Upload Media</div>
+        <div className="text-md font-bold ml-3 flex justify-between items-center">
+          <div>Upload Media</div>
+          <Button className="text-xs p-1 ml-7" onClick={()=> setCurrentPage('add-product/ai-cameraman')}>AI Camera Man</Button>
+        </div>
       </div>
 
       <div className="px-4 py-4 space-y-4">
