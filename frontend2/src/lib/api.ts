@@ -8,7 +8,7 @@
  * Handles all communication with the backend authentication system
  */
 
-const API_BASE_URL = 'http://localhost:5000/api/auth';
+const API_BASE_URL = 'https://backend-557742533869.asia-south1.run.app/api/auth';
 
 /**
  * Helper function to get common headers with user_id for cross-origin auth
