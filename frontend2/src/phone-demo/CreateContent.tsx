@@ -44,15 +44,15 @@ const CreateContent = () => {
     case 'create-content/logos':
       return <CreateLogo />;
     case 'create-content/videos':
-      return <ReelMaker onBack={()=> setCurrentPage('create-content')} />;
+      return <ReelMaker onBack={() => setCurrentPage('create-content')} />;
     case 'create-content/videos2':
       return <CreateVideo2 />;
     case 'create-content/images':
       return <ImageGenerator onBack={() => usePage().setCurrentPage('create-content')} />;
     case 'create-content/generate-video':
       return <GenerateVideo onBack={() => usePage().setCurrentPage('create-content')} />;
-      case 'create-content/reel-maker':
-        return <ReelMaker onBack={() => usePage().setCurrentPage('create-content')} />;
+    case 'create-content/reel-maker':
+      return <ReelMaker onBack={() => usePage().setCurrentPage('create-content')} />;
     default:
       return <CreateContentMain />
   }
@@ -64,7 +64,7 @@ const CreateContentMain = () => {
   const { setCurrentPage, selectedVideo, setSelectedVideo } = usePage();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [subAction, setSubAction] = useState<string | null>(null);
-  
+
   // Edit Image Modal State
   const [selectedImage, setSelectedImage] = useState<MediaItem | GeneratedImage | null>(null);
   const [suggestions, setSuggestions] = useState<ImageSuggestion[]>([]);
@@ -101,19 +101,19 @@ const CreateContentMain = () => {
   const loadAllImages = async () => {
     try {
       setLoadingImages(true);
-      
+
       // Load uploaded images
       const uploadedResponse = await mediaAPI.listMediaByType('images');
       const uploadedImages = uploadedResponse.success ? uploadedResponse.media.map(img => ({ ...img, type: 'uploaded' })) : [];
-      
+
       // Load generated images
       const generatedResponse = await imageGenAPI.getGeneratedImages();
       const generatedImages = generatedResponse.success ? generatedResponse.images.map(img => ({ ...img, type: 'generated' })) : [];
-      
+
       // Combine all images
       const combinedImages = [...uploadedImages, ...generatedImages];
       setAllImages(combinedImages);
-      
+
       console.log(`🔄 Loaded ${uploadedImages.length} uploaded + ${generatedImages.length} generated = ${combinedImages.length} total images`);
     } catch (error) {
       console.error('Error loading images:', error);
@@ -126,10 +126,10 @@ const CreateContentMain = () => {
     try {
       setLoadingVideos(true);
       console.log('CreateContentMain: Loading user videos...');
-      
+
       const response = await videoEditAPI.getUserVideos();
       console.log('CreateContentMain: Full response:', response);
-      
+
       if (response.success) {
         setUserVideos(response.videos);
         console.log('CreateContentMain: Set user videos:', response.videos);
@@ -183,7 +183,7 @@ const CreateContentMain = () => {
       const response = await imageEditAPI.analyzeImage({
         image_url: selectedImage.public_url
       });
-      
+
       if (response.success) {
         setSuggestions(response.suggestions);
         setAnalysisStatus('success');
@@ -249,10 +249,10 @@ const CreateContentMain = () => {
         setEditStatus('success');
         setEditMessage(`Image "${response.title}" edited successfully!`);
         console.log('✅ Image edited successfully:', response);
-        
+
         // Refresh the images list to show the new edited image
         await loadAllImages();
-        
+
         // Clear the form
         setCustomPrompt('');
         setEditTitle('');
@@ -327,12 +327,11 @@ const CreateContentMain = () => {
         >
           <House />
         </button>
-        {subAction}
         <div className="text-md font-bold ml-3">Create Content with AI</div>
       </div>
 
       {/* Main Tabs */}
-      <div className="w-full flex justify-center gap-3 px-3 mt-5">
+      <div className="w-full flex justify-center gap-1 px-3 mt-5">
         <Button
           className={`w-1/2 h-32 flex-col transition-all duration-200 ${activeTab === 'generate' ? 'border-blue-500 border-2' : ''
             }`}
@@ -357,63 +356,66 @@ const CreateContentMain = () => {
       </div>
 
       {/* Sub-options */}
-      <AnimatePresence>
-        {activeTab === 'generate' && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mt-6 flex justify-center gap-3"
-          >
-            <Button
-               className={`w-40 h-24 flex-col ${subAction === 'createImage' ? 'border-blue-500 border-2' : ''
-                }`}
-              variant="secondary"
-               onClick={() => setSubAction('createImage')}
+      <div className='px-2'>
+        <AnimatePresence>
+          {activeTab === 'generate' && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-6 flex justify-center gap-1"
             >
-               <Sparkles size={36} />
-               <div className="mt-1">Generate Image</div>
-            </Button>
-            <Button
-              className={`w-40 h-24 flex-col ${subAction === 'createReel' ? 'border-blue-500 border-2' : ''
-                }`}
-              variant="secondary"
-              onClick={() => setSubAction('createReel')}
-            >
-              <ImagePlus size={36} />
-              <div className="mt-1">Create Reel</div>
-            </Button>
-          </motion.div>
-        )}
+              <Button
+                className={`w-40 h-24 flex-col ${subAction === 'createImage' ? 'border-blue-500 border-2' : ''
+                  }`}
+                variant="secondary"
+                onClick={() => setSubAction('createImage')}
+              >
+                <Sparkles size={36} />
+                <div className="mt-1">Generate Image</div>
+              </Button>
+              <Button
+                className={`w-40 h-24 flex-col ${subAction === 'createReel' ? 'border-blue-500 border-2' : ''
+                  }`}
+                variant="secondary"
+                onClick={() => setSubAction('createReel')}
+              >
+                <ImagePlus size={36} />
+                <div className="mt-1">Create Reel</div>
+              </Button>
+            </motion.div>
+          )}
 
-        {activeTab === 'edit' && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mt-6 flex justify-center gap-3"
-          >
-            <Button
-              className={`w-40 h-24 flex-col ${subAction === 'editVideo' ? 'border-blue-500 border-2' : ''
-                }`}
-              variant="secondary"
-              onClick={() => setSubAction('editVideo')}
+          {activeTab === 'edit' && (
+
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-6 flex justify-center gap-3"
             >
-              <FileEdit size={36} />
-              <div className="mt-1">Edit Video</div>
-            </Button>
-            <Button
-              className={`w-40 h-24 flex-col ${subAction === 'editImage' ? 'border-blue-500 border-2' : ''
-                }`}
-              variant="secondary"
-              onClick={() => setSubAction('editImage')}
-            >
-              <Image size={36} />
-              <div className="mt-1">Edit Image</div>
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <Button
+                className={`w-40 h-24 flex-col ${subAction === 'editVideo' ? 'border-blue-500 border-2' : ''
+                  }`}
+                variant="secondary"
+                onClick={() => setSubAction('editVideo')}
+              >
+                <FileEdit size={36} />
+                <div className="mt-1">Edit Video</div>
+              </Button>
+              <Button
+                className={`w-40 h-24 flex-col ${subAction === 'editImage' ? 'border-blue-500 border-2' : ''
+                  }`}
+                variant="secondary"
+                onClick={() => setSubAction('editImage')}
+              >
+                <Image size={36} />
+                <div className="mt-1">Edit Image</div>
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Action Section */}
       <div className="mt-8 flex flex-col items-center gap-4">
@@ -423,8 +425,8 @@ const CreateContentMain = () => {
           <div className="w-80">
             <div className="flex justify-between items-center mb-2">
               <Label className="text-sm font-semibold">
-              Choose a video to edit:
-            </Label>
+                Choose a video to edit:
+              </Label>
               <button
                 onClick={loadUserVideos}
                 disabled={loadingVideos}
@@ -442,9 +444,8 @@ const CreateContentMain = () => {
                 userVideos.map((video) => (
                   <Button
                     key={video.id}
-                    className={`w-full justify-start ${
-                      selectedVideo?.id === video.id ? 'border-blue-500 bg-blue-50' : ''
-                    }`}
+                    className={`w-full justify-start ${selectedVideo?.id === video.id ? 'border-blue-500 bg-blue-50' : ''
+                      }`}
                     variant="outline"
                     onClick={() => {
                       console.log('Edit video:', video.title);
@@ -472,7 +473,7 @@ const CreateContentMain = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Selected Video Indicator */}
             {selectedVideo && (
               <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
@@ -487,14 +488,12 @@ const CreateContentMain = () => {
         {subAction === 'editImage' && (
           <div className="w-full max-w-4xl space-y-4">
             {/* Image Selection */}
-            <Card className="p-4">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Image className="w-5 h-5 text-purple-600" />
-                  Select Image to Edit
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="p-4">
+              <div className="text-lg flex items-center gap-2 my-2 font-bold">
+                <Image className="w-5 h-5 text-purple-600" />
+                Select Image to Edit
+              </div>
+              <div>
                 {loadingImages ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
@@ -506,16 +505,15 @@ const CreateContentMain = () => {
                     <p>No images found. Upload or generate some images first.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4 max-h-60 overflow-y-auto">
                     {allImages.map((image) => (
                       <button
                         key={image.id}
                         onClick={() => handleImageSelect(image)}
-                        className={`relative border-2 rounded-lg overflow-hidden transition-all ${
-                          selectedImage?.id === image.id
+                        className={`relative border-2 rounded-lg overflow-hidden transition-all ${selectedImage?.id === image.id
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 hover:border-purple-300'
-                        }`}
+                          }`}
                       >
                         <img
                           src={image.public_url}
@@ -527,8 +525,8 @@ const CreateContentMain = () => {
                           }}
                         />
                         <div className="absolute top-2 left-2">
-                          <Badge 
-                            variant={(image as any).type === 'generated' ? 'default' : 'secondary'} 
+                          <Badge
+                            variant={(image as any).type === 'generated' ? 'default' : 'secondary'}
                             className="text-xs"
                           >
                             {(image as any).type === 'generated' ? 'AI Generated' : 'Uploaded'}
@@ -548,18 +546,16 @@ const CreateContentMain = () => {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Selected Image Preview and Analysis */}
             {selectedImage && (
-              <Card className="p-4">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Edit3 className="w-5 h-5 text-purple-600" />
-                    Selected Image
-                  </CardTitle>
-                </CardHeader>
+              <div className="p-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-purple-600" />
+                  Selected Image
+                </CardTitle>
                 <CardContent>
                   <div className="flex items-center gap-4">
                     <img
@@ -567,43 +563,44 @@ const CreateContentMain = () => {
                       alt={selectedImage.title || (selectedImage as any).original_filename || selectedImage.filename}
                       className="w-24 h-24 object-cover rounded"
                     />
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">
-                        {selectedImage.title || (selectedImage as any).original_filename || selectedImage.filename}
-                      </h3>
-                      <Badge 
-                        variant={(selectedImage as any).type === 'generated' ? 'default' : 'secondary'} 
-                        className="text-xs mt-1"
+                    <div className='flex-col'>
+                      <div className="flex-1">
+                        <h3 className="font-medium text-gray-900">
+                          {selectedImage.title || (selectedImage as any).original_filename || selectedImage.filename}
+                        </h3>
+                        <Badge
+                          variant={(selectedImage as any).type === 'generated' ? 'default' : 'secondary'}
+                          className="text-xs mt-1"
+                        >
+                          {(selectedImage as any).type === 'generated' ? 'AI Generated' : 'Uploaded'}
+                        </Badge>
+                      </div>
+                      <Button
+                        onClick={handleAnalyzeImage}
+                        disabled={analyzing}
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs my-1"
                       >
-                        {(selectedImage as any).type === 'generated' ? 'AI Generated' : 'Uploaded'}
-                      </Badge>
+                        {analyzing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            <Lightbulb className="w-4 h-4 " />
+                            Get AI Suggestions
+                          </>
+                        )}
+                      </Button>
                     </div>
-                    <Button
-                      onClick={handleAnalyzeImage}
-                      disabled={analyzing}
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
-                    >
-                      {analyzing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          <Lightbulb className="w-4 h-4 mr-2" />
-                          Get AI Suggestions
-                        </>
-                      )}
-                    </Button>
                   </div>
 
                   {/* Analysis Status */}
                   {analysisMessage && (
-                    <div className={`mt-3 p-3 rounded-md flex items-center gap-2 ${
-                      analysisStatus === 'success' 
-                        ? 'bg-green-50 text-green-800 border border-green-200' 
+                    <div className={`mt-3 p-3 rounded-md flex items-center gap-2 ${analysisStatus === 'success'
+                        ? 'bg-green-50 text-green-800 border border-green-200'
                         : 'bg-red-50 text-red-800 border border-red-200'
-                    }`}>
+                      }`}>
                       {analysisStatus === 'success' ? (
                         <CheckCircle className="w-4 h-4" />
                       ) : (
@@ -613,7 +610,7 @@ const CreateContentMain = () => {
                     </div>
                   )}
                 </CardContent>
-              </Card>
+              </div>
             )}
 
             {/* AI Suggestions */}
@@ -631,11 +628,10 @@ const CreateContentMain = () => {
                       <button
                         key={index}
                         onClick={() => handleSuggestionSelect(suggestion)}
-                        className={`w-full p-2 text-left border rounded-md transition-all ${
-                          selectedSuggestion === suggestion
+                        className={`w-full p-2 text-left border rounded-md transition-all ${selectedSuggestion === suggestion
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 hover:border-purple-300'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
@@ -664,13 +660,11 @@ const CreateContentMain = () => {
 
             {/* Edit Form */}
             {selectedImage && (
-              <Card className="p-4">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Wand2 className="w-5 h-5 text-purple-600" />
-                    Edit Image
-                  </CardTitle>
-                </CardHeader>
+              <div className="p-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Wand2 className="w-5 h-5 text-purple-600" />
+                  Edit Image
+                </CardTitle>
                 <CardContent className="space-y-4">
                   {/* Title Input */}
                   <div>
@@ -722,11 +716,10 @@ const CreateContentMain = () => {
 
                   {/* Edit Status */}
                   {editMessage && (
-                    <div className={`p-3 rounded-md flex items-center gap-2 ${
-                      editStatus === 'success' 
-                        ? 'bg-green-50 text-green-800 border border-green-200' 
+                    <div className={`p-3 rounded-md flex items-center gap-2 ${editStatus === 'success'
+                        ? 'bg-green-50 text-green-800 border border-green-200'
                         : 'bg-red-50 text-red-800 border border-red-200'
-                    }`}>
+                      }`}>
                       {editStatus === 'success' ? (
                         <CheckCircle className="w-4 h-4" />
                       ) : (
@@ -736,7 +729,7 @@ const CreateContentMain = () => {
                     </div>
                   )}
                 </CardContent>
-              </Card>
+              </div>
             )}
 
             {/* Edited Images Display */}
@@ -888,7 +881,7 @@ const CreateLogo = () => {
         console.log("⚠️ Could not load brand name from profile:", error);
       }
     };
-    
+
     fetchBrandName();
   }, []);
 
@@ -936,7 +929,7 @@ const CreateLogo = () => {
 
       const response = await logoAPI.generateLogo(requestData);
       console.log("📄 Logo generation response:", response);
-      
+
       if (response.success && response.logo_url) {
         // Check if the logo URL is not the default fallback
         if (response.logo_url !== "/ai_gen_logo.jpeg" && !response.logo_url.includes("ai_gen_logo")) {
@@ -972,7 +965,7 @@ const CreateLogo = () => {
       setIsGenerating(true);
       setError("");
       setSuccess("");
-      
+
       try {
         const selectedLogoUrl = logos[selectedLogo];
         console.log("🔄 Saving selected logo:", selectedLogoUrl);
@@ -983,14 +976,14 @@ const CreateLogo = () => {
           logoUrl: selectedLogoUrl,
           brandName: brandName
         });
-        
+
         // First, save the logo URL to Cloud Storage and profiles collection
         const response = await logoAPI.saveLogoUrl(selectedLogoUrl, brandName);
-        
+
         if (response.success) {
           setSuccess("Logo selected and saved to Cloud Storage and profiles collection!");
           console.log("✅ Logo saved successfully:", response);
-          
+
           // Also update the profile collection with brand info
           try {
             await profileAPI.updateBrand(brandName, selectedLogoUrl);
@@ -998,7 +991,7 @@ const CreateLogo = () => {
           } catch (profileError) {
             console.warn("⚠️ Profile update failed, but logo was saved:", profileError);
           }
-          
+
           // Navigate to profile page after a short delay
           setTimeout(() => {
             setCurrentPage('onboarding/profile');
@@ -1081,7 +1074,7 @@ const CreateLogo = () => {
             )}
           </Button>
         </div>
-        
+
         {/* Status Messages */}
         {error && (
           <div className="text-red-600 text-sm mt-2 p-2 bg-red-50 rounded">
@@ -1136,9 +1129,9 @@ const CreateLogo = () => {
               }}
               className={`flex items-center justify-center rounded-xl border-2 p-1 transition ${selectedLogo === idx ? 'border-blue-500 bg-blue-300' : 'border-gray-600 border-dashed'}`}
             >
-              <img 
-                src={logo} 
-                alt={`logo-${idx}`} 
+              <img
+                src={logo}
+                alt={`logo-${idx}`}
                 className="max-h-32 max-w-full object-contain"
                 onError={(e) => {
                   console.error(`❌ Failed to load logo ${idx}:`, logo);
@@ -1150,7 +1143,7 @@ const CreateLogo = () => {
               />
             </button>
           ))}
-          
+
           {/* Show debug info if no logos */}
           {logos.length === 0 && (
             <div className="col-span-2 row-span-2 flex items-center justify-center text-white text-sm">
@@ -1165,7 +1158,7 @@ const CreateLogo = () => {
         {/* "Make this my logo" button */}
         {selectedLogo !== null && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-            <Button 
+            <Button
               onClick={handleSelectLogo}
               disabled={isGenerating}
               className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md disabled:opacity-50"
@@ -1235,7 +1228,7 @@ const CreateLogo = () => {
         </CardContent>
       </Card>
 
-      <Button variant={'outline'} className="p-3 my-5 mx-3" onClick={()=> setCurrentPage('onboarding/profile')}>Next (See Profile) <ArrowRight /></Button>
+      <Button variant={'outline'} className="p-3 my-5 mx-3" onClick={() => setCurrentPage('onboarding/profile')}>Next (See Profile) <ArrowRight /></Button>
 
     </div>
   )
@@ -1331,9 +1324,8 @@ const CreateVideo = () => {
                       <video
                         key={media}
                         src={media}
-                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
-                          referenceMedia === media ? "ring-2 ring-blue-500" : ""
-                        }`}
+                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${referenceMedia === media ? "ring-2 ring-blue-500" : ""
+                          }`}
                         onClick={() => handleSelectMedia(media)}
                       />
                     ) : (
@@ -1341,9 +1333,8 @@ const CreateVideo = () => {
                         key={media}
                         src={media}
                         alt="placeholder"
-                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${
-                          referenceMedia === media ? "ring-2 ring-blue-500" : ""
-                        }`}
+                        className={`w-full h-24 object-cover border rounded-md cursor-pointer ${referenceMedia === media ? "ring-2 ring-blue-500" : ""
+                          }`}
                         onClick={() => handleSelectMedia(media)}
                       />
                     )
@@ -1425,18 +1416,18 @@ const CreateVideo2 = () => {
                 <p className="font-medium text-gray-800">{selectedVideo.title}</p>
                 <p className="text-sm text-gray-600 capitalize">{selectedVideo.type}</p>
                 <p className="text-xs text-gray-500">Ready for AI editing</p>
-        </div>
-      </div>
-                </div>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Video Editor */}
       <div className="flex-1 p-4">
         <div className="bg-[#1e1e1e] text-white shadow-lg p-4 w-full max-w-2xl mx-auto rounded-lg">
           <VideoEditorPreview selectedVideoUrl={selectedVideoUrl} />
+        </div>
       </div>
-    </div>
     </div>
   )
 }
