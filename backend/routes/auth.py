@@ -211,7 +211,13 @@ def signup():
         }
         
         print(f"📤 Sending response: {response_data}")
-        return jsonify(response_data), 201
+        
+        # Create response with headers for cross-origin auth
+        from flask import make_response
+        response = make_response(jsonify(response_data), 201)
+        response.headers['X-User-ID'] = user_id
+        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID'
+        return response
         
     except Exception as e:
         print(f"❌ Signup error: {e}")
@@ -355,7 +361,13 @@ def login():
         }
         
         print(f"📤 Sending response: {response_data}")
-        return jsonify(response_data), 200
+        
+        # Create response with headers for cross-origin auth
+        from flask import make_response
+        response = make_response(jsonify(response_data), 200)
+        response.headers['X-User-ID'] = user_id
+        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID'
+        return response
         
     except Exception as e:
         print(f"❌ Login error: {e}")

@@ -31,14 +31,11 @@ except Exception as e:
     print(f"⚠️ GenAI client initialization failed: {e}")
     GENAI_CLIENT = None
 
-
-def get_user_from_session():
-    if not session.get('is_authenticated'):
-        raise ValueError("Not authenticated")
-    user_id = session.get('user_id')
-    if not user_id:
-        raise ValueError("User ID not found in session")
-    return user_id
+# Import the shared auth helper
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from auth_helper import get_user_from_session
 
 
 def _collect_user_media(user_id: str):

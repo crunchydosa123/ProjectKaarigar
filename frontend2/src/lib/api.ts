@@ -3,7 +3,23 @@
  * Handles all communication with the backend authentication system
  */
 
+/**
+ * API Helper for Project Kaarigar Backend
+ * Handles all communication with the backend authentication system
+ */
+
 const API_BASE_URL = 'http://localhost:5000/api/auth';
+
+/**
+ * Helper function to get common headers with user_id for cross-origin auth
+ */
+function getAuthHeaders(): Record<string, string> {
+  const userId = localStorage.getItem('user_id');
+  return {
+    'Content-Type': 'application/json',
+    ...(userId && { 'X-User-ID': userId }),
+  };
+}
 
 export interface User {
   userId: string;
@@ -71,10 +87,14 @@ class AuthAPI {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
+    // Get user_id from localStorage for cross-origin auth
+    const userId = localStorage.getItem('user_id');
+    
     const options: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
+        ...(userId && { 'X-User-ID': userId }), // Add user_id header if available
       },
       credentials: 'include', // Important for session cookies
     };
@@ -85,6 +105,14 @@ class AuthAPI {
 
     try {
       const response = await fetch(url, options);
+      
+      // Store user_id from response headers (for login/signup)
+      const userIdHeader = response.headers.get('X-User-ID');
+      if (userIdHeader) {
+        localStorage.setItem('user_id', userIdHeader);
+        console.log('✅ Stored user_id in localStorage:', userIdHeader);
+      }
+      
       const result = await response.json();
 
       if (!response.ok) {
@@ -123,7 +151,11 @@ class AuthAPI {
    * User logout
    */
   async logout(): Promise<AuthResponse> {
-    return this.request<AuthResponse>('/logout', 'POST');
+    const result = await this.request<AuthResponse>('/logout', 'POST');
+    // Clear localStorage on logout
+    localStorage.removeItem('user_id');
+    console.log('✅ Cleared user_id from localStorage');
+    return result;
   }
 
   /**
@@ -192,7 +224,7 @@ class LogoAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/logo';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/logo';
   }
 
   private async request<T>(
@@ -308,7 +340,7 @@ class MediaAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/media';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/media';
   }
 
   private async request<T>(
@@ -425,7 +457,7 @@ class ProfileAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/profile';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/profile';
   }
 
   private async request<T>(
@@ -535,7 +567,7 @@ class ReelAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/reel';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/reel';
   }
 
   private async request<T>(
@@ -636,7 +668,7 @@ class ImageGenAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/image-gen';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-gen';
   }
 
   private async request<T>(
@@ -728,7 +760,7 @@ class ImageEditAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/image-edit';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-edit';
   }
 
   private async request<T>(
@@ -836,7 +868,7 @@ class VideoEditAPI {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = 'http://localhost:5000/api/video-edit';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/video-edit';
   }
 
   private async request<T>(
@@ -1166,7 +1198,7 @@ class ReelGeneratorAPI {
     console.log(`🔄 Using local backend for delete video...`);
     
     // Use local backend for this endpoint
-    const localBaseURL = 'http://localhost:5000';
+    const localBaseURL = 'https://backend-557742533869.asia-south1.run.app/';
     const url = `${localBaseURL}/api/reel-generator/delete-video`;
     
     console.log(`🌐 URL: ${url}`);
@@ -1272,13 +1304,13 @@ export interface ProductMediaResponse {
 }
 
 class ProductAPI {
-  private baseURL = 'http://localhost:5000/api/product';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/product';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const options: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(), // Use helper to include X-User-ID
       credentials: 'include',
     };
     if (data) options.body = JSON.stringify(data);
@@ -1344,7 +1376,7 @@ export interface GenerateMessageResponse {
 }
 
 class WhatsAppAPI {
-  private baseURL = 'http://localhost:5000/api/whatsapp';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/whatsapp';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
@@ -1391,13 +1423,13 @@ export interface AIInsightsResponse {
 }
 
 class AIInsightsAPI {
-  private baseURL = 'http://localhost:5000/api/ai-insights';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/ai-insights';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const options: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(), // Use helper to include X-User-ID
       credentials: 'include',
     };
     if (data) options.body = JSON.stringify(data);

@@ -395,7 +395,7 @@ const ProductDetail: React.FC = () => {
 
     try {
       setLoading(true);
-      const apiUrl = 'http://localhost:5000/api/marketplace/generate';
+      const apiUrl = 'https://backend-557742533869.asia-south1.run.app/api/marketplace/generate';
       const requestBody = {
         product_id: productId,
         marketplace: marketplace.toLowerCase()

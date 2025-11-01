@@ -36,7 +36,7 @@ const MyntraListing = () => {
     
     try {
       setLoading(true);
-      const apiUrl = `http://localhost:5000/api/marketplace/${selectedProductId}/myntra-listing`;
+      const apiUrl = `https://backend-557742533869.asia-south1.run.app/api/marketplace/${selectedProductId}/myntra-listing`;
       
       console.log('🚀 [MyntraListing] Calling API...');
       console.log('   URL:', apiUrl);

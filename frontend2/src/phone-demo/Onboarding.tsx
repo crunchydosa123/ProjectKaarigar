@@ -42,7 +42,7 @@ const Onboarding = ({}: Props) => {
       setIsLoading(true);
       setError("");
       
-      const response = await fetch('http://localhost:5000/api/conversational/start', {
+      const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/start', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -107,7 +107,7 @@ const Onboarding = ({}: Props) => {
       // Clear the input field immediately
       setCurrentMessage("");
 
-      const response = await fetch('http://localhost:5000/api/conversational/message', {
+      const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/message', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -127,7 +127,7 @@ const Onboarding = ({}: Props) => {
       
       // Fetch the updated conversation status to get the full conversation history
       try {
-        const statusResponse = await fetch(`http://localhost:5000/api/conversational/status/${kaarigarId}`, {
+        const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
           credentials: 'include'
         });
         
@@ -214,7 +214,7 @@ const Onboarding = ({}: Props) => {
       reader.onload = async () => {
         const base64Audio = (reader.result as string).split(',')[1];
         
-        const response = await fetch('http://localhost:5000/api/conversational/audio-message', {
+        const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/audio-message', {
           method: 'POST',
           credentials: 'include',
           headers: {
@@ -237,7 +237,7 @@ const Onboarding = ({}: Props) => {
         if (data.transcribed_text && data.transcribed_text.trim()) {
           // Fetch the updated conversation status to get the full conversation history
           try {
-            const statusResponse = await fetch(`http://localhost:5000/api/conversational/status/${kaarigarId}`, {
+            const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
               credentials: 'include'
             });
             
@@ -465,7 +465,7 @@ const Onboarding = ({}: Props) => {
     if (!kaarigarId) return;
     
     try {
-      const statusResponse = await fetch(`http://localhost:5000/api/conversational/status/${kaarigarId}`, {
+      const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
         credentials: 'include'
       });
       

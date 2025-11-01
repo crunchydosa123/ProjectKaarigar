@@ -31,7 +31,7 @@ const MarketplaceListings = () => {
     
     try {
       setLoading(true);
-      const apiUrl = 'http://localhost:5000/api/marketplace/listings';
+      const apiUrl = 'https://backend-557742533869.asia-south1.run.app/api/marketplace/listings';
       
       console.log('🚀 [MarketplaceListings] Calling API...');
       console.log('   URL:', apiUrl);

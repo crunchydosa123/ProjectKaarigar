@@ -80,7 +80,7 @@ interface GeneratedVideosResponse {
 
 // Simple video API implementation
 class VideoAPI {
-  private baseURL: string = 'http://localhost:5000/api/video';
+  private baseURL: string = 'https://backend-557742533869.asia-south1.run.app/api/video';
 
   private async request<T>(
     endpoint: string,

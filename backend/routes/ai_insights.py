@@ -74,12 +74,11 @@ if STORAGE_AVAILABLE:
         print(f"❌ Cloud Storage initialization failed: {e}")
         STORAGE_AVAILABLE = False
 
-def get_user_from_session():
-    """Get user ID from session"""
-    user_id = session.get('user_id')
-    if not user_id:
-        raise ValueError("No user session found. Please login first.")
-    return user_id
+# Import the shared auth helper
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(__file__)))
+from auth_helper import get_user_from_session
 
 def get_user_profile_data(user_id: str) -> dict:
     """Get user profile data from Firestore and Cloud Storage including products"""

@@ -17,13 +17,21 @@ from routes.whatsapp import whatsapp_bp
 from routes.ai_insights import ai_insights_bp
 
 app = Flask(__name__)
-CORS(app, origins=['*'], supports_credentials=True)
+
+# CORS configuration for Cloud Run deployment
+CORS(app, 
+     origins=['*'],  # Allow all origins (can restrict to specific domains in production)
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization', 'X-User-ID'],
+     expose_headers=['Content-Type', 'X-User-ID'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 
 # Simple configuration - no secrets or encryption
 app.config['SECRET_KEY'] = 'project-kaarigar-simple-key-2025'
-app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = False  # Allow frontend access
-app.config['SESSION_COOKIE_SAMESITE'] = None  # Remove SameSite restrictions
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin
+app.config['SESSION_COOKIE_DOMAIN'] = None  # Don't restrict domain
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
 # Register blueprints
