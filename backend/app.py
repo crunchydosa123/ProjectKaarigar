@@ -19,17 +19,13 @@ from routes.ai_insights import ai_insights_bp
 app = Flask(__name__)
 
 # CORS configuration for Cloud Run deployment
-CORS(app, 
-     origins=['*'],  # Allow all origins (can restrict to specific domains in production)
-     supports_credentials=True,
-     allow_headers=['Content-Type', 'Authorization', 'X-User-ID'],
-     expose_headers=['Content-Type', 'X-User-ID'],
-     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+
+
 
 # Simple configuration - no secrets or encryption
 app.config['SECRET_KEY'] = 'project-kaarigar-simple-key-2025'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = False  # Allow frontend access
+app.config['SESSION_COOKIE_SECURE'] = True  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Allow frontend access
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin
 app.config['SESSION_COOKIE_DOMAIN'] = None  # Don't restrict domain
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
@@ -140,8 +136,22 @@ def health_check():
         "timestamp": "2025-01-22T16:30:00Z"
     }
 
+CORS(app,
+     supports_credentials=True,
+     origins=[
+         "http://localhost:5173",
+         "https://backend-557742533869.asia-south1.run.app", 
+         "https://frontend-557742533869.asia-south1.run.app"
+     ],
+     allow_headers=["Content-Type", "Authorization", "X-User-ID"],
+     expose_headers=["Content-Type", "X-User-ID"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+
 if __name__ == '__main__':
-    print("Starting Project Kaarigar Backend...")
+    import os
+
+    port = int(os.environ.get("PORT", 5000))
+    print(f"\n🚀 Starting Project Kaarigar Backend on port {port}")
     print("Available endpoints:")
     print("  Authentication: /api/auth/*")
     print("  Conversational: /api/conversational/*")
@@ -154,4 +164,5 @@ if __name__ == '__main__':
     print("  Reel Generator: /api/reel-generator/*")
     print("  Testing: /testing/*")
     print("  Health: /health")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+    app.run(host='0.0.0.0', port=port)

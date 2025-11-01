@@ -79,8 +79,9 @@ const ViewProfile = () => {
           if (savedResponse.brand_info && savedResponse.brand_info.brand_name) {
             setLogoInfo(prev => ({
               ...prev,
-              brand_name: savedResponse.brand_info.brand_name
+              brand_name: savedResponse?.brand_info?.brand_name ?? prev.brand_name
             }));
+
             console.log("🏷️ Updated brand name from saved profile:", savedResponse.brand_info.brand_name);
           }
         } else {
@@ -91,7 +92,12 @@ const ViewProfile = () => {
         console.log("🔄 Fetching logo info...");
         const logoResponse = await logoAPI.getLogo();
         if (logoResponse.success && logoResponse.logo_info) {
-          setLogoInfo(logoResponse.logo_info);
+          setLogoInfo({
+            logo_url: logoResponse.logo_info?.logo_url ?? '',
+            brand_name: logoResponse.logo_info?.brand_name ?? '',
+            has_logo: logoResponse.logo_info?.has_logo ?? false,
+          });
+
           console.log("✅ Logo info loaded:", logoResponse.logo_info);
         } else {
           console.log("⚠️ No logo info found, using defaults");
@@ -150,7 +156,7 @@ const ViewProfile = () => {
       }
     } catch (err) {
       console.error("❌ Save profile error:", err);
-      setError(`Failed to save profile: ${err.message || 'Please check your connection and try again.'}`);
+      setError(`Failed to save profile: ${(err as any).message || 'Please check your connection and try again.'}`);
     } finally {
       setSaving(false);
     }

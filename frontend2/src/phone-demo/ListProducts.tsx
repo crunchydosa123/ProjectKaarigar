@@ -302,7 +302,7 @@ const WhatsappCampaign = () => {
       });
       
       // Set the uploaded image as selected
-      setSelectedImage(uploadedMedia.public_url);
+      setSelectedImage(uploadedMedia.public_url ?? null);
       setLocalImageFile(file);
       
       // Refresh media list

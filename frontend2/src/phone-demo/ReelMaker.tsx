@@ -128,26 +128,30 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
       if (response.success) {
         const reels = response.reels || [];
         const mappedReels: GeneratedReel[] = reels.map((reel: any) => ({
-          id: reel.id || reel.name,
-          title: reel.title || reel.name,
-          prompt: reel.prompt || 'Generated from images',
-          filename: reel.filename || reel.name,
-          cloud_path: reel.cloud_path || reel.name,
-          public_url: reel.public_url,
-          images_count: reel.images_count || 0,
-          created_at: reel.created_at || new Date().toISOString(),
-          file_size_mb: reel.file_size_mb || 0,
-          status: reel.status || 'completed',
-          description: reel.description || '',
-          duration_seconds: reel.duration_seconds || 0,
+          id: reel.id ?? reel.name ?? crypto.randomUUID(),
+          title: reel.title ?? reel.name ?? 'Untitled Reel',
+          prompt: reel.prompt ?? 'Generated from images',
+          filename: reel.filename ?? reel.name ?? 'unknown.mp4',
+          cloud_path: reel.cloud_path ?? reel.name ?? '',
+          blob_path: reel.blob_path ?? '', // ✅ added
+          public_url: reel.public_url ?? '',
+          images_count: reel.images_count ?? 0,
+          created_at: reel.created_at ?? new Date().toISOString(),
+          file_size: reel.file_size ?? (reel.file_size_mb ? reel.file_size_mb * 1024 * 1024 : 0), // ✅ added, converts MB → bytes if needed
+          file_size_mb: reel.file_size_mb ?? (reel.file_size ? reel.file_size / (1024 * 1024) : 0),
+          status: reel.status ?? 'completed',
+          description: reel.description ?? '',
+          duration_seconds: reel.duration_seconds ?? 0,
           user_id: user.userId,
           kaarigar_id: '',
           video_type: 'generated_reel',
-          optimized_prompt: '',
-          selected_image_ids: [],
-          generated_at: reel.created_at || new Date().toISOString(),
-          is_active: true,
+          optimized_prompt: reel.optimized_prompt ?? '',
+          selected_image_ids: reel.selected_image_ids ?? [],
+          generated_at: reel.generated_at ?? reel.created_at ?? new Date().toISOString(),
+          is_active: reel.is_active ?? true,
         }));
+
+
         setGeneratedReels(mappedReels);
         console.log(`🎬 Successfully loaded ${mappedReels.length} generated reels:`, mappedReels);
       } else {
@@ -832,7 +836,10 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
                         onError={(e) => {
                           // Fallback to a placeholder if video fails to load
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling.style.display = 'flex';
+                          const nextEl = e.currentTarget.nextElementSibling as HTMLElement | null;
+                          if (nextEl) {
+                            nextEl.style.display = 'flex';
+                          }
                         }}
                       />
                       <div className="absolute inset-0 bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
