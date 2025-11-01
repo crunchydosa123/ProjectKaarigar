@@ -663,6 +663,7 @@ class ImageGenAPI {
       const result = await response.json();
 
       if (!response.ok) {
+        console.log(response)
         throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 

@@ -305,15 +305,24 @@ def generate_image():
                 # Generate image from reference image
                 print("🔄 Generating image from reference image...")
                 
-                # Fetch reference image from Firestore
+                # Try to fetch reference image from uploaded images collection first
+                print(f"🔍 Looking for reference image ID: {reference_image_id}")
                 images_ref = db.collection("media").document(user_id).collection("uploadmedia").document("media_data").collection("images")
                 doc = images_ref.document(reference_image_id).get()
                 
+                # If not found in uploaded images, check generated images collection
                 if not doc.exists:
-                    return jsonify({"error": "Reference image not found"}), 400
+                    print("⚠️ Not found in uploaded images, checking generated images...")
+                    generated_images_ref = db.collection("media").document(user_id).collection("uploadmedia").document("media_data").collection("_generated_images")
+                    doc = generated_images_ref.document(reference_image_id).get()
+                
+                if not doc.exists:
+                    print("❌ Reference image not found in either collection")
+                    return jsonify({"error": "Reference image not found in uploaded or generated images"}), 400
                 
                 image_data = doc.to_dict()
                 reference_image_url = image_data['public_url']
+                print(f"✅ Found reference image: {reference_image_url}")
                 
                 # Download reference image
                 reference_image_path = os.path.join(temp_dir, "reference_image.jpg")

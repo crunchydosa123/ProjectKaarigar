@@ -56,7 +56,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 # ElevenLabs API configuration for STT and TTS
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_b346f8c1a3001388c671ebbea7f54c349f953cf827dd4dec")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_eb5e8ac81d2d4242203403c4fb3f35cbf7b1027d2051e8ff")
 ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
 ELEVEN_TTS_URL = os.environ.get("ELEVEN_TTS_URL", "https://api.elevenlabs.io/v1/text-to-speech")
 ELEVEN_VOICE_ID = os.environ.get("ELEVEN_VOICE_ID", "KaCAGkAghyX8sFEYByRC")
