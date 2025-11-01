@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { mediaAPI, type MediaItem } from "@/lib/api";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 const UploadMedia = () => {
   const { setCurrentPage } = usePage();
@@ -35,7 +36,7 @@ const UploadMedia = () => {
       setSelectedFile(file);
       setUploadStatus("idle");
       setUploadMessage("");
-      
+
       // Auto-detect media type based on file type
       if (file.type.startsWith('image/')) {
         setMediaType("image");
@@ -47,7 +48,7 @@ const UploadMedia = () => {
 
   const handleUpload = async () => {
     console.log("🔧 Frontend: Starting upload process...");
-    
+
     if (!selectedFile) {
       console.log("🔧 Frontend: No file selected");
       setUploadStatus("error");
@@ -87,7 +88,7 @@ const UploadMedia = () => {
         console.log("🔧 Frontend: Upload successful!");
         setUploadStatus("success");
         setUploadMessage("Media uploaded successfully!");
-        
+
         // Reset form
         setSelectedFile(null);
         setTitle("");
@@ -95,7 +96,7 @@ const UploadMedia = () => {
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-        
+
         console.log("🔧 Frontend: Refreshing media list...");
         // Refresh media list
         loadMediaList();
@@ -118,24 +119,24 @@ const UploadMedia = () => {
 
   const handleDeleteMedia = async (mediaId: string, mediaTitle: string) => {
     console.log("🔧 Frontend: Starting delete process for media:", mediaId);
-    
+
     if (!confirm(`Are you sure you want to delete "${mediaTitle}"? This action cannot be undone.`)) {
       console.log("🔧 Frontend: Delete cancelled by user");
       return;
     }
-    
+
     setDeletingMedia(mediaId);
-    
+
     try {
       console.log("🔧 Frontend: Calling mediaAPI.deleteMedia...");
       const response = await mediaAPI.deleteMedia(mediaId);
       console.log("🔧 Frontend: Delete response received:", response);
-      
+
       if (response.success) {
         console.log("🔧 Frontend: Delete successful!");
         setUploadStatus("success");
         setUploadMessage(`"${mediaTitle}" deleted successfully!`);
-        
+
         // Refresh media list
         console.log("🔧 Frontend: Refreshing media list after delete...");
         loadMediaList();
@@ -161,17 +162,17 @@ const UploadMedia = () => {
       console.log("🔧 Frontend: Starting to load media list...");
       const response = await mediaAPI.listMedia();
       console.log("🔧 Frontend: Received response:", response);
-      
+
       if (response.success) {
         console.log("🔧 Frontend: Response successful, setting media data");
         console.log("🔧 Frontend: All media count:", response.media?.length || 0);
         console.log("🔧 Frontend: Images count:", response.images?.length || 0);
         console.log("🔧 Frontend: Videos count:", response.videos?.length || 0);
-        
+
         setUploadedMedia(response.media || []);
         setUploadedImages(response.images || []);
         setUploadedVideos(response.videos || []);
-        
+
         console.log("🔧 Frontend: Media data set successfully");
       } else {
         console.error("🔧 Frontend: Response not successful:", response.error);
@@ -203,17 +204,16 @@ const UploadMedia = () => {
         </button>
         <div className="text-md font-bold ml-3 flex justify-between items-center">
           <div>Upload Media</div>
-          <Button className="text-xs p-1 ml-7" onClick={()=> setCurrentPage('add-product/ai-cameraman')}>AI Camera Man</Button>
+          <Button className="text-xs p-1 ml-7" onClick={() => setCurrentPage('add-product/ai-cameraman')}>AI Camera Man</Button>
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="space-y-4">
         {/* Upload Form */}
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle className="text-lg">Upload New Media</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <div className="">
+          <div className="text-lg px-4 mb-2 mt-2 font-bold">Upload New Media</div>
+
+          <div className="space-y-4 px-4">
             {/* Title Input */}
             <div>
               <Label htmlFor="title">Media Title *</Label>
@@ -237,7 +237,7 @@ const UploadMedia = () => {
                 className="mt-1"
                 rows={3}
               />
-      </div>
+            </div>
 
             {/* File Upload */}
             <div>
@@ -266,7 +266,7 @@ const UploadMedia = () => {
                   </div>
                 )}
               </div>
-      </div>
+            </div>
 
             {/* Media Type Selection */}
             <div>
@@ -280,7 +280,7 @@ const UploadMedia = () => {
                 >
                   <LucideImagePlus className="w-4 h-4 mr-2" />
                   Image
-        </Button>
+                </Button>
                 <Button
                   type="button"
                   variant={mediaType === "video" ? "default" : "outline"}
@@ -289,8 +289,8 @@ const UploadMedia = () => {
                 >
                   <LucideVideo className="w-4 h-4 mr-2" />
                   Video
-        </Button>
-        </div>
+                </Button>
+              </div>
             </div>
 
             {/* Upload Button */}
@@ -314,13 +314,12 @@ const UploadMedia = () => {
 
             {/* Status Message */}
             {uploadMessage && (
-              <div className={`p-3 rounded-md flex items-center ${
-                uploadStatus === "success" 
-                  ? "bg-green-50 text-green-800 border border-green-200" 
-                  : uploadStatus === "error"
+              <div className={`p-3 rounded-md flex items-center ${uploadStatus === "success"
+                ? "bg-green-50 text-green-800 border border-green-200"
+                : uploadStatus === "error"
                   ? "bg-red-50 text-red-800 border border-red-200"
                   : "bg-blue-50 text-blue-800 border border-blue-200"
-              }`}>
+                }`}>
                 {uploadStatus === "success" ? (
                   <CheckCircle className="w-4 h-4 mr-2" />
                 ) : uploadStatus === "error" ? (
@@ -329,51 +328,53 @@ const UploadMedia = () => {
                 {uploadMessage}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Uploaded Media List */}
         {uploadedMedia.length > 0 && (
-          <Card className="p-4">
-            <CardHeader>
-              <CardTitle className="text-lg">Your Uploaded Media</CardTitle>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant={activeTab === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('all')}
-                >
-                  All ({uploadedMedia.length})
-                </Button>
-                <Button
-                  variant={activeTab === 'images' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('images')}
-                >
-                  <LucideImagePlus className="w-4 h-4 mr-1" />
-                  Images ({uploadedImages.length})
-                </Button>
-                <Button
-                  variant={activeTab === 'videos' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('videos')}
-                >
-                  <LucideVideo className="w-4 h-4 mr-1" />
-                  Videos ({uploadedVideos.length})
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
+          <div className="p-4">
+            <div>
+              <div className="text-lg font-bold">Your Uploaded Media</div>
+              <ButtonGroup className="mb-3">
+                <ButtonGroup>
+                  <Button
+                    variant={activeTab === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('all')}
+                  >
+                    All ({uploadedMedia.length})
+                  </Button>
+                  <Button
+                    variant={activeTab === 'images' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('images')}
+                  >
+                    <LucideImagePlus className="w-4 h-4 mr-1" />
+                    Images ({uploadedImages.length})
+                  </Button>
+                  <Button
+                    variant={activeTab === 'videos' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('videos')}
+                  >
+                    <LucideVideo className="w-4 h-4 mr-1" />
+                    Videos ({uploadedVideos.length})
+                  </Button>
+                </ButtonGroup>
+              </ButtonGroup>
+            </div>
+            <div>
               {activeTab === 'all' && (
                 <div className="space-y-4">
                   {/* Images Section */}
                   {uploadedImages.length > 0 && (
                     <div>
-                      <h3 className="text-md font-semibold mb-3 flex items-center">
+                      <h3 className="text-md font-semibold mb-3 flex items-center mt-2">
                         <LucideImagePlus className="w-4 h-4 mr-2" />
                         Images ({uploadedImages.length})
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                         {uploadedImages.map((media) => (
                           <div key={media.id} className="border rounded-lg p-3">
                             <div className="flex items-start justify-between mb-2">
@@ -400,13 +401,13 @@ const UploadMedia = () => {
                                 </Button>
                               </div>
                             </div>
-                            
+
                             <img
                               src={media.public_url}
                               alt={media.title || media.original_filename}
                               className="w-full h-32 object-cover rounded"
                             />
-                            
+
                             {media.description && (
                               <p className="text-sm text-gray-600 mt-2">{media.description}</p>
                             )}
@@ -423,7 +424,7 @@ const UploadMedia = () => {
                         <LucideVideo className="w-4 h-4 mr-2" />
                         Videos ({uploadedVideos.length})
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                         {uploadedVideos.map((media) => (
                           <div key={media.id} className="border rounded-lg p-3">
                             <div className="flex items-start justify-between mb-2">
@@ -450,13 +451,13 @@ const UploadMedia = () => {
                                 </Button>
                               </div>
                             </div>
-                            
+
                             <video
                               src={media.public_url}
                               className="w-full h-32 object-cover rounded"
                               controls
                             />
-                            
+
                             {media.description && (
                               <p className="text-sm text-gray-600 mt-2">{media.description}</p>
                             )}
@@ -469,7 +470,7 @@ const UploadMedia = () => {
               )}
 
               {activeTab === 'images' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                   {uploadedImages.map((media) => (
                     <div key={media.id} className="border rounded-lg p-3">
                       <div className="flex items-start justify-between mb-2">
@@ -481,9 +482,9 @@ const UploadMedia = () => {
                           <span className="text-xs text-gray-400">
                             {new Date(media.uploaded_at).toLocaleDateString()}
                           </span>
-              <Button
+                          <Button
                             size="sm"
-                variant="outline"
+                            variant="outline"
                             onClick={() => handleDeleteMedia(media.id, media.title || media.original_filename)}
                             disabled={deletingMedia === media.id}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
@@ -493,16 +494,16 @@ const UploadMedia = () => {
                             ) : (
                               <Trash2 className="w-3 h-3" />
                             )}
-              </Button>
+                          </Button>
                         </div>
                       </div>
-                      
+
                       <img
                         src={media.public_url}
                         alt={media.title || media.original_filename}
                         className="w-full h-32 object-cover rounded"
                       />
-                      
+
                       {media.description && (
                         <p className="text-sm text-gray-600 mt-2">{media.description}</p>
                       )}
@@ -515,7 +516,7 @@ const UploadMedia = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {uploadedVideos.map((media) => (
                     <div key={media.id} className="border rounded-lg p-3">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex-col items-start justify-between mb-2">
                         <div className="flex-1">
                           <h4 className="font-medium">{media.title || media.original_filename}</h4>
                           <p className="text-sm text-gray-500">Video</p>
@@ -539,19 +540,19 @@ const UploadMedia = () => {
                           </Button>
                         </div>
                       </div>
-                      
+
                       <video
                         src={media.public_url}
                         className="w-full h-32 object-cover rounded"
                         controls
                       />
-                      
+
                       {media.description && (
                         <p className="text-sm text-gray-600 mt-2">{media.description}</p>
                       )}
                     </div>
-                ))}
-              </div>
+                  ))}
+                </div>
               )}
 
               {uploadedMedia.length === 0 && (
@@ -560,8 +561,8 @@ const UploadMedia = () => {
                   <p>No media uploaded yet</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>
