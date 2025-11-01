@@ -82,7 +82,7 @@ def get_user_from_session():
     return user_id
 
 def get_user_profile_data(user_id: str) -> dict:
-    """Get user profile data from Firestore and Cloud Storage"""
+    """Get user profile data from Firestore and Cloud Storage including products"""
     try:
         print(f"🔍 Getting profile data for user: {user_id}")
         
@@ -124,6 +124,29 @@ def get_user_profile_data(user_id: str) -> dict:
                 profile_data["name"] = profile_data.get("name") or user_data.get("name", "Artisan")
                 profile_data["email"] = user_data.get("email", "")
         
+        # Fetch user's products for more specific insights
+        try:
+            print(f"🛍️ Fetching products for user: {user_id}")
+            products_ref = db.collection("products").where("user_id", "==", user_id).limit(10)
+            products_docs = products_ref.stream()
+            
+            products = []
+            for doc in products_docs:
+                product_data = doc.to_dict()
+                products.append({
+                    "name": product_data.get("name", ""),
+                    "description": product_data.get("description", ""),
+                    "category": product_data.get("category", ""),
+                    "price": product_data.get("price", ""),
+                    "materials": product_data.get("materials", ""),
+                })
+            
+            profile_data["products"] = products
+            print(f"✅ Found {len(products)} products")
+        except Exception as e:
+            print(f"⚠️ Could not load products: {e}")
+            profile_data["products"] = []
+        
         return profile_data
         
     except Exception as e:
@@ -147,22 +170,31 @@ def call_gemini_for_insights(profile: dict) -> dict:
             "The JSON must have a single key 'insights' whose value is an array of exactly six objects. "
             "Each object must have two keys: 'title' and 'text'. "
             " - 'title' should be a 5-6 word description summarizing the insight (concise phrase). "
-            " - 'text' should be a short paragraph (2-5 sentences) specifically tailored to the PROFILE. "
+            " - 'text' should be 3-5 actionable bullet points (NOT a paragraph). Each bullet point should be on a new line starting with '• '. "
+            "   Make each bullet point SPECIFIC to the user's profile, products, location, materials, and craft. "
+            "   Include concrete numbers, product names, regional opportunities, material suggestions, etc. "
+            "   DO NOT give generic advice - use the actual product names, craft type, and location from the profile.\n"
             "Do NOT include extra keys or commentary outside the JSON.\n"
             "Topics (in order):\n"
-            "1) Government schemes or initiatives\n"
-            "2) Current sales trends and market demand\n"
-            "3) Opportunities to expand online and offline reach\n"
-            "4) Suggestions for improving product quality, design, or branding\n"
-            "5) Financial or training programs they can benefit from\n"
-            "6) Future trends and innovations relevant to their work\n"
+            "1) Government schemes or initiatives specific to their craft and location\n"
+            "2) Current sales trends and market demand for their specific products\n"
+            "3) Opportunities to expand online and offline reach for their products\n"
+            "4) Suggestions for improving their specific product quality, design, or branding\n"
+            "5) Financial or training programs they can benefit from based on their craft\n"
+            "6) Future trends and innovations relevant to their specific craft and products\n"
         )
         
         user_prompt = (
             f"PROFILE: {profile_json}\n\n"
             "Task: Based on the PROFILE produce 6 actionable, motivating advisory entries as described above."
-            " Make each entry specific to the PROFILE (use region, product, materials, price_range, experience, etc.)."
-            " Where appropriate, cite concrete action steps. Keep tone encouraging and growth-focused."
+            " CRITICAL: Make each bullet point HIGHLY SPECIFIC using:\n"
+            " - Actual product names from the products array\n"
+            " - Specific craft type and materials mentioned\n"
+            " - Regional location for local schemes/markets\n"
+            " - Price ranges and target markets\n"
+            " - Experience level for appropriate recommendations\n"
+            " Format each 'text' field as 3-5 bullet points starting with '• ' on separate lines.\n"
+            " Keep tone encouraging and growth-focused with actionable steps."
         )
         
         print(f"📝 Calling Gemini model: {TEXT_MODEL}")

@@ -355,10 +355,21 @@ const AIEngagementInsights = () => {
                 {/* Title and Text Overlay */}
                 <div className="relative z-10 px-6 pb-8 w-full">
                   <h2 className="text-2xl font-bold mb-4">{insights[currentSlide].title}</h2>
-                  <p className="text-lg leading-relaxed line-clamp-4">
-                    {insights[currentSlide].text}
-                  </p>
-                  <p className="text-sm text-gray-400 mt-4">Tap to read more</p>
+                  <div className="text-left space-y-1">
+                    {insights[currentSlide].text.split('\n').slice(0, 3).map((line, index) => {
+                      const trimmedLine = line.trim()
+                      if (trimmedLine.startsWith('•')) {
+                        return (
+                          <div key={index} className="flex items-start gap-2 text-sm">
+                            <span className="text-blue-400">•</span>
+                            <span className="flex-1 line-clamp-1">{trimmedLine.substring(1).trim()}</span>
+                          </div>
+                        )
+                      }
+                      return null
+                    })}
+                  </div>
+                  <p className="text-sm text-gray-400 mt-4 text-center">Tap to read more</p>
                 </div>
               </motion.div>
             </AnimatePresence>
@@ -418,9 +429,22 @@ const InsightDetail = () => {
       {/* Content */}
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">{insight.title}</h1>
-        <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">
-          {insight.text}
-        </p>
+        <div className="text-gray-300 leading-relaxed space-y-2">
+          {insight.text.split('\n').map((line, index) => {
+            const trimmedLine = line.trim()
+            if (trimmedLine.startsWith('•')) {
+              return (
+                <div key={index} className="flex items-start gap-2">
+                  <span className="text-blue-400 mt-1">•</span>
+                  <span className="flex-1">{trimmedLine.substring(1).trim()}</span>
+                </div>
+              )
+            } else if (trimmedLine) {
+              return <p key={index}>{trimmedLine}</p>
+            }
+            return null
+          })}
+        </div>
       </div>
     </div>
   )
