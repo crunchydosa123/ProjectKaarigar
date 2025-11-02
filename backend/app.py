@@ -159,7 +159,8 @@ def health_check():
 if is_production:
     cors_origins = [
         "https://backend-557742533869.asia-south1.run.app", 
-        "https://frontend-557742533869.asia-south1.run.app"
+        "https://frontend-557742533869.asia-south1.run.app",
+        "https://router-557742533869.asia-south1.run.app"
     ]
 else:
     # Development: Allow localhost and common dev ports
@@ -170,7 +171,8 @@ else:
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
         "https://backend-557742533869.asia-south1.run.app",
-        "https://frontend-557742533869.asia-south1.run.app"
+        "https://frontend-557742533869.asia-south1.run.app",
+        "https://router-557742533869.asia-south1.run.app"
     ]
 
 CORS(app,
@@ -178,8 +180,9 @@ CORS(app,
      origins=cors_origins,
      allow_headers=["Content-Type", "Authorization", "X-User-ID"],
      expose_headers=["Content-Type", "X-User-ID", "Set-Cookie"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+     #allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+     )
 
 if __name__ == '__main__':
     import os

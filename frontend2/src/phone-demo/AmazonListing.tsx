@@ -37,7 +37,8 @@ const AmazonListing = () => {
     
     try {
       setLoading(true);
-      const apiUrl = `https://backend-557742533869.asia-south1.run.app/api/marketplace/${selectedProductId}/amazon-listing`;
+      //const apiUrl = `https://backend-557742533869.asia-south1.run.app/api/marketplace/${selectedProductId}/amazon-listing`;
+      const apiUrl = `/api/marketplace/${selectedProductId}/amazon-listing`;
       
       console.log('🚀 [AmazonListing] Calling API...');
       console.log('   URL:', apiUrl);

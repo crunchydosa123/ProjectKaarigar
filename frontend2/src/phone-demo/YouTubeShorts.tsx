@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { House, Youtube, Loader2, ExternalLink, Eye, ThumbsUp, MessageSquare, BarChart3, Upload, Check, Play } from 'lucide-react';
 import { mediaAPI } from '@/lib/api';
 
-const BASE_URL = 'https://backend-557742533869.asia-south1.run.app';
+//const BASE_URL = 'https://backend-557742533869.asia-south1.run.app';
+const BASE_URL = '';
 
 // API Helper
 const youtubeAPI = {
