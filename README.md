@@ -5,7 +5,7 @@ Mock accounts :
 username: surajchavan99886@gmail.com
 pass:123456
 
-Mock account2
+Mock account2:
 username: ramu.deo@gmail.com
 pass:123456
 
