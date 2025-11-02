@@ -1,5 +1,15 @@
 # GenAIExchange
 
+# Some Points to be considered
+Mock accounts :
+username: surajchavan99886@gmail.com
+pass:123456
+
+Mock account2
+username: ramu.deo@gmail.com
+pass:123456
+
+
 # Problem statement:
 
 <img width="891" height="331" alt="image" src="https://github.com/user-attachments/assets/2aaf62c2-4b5e-45c0-ad25-638021b4d0bf" />
