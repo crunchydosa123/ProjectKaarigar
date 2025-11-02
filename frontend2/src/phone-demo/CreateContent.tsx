@@ -67,6 +67,10 @@ const CreateContentMain = () => {
 
   // Edit Image Modal State
   const [selectedImage, setSelectedImage] = useState<MediaItem | GeneratedImage | null>(null);
+  const [referenceImage, setReferenceImage] = useState<MediaItem | GeneratedImage | null>(null);
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string>('');
+  const [usingBrandLogo, setUsingBrandLogo] = useState(false);
+  const [showReferencePicker, setShowReferencePicker] = useState(false);
   const [suggestions, setSuggestions] = useState<ImageSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<ImageSuggestion | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
@@ -88,8 +92,24 @@ const CreateContentMain = () => {
   useEffect(() => {
     if (subAction === 'editImage') {
       loadAllImages();
+      loadBrandLogo();
     }
   }, [subAction]);
+
+  // Load brand logo from profile
+  const loadBrandLogo = async () => {
+    try {
+      const response = await profileAPI.getProfileData();
+      if (response.success && (response as any).brand_info && (response as any).brand_info.logo_url) {
+        setBrandLogoUrl((response as any).brand_info.logo_url);
+        console.log("🏷️ Loaded brand logo from profile:", (response as any).brand_info.logo_url);
+      } else {
+        console.log("⚠️ No brand logo found in profile");
+      }
+    } catch (error) {
+      console.log("⚠️ Could not load brand logo from profile:", error);
+    }
+  };
 
   // Load videos when edit video is selected
   useEffect(() => {
@@ -159,10 +179,36 @@ const CreateContentMain = () => {
     setSelectedSuggestion(null);
     setCustomPrompt('');
     setEditTitle('');
+    setReferenceImage(null);
+    setUsingBrandLogo(false);
     setAnalysisStatus('idle');
     setAnalysisMessage('');
     setEditStatus('idle');
     setEditMessage('');
+  };
+
+  const handleReferenceImageSelect = (image: any) => {
+    setReferenceImage(image);
+    setUsingBrandLogo(false);
+    setShowReferencePicker(false);
+    console.log("✅ Selected reference image:", image);
+  };
+
+  const handleUseBrandLogo = () => {
+    if (brandLogoUrl) {
+      setReferenceImage(null);
+      setUsingBrandLogo(true);
+      setShowReferencePicker(false);
+      console.log("🏷️ Using brand logo:", brandLogoUrl);
+    } else {
+      setEditStatus('error');
+      setEditMessage('Brand logo not found. Please generate a logo first.');
+    }
+  };
+
+  const handleClearReferenceImage = () => {
+    setReferenceImage(null);
+    setUsingBrandLogo(false);
   };
 
   const handleAnalyzeImage = async () => {
@@ -237,17 +283,37 @@ const CreateContentMain = () => {
       console.log('Image URL:', selectedImage.public_url);
       console.log('Prompt:', customPrompt);
       console.log('Title:', editTitle);
+      console.log('Reference Image:', referenceImage ? referenceImage.public_url : 'None');
+      console.log('Using Brand Logo:', usingBrandLogo);
 
-      const response = await imageEditAPI.editImage({
-        image_url: selectedImage.public_url,
-        prompt: customPrompt.trim(),
-        title: editTitle.trim(),
-        original_image_id: selectedImage.id
-      });
+      // Check if reference image or brand logo is selected
+      const hasReference = referenceImage || usingBrandLogo;
+
+      let response;
+      if (hasReference) {
+        // Use edit with reference API
+        response = await imageEditAPI.editImageWithReference({
+          image_url: selectedImage.public_url,
+          prompt: customPrompt.trim(),
+          title: editTitle.trim(),
+          original_image_id: selectedImage.id,
+          reference_image_url: referenceImage ? referenceImage.public_url : undefined,
+          use_brand_logo: usingBrandLogo
+        });
+      } else {
+        // Use regular edit API
+        response = await imageEditAPI.editImage({
+          image_url: selectedImage.public_url,
+          prompt: customPrompt.trim(),
+          title: editTitle.trim(),
+          original_image_id: selectedImage.id
+        });
+      }
 
       if (response.success) {
         setEditStatus('success');
-        setEditMessage(`Image "${response.title}" edited successfully!`);
+        const refType = response.reference_image_type ? ` (with ${response.reference_image_type === 'brand_logo' ? 'brand logo' : 'reference image'})` : '';
+        setEditMessage(`Image "${response.title}" edited successfully!${refType}`);
         console.log('✅ Image edited successfully:', response);
 
         // Refresh the images list to show the new edited image
@@ -258,6 +324,8 @@ const CreateContentMain = () => {
         setEditTitle('');
         setSelectedSuggestion(null);
         setSuggestions([]);
+        setReferenceImage(null);
+        setUsingBrandLogo(false);
         setAnalysisStatus('idle');
         setAnalysisMessage('');
       } else {
@@ -678,6 +746,127 @@ const CreateContentMain = () => {
                       disabled={editing}
                       className="w-full"
                     />
+                  </div>
+
+                  {/* Reference Image Section (Optional) */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Reference Image (Optional - for branding)
+                    </Label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowReferencePicker(!showReferencePicker)}
+                          disabled={editing}
+                          className="flex-1"
+                        >
+                          <ImagePlus className="w-4 h-4 mr-2" />
+                          Select Reference Image
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleUseBrandLogo}
+                          disabled={editing || !brandLogoUrl}
+                          className="flex-1"
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Use Brand Logo
+                        </Button>
+                      </div>
+
+                      {/* Reference Image Preview */}
+                      {(referenceImage || usingBrandLogo) && (
+                        <div className="relative border border-purple-200 rounded-lg p-3 bg-purple-50">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={usingBrandLogo ? brandLogoUrl : referenceImage?.public_url}
+                              alt={usingBrandLogo ? "Brand Logo" : referenceImage?.title || "Reference"}
+                              className="w-16 h-16 object-cover rounded"
+                              onError={(e) => {
+                                e.currentTarget.src = '/placeholder-image.png';
+                              }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">
+                                {usingBrandLogo ? "Brand Logo" : (referenceImage?.title || referenceImage?.filename || "Reference Image")}
+                              </p>
+                              <Badge className="text-xs mt-1 bg-purple-100 text-purple-800">
+                                {usingBrandLogo ? "Brand Logo" : "Reference"}
+                              </Badge>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleClearReferenceImage}
+                              disabled={editing}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reference Image Picker */}
+                      {showReferencePicker && (
+                        <div className="border border-gray-200 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
+                          <div className="flex justify-between items-center mb-2">
+                            <Label className="text-xs font-semibold text-gray-600">
+                              Select from your images:
+                            </Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowReferencePicker(false)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {allImages
+                              .filter(img => img.id !== selectedImage?.id) // Don't show the main selected image
+                              .slice(0, 9) // Show max 9 images
+                              .map((image) => (
+                                <button
+                                  key={image.id}
+                                  type="button"
+                                  onClick={() => handleReferenceImageSelect(image)}
+                                  className={`relative border-2 rounded-lg overflow-hidden transition-all ${
+                                    referenceImage?.id === image.id
+                                      ? 'border-purple-500 bg-purple-50'
+                                      : 'border-gray-200 hover:border-purple-300'
+                                  }`}
+                                >
+                                  <img
+                                    src={image.public_url}
+                                    alt={image.title || image.filename}
+                                    className="w-full h-20 object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.src = '/placeholder-image.png';
+                                    }}
+                                  />
+                                  {referenceImage?.id === image.id && (
+                                    <div className="absolute inset-0 bg-purple-500 bg-opacity-20 flex items-center justify-center">
+                                      <CheckCircle className="w-6 h-6 text-purple-600" />
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            {allImages.filter(img => img.id !== selectedImage?.id).length === 0 && (
+                              <div className="col-span-3 text-center py-4 text-sm text-gray-500">
+                                No other images available
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Prompt Input */}

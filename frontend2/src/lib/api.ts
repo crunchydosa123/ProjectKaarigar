@@ -746,6 +746,15 @@ export interface ImageEditRequest {
   original_image_id?: string;
 }
 
+export interface ImageEditWithReferenceRequest {
+  image_url: string;
+  prompt: string;
+  title: string;
+  original_image_id?: string;
+  reference_image_url?: string;
+  use_brand_logo?: boolean;
+}
+
 export interface ImageEditResponse {
   success: boolean;
   message: string;
@@ -753,6 +762,7 @@ export interface ImageEditResponse {
   public_url?: string;
   title?: string;
   file_size?: number;
+  reference_image_type?: string;
   error?: string;
 }
 
@@ -803,6 +813,10 @@ class ImageEditAPI {
 
   async editImage(request: ImageEditRequest): Promise<ImageEditResponse> {
     return this.request<ImageEditResponse>('/edit-image', 'POST', request);
+  }
+
+  async editImageWithReference(request: ImageEditWithReferenceRequest): Promise<ImageEditResponse> {
+    return this.request<ImageEditResponse>('/edit-image-with-reference', 'POST', request);
   }
 
   async healthCheck(): Promise<{ status: string; service: string; firestore_available: boolean; storage_available: boolean }> {
