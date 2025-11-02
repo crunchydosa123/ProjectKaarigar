@@ -309,6 +309,11 @@ Leverages **voice-based Camera Assist** for **natural spoken interactions** and 
 
 ---
 
+## Camera Agent Walkthrough
+
+Please take a look at this video to get a detailed overview of how our specialized camera agent helps artisans navigate complex photo and video shoots with ease and get the best possible results.
+
+Video Link - [Watch the demo](https://youtu.be/vf5IxlNhGro)
 
 ## Implementation and WireFrames
 
