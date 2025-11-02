@@ -35,26 +35,26 @@ CORS(ai_insights_bp, origins='*', supports_credentials=True)
 PROJECT_ID = "karigar-475215"
 BUCKET_NAME = "all_in_one_bucket1"
 GCS_IMAGES_PREFIX = "ai_insights_images"
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDA6vL1W_ZcsNGQdsw3jcFjlfjBPiRjtfY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TEXT_MODEL = "gemini-2.0-flash-exp"
 
 # Google Custom Search configuration
-GOOGLE_API_KEY = "AIzaSyA-FSI1OrvEgzkcZYmSfp_QAU5SaOu6ekg"
-GOOGLE_CX = "96fe143fecdae4723"
+GOOGLE_API_KEY = ""
+GOOGLE_CX = ""
 MAX_SEARCH_QUERIES = 4
 RESULTS_PER_QUERY = 3
 REQUEST_TIMEOUT = 10
 
 # Multiple image generation API keys for rate limiting (rotate every 2 images)
 IMAGE_API_KEYS = [
-    "AIzaSyAbVS0doSEnxphnOS3jNiAZ7bwwbsvAjrw",
-    "AIzaSyCVcL7IcwHvlpBUVvNktl0Jj_aU9LHVSKw",
-    "AIzaSyB39LHQGrzzwQPu2_ZpG7VENd-zLyQV7m4"
+    "",
+    "",
+    ""
 ]
 
 # Google Custom Search for links
-GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyB39LHQGrzzwQPu2_ZpG7VENd-zLyQV7m4")
-GOOGLE_SEARCH_CX = os.environ.get("GOOGLE_CX", "a09e7dcaea8ed4f01")
+GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_API_KEY")
+GOOGLE_SEARCH_CX = os.environ.get("GOOGLE_CX")
 
 # Initialize clients
 if FIRESTORE_AVAILABLE:

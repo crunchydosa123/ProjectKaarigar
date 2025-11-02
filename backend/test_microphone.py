@@ -9,7 +9,7 @@ import requests
 import base64
 
 # Configuration
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_9762526c74e8278229361f3cd5d3eef580ff7fd0ca7341a2")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 ELEVEN_STT_URL = os.environ.get("ELEVEN_STT_URL", "https://api.elevenlabs.io/v1/speech-to-text")
 
 def test_stt_with_sample_audio():
