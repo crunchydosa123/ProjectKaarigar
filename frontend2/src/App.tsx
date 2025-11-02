@@ -44,7 +44,7 @@ function App() {
           {/* Button 2 */}
           <button
             onClick={() =>
-              window.open('https://www.youtube.com/watch?v=ysz5S6PUM-U', '_blank')
+              window.open('https://www.youtube.com/watch?v=e7VUdxC5V8A', '_blank')
             }
             className="bg-white rounded-md p-3 flex justify-start items-center gap-2 my-1 hover:shadow-md transition"
           >
