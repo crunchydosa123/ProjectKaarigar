@@ -3,7 +3,7 @@ from google.genai import types
 from PIL import Image
 from io import BytesIO
 
-client = genai.Client(api_key="AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+client = genai.Client(api_key="")
 
 # Edit prompt - modify the existing diary image
 prompt = (

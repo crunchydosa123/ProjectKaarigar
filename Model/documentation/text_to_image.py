@@ -3,7 +3,7 @@ from google.genai import types
 from PIL import Image
 from io import BytesIO
 
-client = genai.Client(api_key="AIzaSyB39LHQGrzzwQPu2_ZpG7VENd-zLyQV7m4")
+client = genai.Client(api_key="")
 
 response = client.models.generate_images(
     model='imagen-4.0-generate-001',

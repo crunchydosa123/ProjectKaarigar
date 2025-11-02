@@ -1,3 +1,0 @@
-file 'D:\ProjectKaarigar\Model\images (1).jpeg'
-duration 8.0
-file 'D:\ProjectKaarigar\Model\images (1).jpeg'

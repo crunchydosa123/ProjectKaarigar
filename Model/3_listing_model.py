@@ -36,7 +36,7 @@ except Exception:
     HttpOptions = None
 
 # Placeholder API key. Replace this with your actual Gemini API key.
-GEMINI_API_KEY = "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4"
+GEMINI_API_KEY = ""
 
 # ==================== PATH-ONLY LISTING FUNCTIONS ====================
 

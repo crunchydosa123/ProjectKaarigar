@@ -1,2 +1,0 @@
-$env:GOOGLE_APPLICATION_CREDENTIALS = "D:\projects\Project_Kaarigar\Kaarigar_India\ProjectKaarigar\Model\karigar-475215-98d510674943.json"
-

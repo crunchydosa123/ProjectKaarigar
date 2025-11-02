@@ -22,9 +22,9 @@ import requests
 from urllib.parse import urlparse
 
 # Configuration
-GOOGLE_API_KEY = "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4"
-BUCKET_NAME = "all_in_one_bucket1"
-MUSIC_DIR = "music_library"
+GOOGLE_API_KEY = ""
+BUCKET_NAME = ""
+MUSIC_DIR = ""
 
 # Initialize clients
 client = genai.Client(api_key=GOOGLE_API_KEY)
