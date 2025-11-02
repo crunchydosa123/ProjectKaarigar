@@ -21,7 +21,7 @@ listing_bp = Blueprint('listing', __name__)
 db = firestore.Client()
 
 # Initialize Gemini API
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyDA6vL1W_ZcsNGQdsw3jcFjlfjBPiRjtfY')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 print("✅ Marketplace listing blueprint created successfully")

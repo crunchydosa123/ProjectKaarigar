@@ -7,7 +7,7 @@ import os
 import google.generativeai as genai
 
 # Configure API
-GEMINI_API_KEY = "AIzaSyDA6vL1W_ZcsNGQdsw3jcFjlfjBPiRjtfY"
+GEMINI_API_KEY = ""
 
 genai.configure(api_key=GEMINI_API_KEY)
 

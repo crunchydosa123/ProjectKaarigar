@@ -28,7 +28,7 @@ import re
 from pathlib import Path
 
 # ------------------ Configuration (edit or set via env) ------------------
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_9762526c74e8278229361f3cd5d3eef580ff7fd0ca7341a2")

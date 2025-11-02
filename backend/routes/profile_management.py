@@ -52,7 +52,7 @@ if STORAGE_AVAILABLE:
         STORAGE_AVAILABLE = False
 
 # Gemini API configuration
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
 def ensure_authenticated():
