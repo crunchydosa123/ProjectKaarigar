@@ -3,6 +3,7 @@ Quick Image-to-Image Generator from URL
 Simple script to edit images from URLs using Gemini
 """
 
+import os
 from google import genai
 from google.genai import types
 from PIL import Image
@@ -10,7 +11,7 @@ from io import BytesIO
 import requests
 
 # Initialize Gemini
-client = genai.Client(api_key="AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+client = genai.Client(api_key=os.environ.get("GENAI_API_KEY"))
 
 # ============================================================================
 # YOUR INPUTS - MODIFY THESE

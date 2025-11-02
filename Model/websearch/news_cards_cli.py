@@ -72,7 +72,7 @@ GCS_IMAGES_PREFIX = "kaarigar_images"    # folder in bucket to store images
 
 def require_text_api_key():
     # Intentional hardcoded key preserved as requested
-    key = "AIzaSyDA6vL1W_ZcsNGQdsw3jcFjlfjBPiRjtfY"
+    key = ""  # TODO: Set your Google API Key
     gtext.configure(api_key=key)
 
 
@@ -432,9 +432,9 @@ def main():
     # Optional web searches for relevant links
     links_results = {}
     if not args.no_search:
-        # Hardcoded credentials preserved as requested
-        google_api_key = "AIzaSyA-FSI1OrvEgzkcZYmSfp_QAU5SaOu6ekg"
-        google_cx = "96fe143fecdae4723"
+        # TODO: Set your credentials
+        google_api_key = ""  # TODO: Set your Google API Key
+        google_cx = ""  # TODO: Set your Custom Search Engine ID
         if not google_api_key or not google_cx:
             print("Skipping web searches because GOOGLE_API_KEY or GOOGLE_CX not set.")
         else:

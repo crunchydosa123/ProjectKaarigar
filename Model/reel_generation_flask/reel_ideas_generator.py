@@ -3,6 +3,11 @@ Reel Ideas Generator Module
 Generates creative ideas for reels using Gemini AI
 """
 
+"""
+Reel Ideas Generator Module
+Generates creative ideas for reels using Gemini AI
+"""
+
 import re
 import json
 import logging

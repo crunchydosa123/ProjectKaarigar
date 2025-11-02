@@ -40,19 +40,19 @@ from google.cloud import firestore
 # Configuration (edit or use env variables)
 # ---------------------------
 # Gemini / GenAI
-GENAI_API_KEY = os.environ.get("GENAI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
-VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "karigar-475215")   # optional Vertex project
+GENAI_API_KEY = os.environ.get("GENAI_API_KEY")
+VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT")   # optional Vertex project
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")  # default location
 
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "ACe7815acf39a739898e084fb8f61f3edc")
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "e1c5d57847356c3517fe2b2a3a7d1fdf")
-TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
-ADMIN_WHATSAPP_NUMBER = os.environ.get("ADMIN_WHATSAPP_NUMBER", "whatsapp:+917058642591")
-ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "verysecret")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://whatsapp-bot-557742533869.asia-south1.run.app")
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM")
+ADMIN_WHATSAPP_NUMBER = os.environ.get("ADMIN_WHATSAPP_NUMBER")
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL")
 
-# Firestore user id (hardcoded per request)
-FIRESTORE_USER_ID = os.environ.get("FIRESTORE_USER_ID", "user1")
+# Firestore user id
+FIRESTORE_USER_ID = os.environ.get("FIRESTORE_USER_ID")
 
 # ---------------------------
 # Safety checks & clients

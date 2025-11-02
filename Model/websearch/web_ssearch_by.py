@@ -60,14 +60,14 @@ if __name__ == "__main__":
     # Click "+ CREATE CREDENTIALS" -> "API key".
     # Copy the key string (starts with "AIza...").
     # You MUST also enable the "Custom Search JSON API" in the Library.
-    API_KEY = "AIzaSyA-FSI1OrvEgzkcZYmSfp_QAU5SaOu6ekg"
+    API_KEY = ""  # TODO: Set your Google API Key
 
     # 2. --- GET YOUR SEARCH ENGINE ID (CX ID) ---
     # Go to: https://programmablesearchengine.google.com/
     # Click "Add" to create a new search engine.
     # In the setup, toggle on "Search the entire web".
     # After creating it, copy the "Search engine ID" from the overview page.
-    CX_ID = "96fe143fecdae4723"
+    CX_ID = ""  # TODO: Set your Custom Search Engine ID
     
     # 3. --- SET YOUR QUERY ---
     QUERY = "What is the YouTube Analytics API?"

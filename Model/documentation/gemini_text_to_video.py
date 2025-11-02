@@ -1,8 +1,9 @@
+import os
 import time
 from google import genai
 from google.genai import types
 
-client = genai.Client(api_key="AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
+client = genai.Client(api_key=os.environ.get("GENAI_API_KEY"))
 
 prompt = """A close up of two people staring at a cryptic drawing on a wall, torchlight flickering.
 A man murmurs, 'This must be it. That's the secret code.' The woman looks at him and whispering excitedly, 'What did you find?'"""

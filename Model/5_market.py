@@ -205,7 +205,7 @@ def interactive_prompt():
     gemini_key = None
     if use_gemini:
         # try environment first
-        gemini_key = "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4"
+        gemini_key = os.environ.get("GENAI_API_KEY")
         if not gemini_key:
             gemini_key = input("Enter GEMINI API key (or set GEMINI_API_KEY env var): ").strip()
         # final check

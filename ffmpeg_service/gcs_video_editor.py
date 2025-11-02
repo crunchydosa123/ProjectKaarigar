@@ -22,7 +22,7 @@ import requests
 from urllib.parse import urlparse
 
 # Configuration
-GOOGLE_API_KEY = "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4"
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 BUCKET_NAME = "all_in_one_bucket1"
 MUSIC_DIR = "music_library"
 
