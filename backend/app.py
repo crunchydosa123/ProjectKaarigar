@@ -24,11 +24,30 @@ app = Flask(__name__)
 
 # Simple configuration - no secrets or encryption
 app.config['SECRET_KEY'] = 'project-kaarigar-simple-key-2025'
-app.config['SESSION_COOKIE_SECURE'] = True  # Set to True in production with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True  # Allow frontend access
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin
+
+# Detect environment - check if running locally or in production
+import os
+is_production = os.environ.get('ENVIRONMENT', '').lower() == 'production' or \
+                'asia-south1.run.app' in os.environ.get('HOST', '') or \
+                os.environ.get('GAE_ENV', '') == 'standard'
+
+# Session cookie configuration - adapts to environment
+if is_production:
+    # Production: HTTPS required, use Secure + SameSite=None for cross-origin
+    app.config['SESSION_COOKIE_SECURE'] = True  # Requires HTTPS
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin with Secure
+    print("🔒 Production mode: Secure cookies enabled (HTTPS required)")
+else:
+    # Development: Allow HTTP, use Lax for same-site cookies
+    app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP for localhost
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Better for same-origin/same-site
+    print("🔓 Development mode: Non-secure cookies enabled (HTTP allowed)")
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access for security
 app.config['SESSION_COOKIE_DOMAIN'] = None  # Don't restrict domain
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+app.config['SESSION_COOKIE_PATH'] = '/'  # Available for all paths
+app.config['SESSION_COOKIE_NAME'] = 'session'  # Standard name
 
 # Register blueprints
 app.register_blueprint(testing_bp, url_prefix="/testing")
@@ -136,16 +155,31 @@ def health_check():
         "timestamp": "2025-01-22T16:30:00Z"
     }
 
+# CORS configuration - more permissive for development, stricter for production
+if is_production:
+    cors_origins = [
+        "https://backend-557742533869.asia-south1.run.app", 
+        "https://frontend-557742533869.asia-south1.run.app"
+    ]
+else:
+    # Development: Allow localhost and common dev ports
+    cors_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "https://backend-557742533869.asia-south1.run.app",
+        "https://frontend-557742533869.asia-south1.run.app"
+    ]
+
 CORS(app,
-     supports_credentials=True,
-     origins=[
-         "http://localhost:5173",
-         "https://backend-557742533869.asia-south1.run.app", 
-         "https://frontend-557742533869.asia-south1.run.app"
-     ],
+     supports_credentials=True,  # CRITICAL: Allows cookies to be sent
+     origins=cors_origins,
      allow_headers=["Content-Type", "Authorization", "X-User-ID"],
-     expose_headers=["Content-Type", "X-User-ID"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     expose_headers=["Content-Type", "X-User-ID", "Set-Cookie"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 if __name__ == '__main__':
     import os

@@ -163,13 +163,14 @@ const Homepage = () => {
             Upload 
           </Button> 
         </div>
-        <button className='bg-white rounded-sm h-10 flex justify-start p-2'>
+        <button 
+          className='bg-white rounded-sm h-10 flex justify-start p-2 w-full'
+          onClick={()=> setCurrentPage('youtube-shorts')}
+        >
           <div className="w-6 h-6 bg-cover bg-center mr-2" style={{ backgroundImage: "url('/youtube.png')" }} ></div>
           <div className='flex flex-col items-start justify-center'>
-            <button className='text-left' onClick={()=> setCurrentPage('youtube-shorts')}>
-            <div className='text-sm font-bold'>YouTube</div>
-            <div className='text-xs'>Videos, Shorts</div>
-            </button>
+            <div className='text-sm font-bold text-left'>YouTube</div>
+            <div className='text-xs text-left'>Videos, Shorts</div>
           </div>
         </button>
 

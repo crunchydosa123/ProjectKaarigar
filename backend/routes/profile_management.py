@@ -55,9 +55,78 @@ if STORAGE_AVAILABLE:
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDiUMs4sIAdOk09006hS7DcY79DZh53_M4")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
+def ensure_authenticated():
+    """Ensure user is authenticated - check session or restore from header"""
+    is_authenticated = session.get('is_authenticated', False)
+    user_id_header = request.headers.get('X-User-ID')
+    
+    # If authenticated in session, return True
+    if is_authenticated:
+        return True
+    
+    # If not authenticated in session, try to restore from header
+    if user_id_header:
+        print(f"⚠️ Session not authenticated, trying X-User-ID header: {user_id_header}")
+        
+        # If Firestore is not available, trust the header (for offline/development)
+        if not FIRESTORE_AVAILABLE:
+            print(f"⚠️ Firestore not available, trusting X-User-ID header")
+            session['user_id'] = user_id_header
+            session['is_authenticated'] = True
+            session.permanent = True
+            return True
+        
+        try:
+            user_doc = db.collection("users").document(user_id_header).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                # Restore session
+                session['user_id'] = user_id_header
+                session['email'] = user_data.get('email', '')
+                session['name'] = user_data.get('name', '')
+                session['is_authenticated'] = True
+                session.permanent = True
+                print(f"✅ Session restored from X-User-ID header")
+                return True
+            else:
+                print(f"❌ User not found in database: {user_id_header}")
+                return False
+        except Exception as e:
+            print(f"⚠️ Could not restore session from header: {e}")
+            # If we can't verify but have a header, still allow (fallback)
+            print(f"⚠️ Allowing authentication based on header despite error")
+            session['user_id'] = user_id_header
+            session['is_authenticated'] = True
+            session.permanent = True
+            return True
+    
+    return False
+
 def get_user_from_session():
-    """Get user ID from session"""
+    """Get user ID from session or X-User-ID header"""
+    # First try session (works for same-origin)
     user_id = session.get('user_id')
+    
+    # Fallback to header (works for cross-origin when cookies are blocked)
+    if not user_id:
+        user_id = request.headers.get('X-User-ID')
+        if user_id:
+            print(f"⚠️ Session cookie not found, using X-User-ID header: {user_id}")
+            # Try to restore session from header
+            try:
+                user_doc = db.collection("users").document(user_id).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    # Restore session for future requests
+                    session['user_id'] = user_id
+                    session['email'] = user_data.get('email', '')
+                    session['name'] = user_data.get('name', '')
+                    session['is_authenticated'] = True
+                    session.permanent = True
+                    print(f"✅ Session restored from X-User-ID header")
+            except Exception as e:
+                print(f"⚠️ Could not restore session from header: {e}")
+    
     if not user_id:
         raise ValueError("No user session found. Please login first.")
     return user_id
@@ -474,7 +543,7 @@ def get_profile_data():
     """Get and generate profile data for the current user"""
     print("👤 GET PROFILE DATA REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()
@@ -644,7 +713,7 @@ def save_profile():
     """Save profile data to Firestore"""
     print("💾 SAVE PROFILE REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()
@@ -755,7 +824,7 @@ def get_saved_profile():
     """Get saved profile data for the current user"""
     print("🔍 GET SAVED PROFILE REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()
@@ -794,7 +863,7 @@ def update_brand():
     """Update brand name and logo information"""
     print("🏷️ UPDATE BRAND REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()
@@ -871,7 +940,7 @@ def update_logo_from_storage():
     """Update logo URL from Cloud Storage for existing user"""
     print("🔄 UPDATE LOGO FROM STORAGE REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()
@@ -949,7 +1018,7 @@ def debug_user_data():
     """Debug endpoint to show user data and Cloud Storage URLs"""
     print("🔍 DEBUG USER DATA REQUEST")
     try:
-        if not session.get('is_authenticated'):
+        if not ensure_authenticated():
             return jsonify({"error": "Not authenticated"}), 401
         
         user_id = get_user_from_session()

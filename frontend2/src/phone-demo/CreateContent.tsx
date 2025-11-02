@@ -693,10 +693,18 @@ const CreateContentMain = () => {
                 <CardContent>
                   <div className="space-y-2">
                     {suggestions.map((suggestion, index) => (
-                      <button
+                      <div
                         key={index}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleSuggestionSelect(suggestion)}
-                        className={`w-full p-2 text-left border rounded-md transition-all ${selectedSuggestion === suggestion
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSuggestionSelect(suggestion);
+                          }
+                        }}
+                        className={`w-full p-2 text-left border rounded-md transition-all cursor-pointer ${selectedSuggestion === suggestion
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 hover:border-purple-300'
                           }`}
@@ -719,7 +727,7 @@ const CreateContentMain = () => {
                             </p>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </CardContent>

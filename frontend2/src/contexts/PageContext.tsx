@@ -83,19 +83,54 @@ export const PageProvider: React.FC<PageProviderProps> = ({ children }) => {
       const response = await authAPI.login(email, password);
       
       if (response.success && response.user) {
-        setUser(response.user);
-        setIsAuthenticated(true);
+        // Give a small delay for session cookie to be set and user_id to be stored
+        await new Promise(resolve => setTimeout(resolve, 200));
         
-        if (response.profile) {
-          setProfile(response.profile);
+        // CRITICAL: Verify session was actually created and authenticated
+        try {
+          const sessionCheck = await authAPI.checkSession();
+          
+          if (sessionCheck.authenticated && sessionCheck.user) {
+            // Authentication verified - proceed with login
+            setUser(response.user);
+            
+            if (response.profile) {
+              setProfile(response.profile);
+            }
+            
+            setIsAuthenticated(true);
+            setCurrentPage('home');
+            console.log('✅ Login successful - session verified');
+            return true;
+          } else {
+            // Session not verified - authentication failed
+            console.error('❌ Login failed: Session not verified after login');
+            // Clear any partial state
+            setUser(null);
+            setProfile(null);
+            setIsAuthenticated(false);
+            return false;
+          }
+        } catch (sessionError) {
+          // Session verification failed - authentication failed
+          console.error('❌ Login failed: Could not verify session:', sessionError);
+          // Clear any partial state
+          setUser(null);
+          setProfile(null);
+          setIsAuthenticated(false);
+          // Clear localStorage if session verification fails
+          localStorage.removeItem('user_id');
+          return false;
         }
-        
-        setCurrentPage('home');
-        return true;
       }
       return false;
     } catch (error) {
       console.error('Login error:', error);
+      // Clear any partial state on error
+      setUser(null);
+      setProfile(null);
+      setIsAuthenticated(false);
+      localStorage.removeItem('user_id');
       return false;
     }
   };
@@ -105,19 +140,56 @@ export const PageProvider: React.FC<PageProviderProps> = ({ children }) => {
       const response = await authAPI.signup(email, password, name);
       
       if (response.success && response.user) {
-        setUser(response.user);
-        setIsAuthenticated(true);
+        // Give a small delay for session cookie to be set and user_id to be stored
+        await new Promise(resolve => setTimeout(resolve, 200));
         
-        if (response.profile) {
-          setProfile(response.profile);
+        // CRITICAL: Verify session was actually created and authenticated
+        try {
+          const sessionCheck = await authAPI.checkSession();
+          
+          if (sessionCheck.authenticated && sessionCheck.user) {
+            // Authentication verified - proceed with signup
+            setUser(response.user);
+            
+            if (response.profile) {
+              setProfile(response.profile);
+            }
+            
+            setIsAuthenticated(true);
+            setCurrentPage('home');
+            console.log('✅ Signup successful - session verified');
+            return true;
+          } else {
+            // Session not verified - authentication failed
+            console.error('❌ Signup failed: Session not verified after signup');
+            // Clear any partial state
+            setUser(null);
+            setProfile(null);
+            setIsAuthenticated(false);
+            // Clear localStorage if session verification fails
+            localStorage.removeItem('user_id');
+            return false;
+          }
+        } catch (sessionError) {
+          // Session verification failed - authentication failed
+          console.error('❌ Signup failed: Could not verify session:', sessionError);
+          // Clear any partial state
+          setUser(null);
+          setProfile(null);
+          setIsAuthenticated(false);
+          // Clear localStorage if session verification fails
+          localStorage.removeItem('user_id');
+          return false;
         }
-        
-        setCurrentPage('home');
-        return true;
       }
       return false;
     } catch (error) {
       console.error('Signup error:', error);
+      // Clear any partial state on error
+      setUser(null);
+      setProfile(null);
+      setIsAuthenticated(false);
+      localStorage.removeItem('user_id');
       return false;
     }
   };

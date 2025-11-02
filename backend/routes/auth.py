@@ -216,7 +216,17 @@ def signup():
         from flask import make_response
         response = make_response(jsonify(response_data), 201)
         response.headers['X-User-ID'] = user_id
-        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID'
+        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID, Set-Cookie'
+        
+        # Mark session as permanent to ensure it persists
+        session.permanent = True
+        
+        print(f"🔐 Session details after creation:")
+        print(f"   - Session ID: {session.get('_id', 'N/A')}")
+        print(f"   - User ID: {session.get('user_id')}")
+        print(f"   - Is authenticated: {session.get('is_authenticated')}")
+        print(f"   - Session permanent: {session.permanent}")
+        
         return response
         
     except Exception as e:
@@ -366,7 +376,17 @@ def login():
         from flask import make_response
         response = make_response(jsonify(response_data), 200)
         response.headers['X-User-ID'] = user_id
-        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID'
+        response.headers['Access-Control-Expose-Headers'] = 'X-User-ID, Set-Cookie'
+        
+        # Mark session as permanent to ensure it persists
+        session.permanent = True
+        
+        print(f"🔐 Session details after login:")
+        print(f"   - Session ID: {session.get('_id', 'N/A')}")
+        print(f"   - User ID: {session.get('user_id')}")
+        print(f"   - Is authenticated: {session.get('is_authenticated')}")
+        print(f"   - Session permanent: {session.permanent}")
+        
         return response
         
     except Exception as e:
@@ -435,27 +455,68 @@ def check_session():
     """Check if user is authenticated"""
     print("🔍 SESSION CHECK REQUEST")
     try:
-        print(f"📋 Current session: {dict(session)}")
+        # Log detailed session info for debugging
+        print(f"📋 Current session keys: {list(session.keys())}")
+        print(f"📋 Session ID available: {hasattr(session, 'get')}")
+        print(f"📋 Is authenticated flag: {session.get('is_authenticated', False)}")
+        print(f"📋 User ID: {session.get('user_id', 'Not found')}")
         
-        if session.get('is_authenticated'):
+        # Check if session has authentication data
+        is_authenticated = session.get('is_authenticated', False)
+        user_id = session.get('user_id')
+        
+        # Also check X-User-ID header as fallback
+        user_id_header = request.headers.get('X-User-ID')
+        
+        if is_authenticated and user_id:
             user_data = {
-                "userId": session.get('user_id'),
-                "email": session.get('email'),
-                "name": session.get('name')
+                "userId": user_id,
+                "email": session.get('email', ''),
+                "name": session.get('name', '')
             }
             print(f"✅ User is authenticated: {user_data}")
+            
+            # Ensure session is marked as permanent for persistence
+            session.permanent = True
             
             return jsonify({
                 "success": True,
                 "authenticated": True,
                 "user": user_data
             }), 200
-        else:
-            print("❌ User is not authenticated")
-            return jsonify({
-                "success": True,
-                "authenticated": False
-            }), 200
+        elif user_id_header:
+            # Fallback: use header if session cookie didn't work
+            print(f"⚠️ Session cookie not found, using X-User-ID header: {user_id_header}")
+            # Try to restore session from header
+            from Database_Setup.firestore_nosql_storage import db
+            try:
+                user_doc = db.collection("users").document(user_id_header).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    # Restore session
+                    session['user_id'] = user_id_header
+                    session['email'] = user_data.get('email', '')
+                    session['name'] = user_data.get('name', '')
+                    session['is_authenticated'] = True
+                    session.permanent = True
+                    
+                    return jsonify({
+                        "success": True,
+                        "authenticated": True,
+                        "user": {
+                            "userId": user_id_header,
+                            "email": session.get('email', ''),
+                            "name": session.get('name', '')
+                        }
+                    }), 200
+            except Exception as e:
+                print(f"⚠️ Could not restore session from header: {e}")
+        
+        print("❌ User is not authenticated")
+        return jsonify({
+            "success": True,
+            "authenticated": False
+        }), 200
         
     except Exception as e:
         print(f"❌ Session check error: {e}")

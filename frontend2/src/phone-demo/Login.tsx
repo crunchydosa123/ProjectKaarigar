@@ -25,11 +25,11 @@ const Login = () => {
       const success = await login(email, password);
       
       if (!success) {
-        setError('Login failed. Please check your credentials.');
+        setError('Authentication failed. Please check your credentials and try again.');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError('Login failed. Please try again.');
+      setError('Authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }

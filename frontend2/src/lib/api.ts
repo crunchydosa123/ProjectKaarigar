@@ -467,10 +467,14 @@ class ProfileAPI {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
 
+    // Get user_id from localStorage for cross-origin auth fallback
+    const userId = localStorage.getItem('user_id');
+
     const options: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
+        ...(userId && { 'X-User-ID': userId }), // Add user_id header if available
       },
       credentials: 'include', // Important for session cookies
     };
