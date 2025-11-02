@@ -1,0 +1,98 @@
+{
+  "input": {
+    "module_name": "pot",
+    "platform_selected": "amazon",
+    "user_price": 200.0,
+    "images": {
+      "local_paths": [],
+      "urls": [
+        "https://storage.googleapis.com/all_in_one_bucket1/kaarigar/KR_USER1/media/images/00e66e6b-bbbf-4708-919e-305d3cf433d9.jpeg",
+        "https://storage.googleapis.com/all_in_one_bucket1/kaarigar/KR_USER1/media/images/00e66e6b-bbbf-4708-919e-305d3cf433d9.jpeg"
+      ]
+    },
+    "inferred_keywords": []
+  },
+  "listing": {
+    "title": "Hand-Painted Terracotta Water Pot for Plants & Home Decor - Rustic Clay Earthenware Jug, Unglazed, Handmade Outdoor Garden Planter Vase",
+    "bullets": [
+      "Authentic Hand-Painted Terracotta: Each pot features unique white hand-drawn patterns, showcasing traditional artisan craftsmanship and adding rustic charm to any space.",
+      "Natural Porous Earthenware: Made from unglazed fired clay, our terracotta pot naturally allows for air and water exchange, promoting healthier plant roots and offering evaporative cooling for stored water.",
+      "Versatile & Multi-functional: Perfect as a decorative planter for indoor/outdoor plants, a rustic water storage urn, or a unique accent piece for farmhouse, bohemian, or traditional decor.",
+      "Durable & Sturdy Construction: Crafted with a thick, rounded rim and robust body, ensuring longevity and stability for both decorative and functional use.",
+      "Eco-Friendly & Sustainable: Made from natural clay, this unglazed pot is an environmentally conscious choice for your home and garden.",
+      "Enhances Plant Health: The porous nature of terracotta helps prevent overwatering by allowing excess moisture to evaporate, ideal for a wide variety of plants.",
+      "Unique Gift Idea: A thoughtful and distinctive gift for gardeners, home decorators, or anyone who appreciates handmade, rustic aesthetics."
+    ],
+    "description": "Discover the timeless beauty and functionality of our Hand-Painted Terracotta Water Pot, a true testament to artisanal craftsmanship. Each pot is meticulously shaped from natural unglazed clay, giving it a warm, reddish-brown hue and a matte, rustic finish. What truly sets this piece apart are the intricate white hand-painted designs that adorn its body – a blend of geometric bands and flowing lines that tell a story of tradition and artistry. Ideal for both practical use and decorative charm, its porous terracotta material naturally allows for air circulation, promoting healthier plant growth when used as a planter, or offering natural cooling for water storage. The sturdy, hand-thickened rim ensures durability, while its versatile design complements various decor styles from farmhouse to bohemian. Bring a touch of handmade elegance and natural functionality to your home, garden, or patio with this unique earthenware jug.",
+    "specifications": {
+      "Material": "Unglazed Terracotta (Fired Clay)",
+      "Color": "Reddish-Brown with White Hand-Painted Designs",
+      "Finish": "Matte, Rustic",
+      "Craftsmanship": "Hand-Thrown/Hand-Built, Hand-Painted",
+      "Usage": "Indoor/Outdoor Planter, Water Urn, Decorative Vase",
+      "Diameter": "Approx. 8-10 inches (estimated from image)",
+      "Height": "Approx. 10-12 inches (estimated from image)",
+      "Drainage Hole": "Not explicitly visible, but typical for planters (recommend stating if it has one or not)"
+    },
+    "seo_tags": [
+      "terracotta pot",
+      "hand painted planter",
+      "earthenware vase",
+      "clay pot",
+      "rustic home decor",
+      "garden planter",
+      "unglazed pot",
+      "handmade pottery",
+      "water urn",
+      "outdoor planter",
+      "indoor plant pot",
+      "farmhouse decor",
+      "bohemian decor",
+      "traditional pottery",
+      "ceramic jug",
+      "flower pot",
+      "decorative pot",
+      "clay planter",
+      "artisan craft",
+      "porous pot"
+    ],
+    "faqs": [
+      {
+        "q": "Does this terracotta pot have a drainage hole?",
+        "a": "While not explicitly visible in the image, most terracotta planters come with a drainage hole. Please check the product options or description for confirmation on this specific model. If not, it can be used with a liner or for decorative purposes."
+      },
+      {
+        "q": "Is the white design truly hand-painted or is it a print?",
+        "a": "Yes, the white designs are genuinely hand-painted by artisans, which means each pot will have unique variations, adding to its authentic handmade charm."
+      },
+      {
+        "q": "Can this pot be used outdoors in all weather conditions?",
+        "a": "Unglazed terracotta is generally durable for outdoor use. However, in freezing temperatures, the porous material can absorb water and crack if it freezes. We recommend bringing it indoors or protecting it during harsh winter conditions."
+      },
+      {
+        "q": "What is the best way to clean this unglazed terracotta pot?",
+        "a": "For unglazed terracotta, gently scrub with a brush and warm water. For stubborn mineral deposits, a mild vinegar solution can be used. Avoid harsh detergents that can clog the pores."
+      },
+      {
+        "q": "Is this pot suitable for storing drinking water?",
+        "a": "While terracotta traditionally stores water and provides evaporative cooling, we recommend using it primarily for decorative purposes or for plants unless specifically certified for food/drink safety. The porosity, while beneficial for cooling, also means it's not completely sealed."
+      }
+    ],
+    "pricing": {
+      "ai_price": 25.0,
+      "recommended_range": [
+        22.0,
+        35.0
+      ]
+    },
+    "policies": {
+      "Shipping": "Standard Amazon shipping policies apply. Expedited options available.",
+      "Returns": "30-day free returns in original condition via Amazon's return policy.",
+      "Warranty": "Manufacturer's limited warranty against defects in craftsmanship."
+    },
+    "whats_in_the_box": [
+      "1 x Hand-Painted Terracotta Water Pot"
+    ],
+    "platform": "amazon"
+  }
+}

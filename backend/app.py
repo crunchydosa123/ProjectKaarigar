@@ -1,34 +1,205 @@
-from flask import Flask
-from routes.edit_routes import edit_bp
-from routes.converse_routes import conv_bp
-from routes.product_optimize_routes import product_bp
-import os
+from flask import Flask, session
 from flask_cors import CORS
+from routes.testing import testing_bp
+from routes.auth import auth_bp
+from routes.conversational import conversational_bp
+from routes.logo_generation import logo_bp
+from routes.profile_management import profile_bp
+from routes.media_upload import media_bp
+from routes.image_generation import image_gen_bp
+from routes.image_editing import image_edit_bp
+from routes.video_editing import video_edit_bp
+from routes.reel_generator import reel_gen_bp
+from routes.product import product_bp
+from routes.youtube import youtube_bp
+from routes.marketplace_listing import listing_bp
+from routes.whatsapp import whatsapp_bp
+from routes.ai_insights import ai_insights_bp
 
-def create_app():
-    app = Flask(__name__)
-    
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
-    # config: optional
-    app.config.from_mapping({
-    "MAX_CONTENT_LENGTH": 1024 * 1024 * 1024, # 1GB max upload by default
-    "UPLOAD_FOLDER": os.path.join(app.instance_path, "uploads")
-    })
+app = Flask(__name__)
 
-    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-
-    # Register blueprints
-    app.register_blueprint(edit_bp, url_prefix="/api")
-    app.register_blueprint(conv_bp, url_prefix="/api")
-    app.register_blueprint(product_bp, url_prefix="/api")
+# CORS configuration for Cloud Run deployment
 
 
-    @app.route("/", methods=["GET"])
-    def idx():
-        return "Flask Video Editor API. Use POST /api/edit to upload video and user_prompt."
-    return app
+
+# Simple configuration - no secrets or encryption
+app.config['SECRET_KEY'] = 'project-kaarigar-simple-key-2025'
+
+# Detect environment - check if running locally or in production
+import os
+is_production = os.environ.get('ENVIRONMENT', '').lower() == 'production' or \
+                'asia-south1.run.app' in os.environ.get('HOST', '') or \
+                os.environ.get('GAE_ENV', '') == 'standard'
+
+# Session cookie configuration - adapts to environment
+if is_production:
+    # Production: HTTPS required, use Secure + SameSite=None for cross-origin
+    app.config['SESSION_COOKIE_SECURE'] = True  # Requires HTTPS
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin with Secure
+    print("🔒 Production mode: Secure cookies enabled (HTTPS required)")
+else:
+    # Development: Allow HTTP, use Lax for same-site cookies
+    app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP for localhost
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Better for same-origin/same-site
+    print("🔓 Development mode: Non-secure cookies enabled (HTTP allowed)")
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access for security
+app.config['SESSION_COOKIE_DOMAIN'] = None  # Don't restrict domain
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+app.config['SESSION_COOKIE_PATH'] = '/'  # Available for all paths
+app.config['SESSION_COOKIE_NAME'] = 'session'  # Standard name
+
+# Register blueprints
+app.register_blueprint(testing_bp, url_prefix="/testing")
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(conversational_bp, url_prefix="/api/conversational")
+app.register_blueprint(logo_bp, url_prefix="/api/logo")
+app.register_blueprint(profile_bp, url_prefix="/api/profile")
+app.register_blueprint(media_bp, url_prefix="/api/media")
+app.register_blueprint(image_gen_bp, url_prefix="/api/image-gen")
+app.register_blueprint(image_edit_bp, url_prefix="/api/image-edit")
+app.register_blueprint(video_edit_bp, url_prefix="/api/video-edit")
+app.register_blueprint(reel_gen_bp, url_prefix="/api/reel-generator")
+app.register_blueprint(product_bp, url_prefix="/api/product")
+app.register_blueprint(youtube_bp, url_prefix="/api/youtube")
+app.register_blueprint(listing_bp, url_prefix="/api/marketplace")
+app.register_blueprint(whatsapp_bp, url_prefix="/api/whatsapp")
+app.register_blueprint(ai_insights_bp, url_prefix="/api/ai-insights")
+
+print("\n📋 Registered Blueprints:")
+for blueprint_name, blueprint_obj in app.blueprints.items():
+    print(f"   ✅ {blueprint_name}: {blueprint_obj.url_prefix}")
+
+@app.route('/')
+def home():
+    return {
+        "message": "Project Kaarigar Backend API",
+        "version": "1.0.0",
+        "endpoints": {
+            "authentication": {
+                "POST /api/auth/signup": "User signup",
+                "POST /api/auth/login": "User login", 
+                "POST /api/auth/logout": "User logout",
+                "GET /api/auth/profile": "Get user profile",
+                "GET /api/auth/session": "Check session status",
+                "GET /api/auth/health": "Auth service health check"
+            },
+            "conversational": {
+                "POST /api/conversational/start": "Start conversational onboarding",
+                "POST /api/conversational/message": "Send text message in conversation",
+                "POST /api/conversational/audio-message": "Send audio message in conversation",
+                "GET /api/conversational/status/<kaarigar_id>": "Get conversation status",
+                "GET /api/conversational/list": "List user conversations",
+                "GET /api/conversational/health": "Conversational service health check"
+            },
+            "logo_generation": {
+                "POST /api/logo/generate": "Generate logo from conversation data",
+                "GET /api/logo/get-logo": "Get user's current logo",
+                "GET /api/logo/health": "Logo generation service health check"
+            },
+            "profile_management": {
+                "GET /api/profile/get-profile-data": "Get and generate profile data using Gemini",
+                "POST /api/profile/save-profile": "Save profile data to Firestore",
+                "GET /api/profile/get-saved-profile": "Get saved profile data",
+                "GET /api/profile/health": "Profile management service health check"
+            },
+            "media_upload": {
+                "POST /api/media/upload": "Upload media files to Cloud Storage",
+                "GET /api/media/list": "List user's uploaded media (all types)",
+                "GET /api/media/list/images": "List user's uploaded images only",
+                "GET /api/media/list/videos": "List user's uploaded videos only",
+                "DELETE /api/media/delete/<media_id>": "Delete media by ID from both Firestore and Cloud Storage",
+                "GET /api/media/health": "Media upload service health check"
+            },
+            "reel_generation": {
+            },
+            "image_generation": {
+                "POST /api/image-gen/generate-image": "Generate image from text prompt or reference image using Imagen/Gemini",
+                "GET /api/image-gen/get-generated-images": "List user's generated images",
+                "GET /api/image-gen/health": "Image generation service health check"
+            },
+            "image_editing": {
+                "POST /api/image-edit/analyze-image": "Analyze image and generate creative editing suggestions using Gemini",
+                "POST /api/image-edit/edit-image": "Edit image using AI-generated or custom prompt using Gemini",
+                "GET /api/image-edit/health": "Image editing service health check"
+            },
+            "video_editing": {
+                "GET /api/video-edit/get-user-videos": "Get all user videos/reels from Firestore and Cloud Storage",
+                "POST /api/video-edit/edit-video": "Edit video using AI prompts (matches test_req.py structure)",
+                "POST /api/video-edit/add-trending-audio": "Add trending audio to video (matches test_req_trending_audio.py structure)",
+                "GET /api/video-edit/get-trending-songs": "Get list of trending songs from FFmpeg service",
+                "GET /api/video-edit/health": "Video editing service health check"
+            },
+            "reel_generator": {
+                "POST /api/reel-generator": "Generate reel from selected images and prompt",
+                "POST /api/reel-generator/generate-video/images": "Generate video from image URLs (JSON)",
+                "GET /api/reel-generator/user-reels": "Get all reels for a specific user",
+                "GET /api/reel-generator/generated-reels": "Get generated reels for a user",
+                "POST /api/reel-generator/suggest-script": "Generate AI script suggestions based on prompt and images",
+                "DELETE /api/reel-generator/delete-video": "Delete video from Cloud Storage and Firestore",
+                "GET /api/reel-generator/proxy-image": "Proxy endpoint to download images from URLs",
+                "GET /api/reel-generator/health": "Reel generator service health check"
+            },
+            "testing": {
+                "GET /testing/": "Testing route",
+                "POST /testing/data": "Testing data endpoint"
+            }
+        }
+    }
+
+@app.route('/health')
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "Project Kaarigar Backend",
+        "timestamp": "2025-01-22T16:30:00Z"
+    }
+
+# CORS configuration - more permissive for development, stricter for production
+if is_production:
+    cors_origins = [
+        "https://backend-557742533869.asia-south1.run.app", 
+        "https://frontend-557742533869.asia-south1.run.app",
+        "https://router-557742533869.asia-south1.run.app"
+    ]
+else:
+    # Development: Allow localhost and common dev ports
+    cors_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "https://backend-557742533869.asia-south1.run.app",
+        "https://frontend-557742533869.asia-south1.run.app",
+        "https://router-557742533869.asia-south1.run.app"
+    ]
+
+CORS(app,
+     supports_credentials=True,  # CRITICAL: Allows cookies to be sent
+     origins=cors_origins,
+     allow_headers=["Content-Type", "Authorization", "X-User-ID"],
+     expose_headers=["Content-Type", "X-User-ID", "Set-Cookie"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+     #allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+     )
 
 if __name__ == '__main__':
-    app = create_app()
+    import os
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    print(f"\n🚀 Starting Project Kaarigar Backend on port {port}")
+    print("Available endpoints:")
+    print("  Authentication: /api/auth/*")
+    print("  Conversational: /api/conversational/*")
+    print("  Logo Generation: /api/logo/*")
+    print("  Profile Management: /api/profile/*")
+    print("  Media Upload: /api/media/*")
+    print("  Image Generation: /api/image-gen/*")
+    print("  Image Editing: /api/image-edit/*")
+    print("  Video Editing: /api/video-edit/*")
+    print("  Reel Generator: /api/reel-generator/*")
+    print("  Testing: /testing/*")
+    print("  Health: /health")
+
+    app.run(host='0.0.0.0', port=port)

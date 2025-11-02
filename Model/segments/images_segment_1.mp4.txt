@@ -1,0 +1,5 @@
+file 'D:\ProjectKaarigar\Model\clay-pot-372.jpg'
+duration 4.0
+file 'D:\ProjectKaarigar\Model\images.jpeg'
+duration 4.0
+file 'D:\ProjectKaarigar\Model\images.jpeg'

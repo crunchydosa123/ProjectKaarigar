@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "karigar-475215",
+  "private_key_id": "98d510674943756229beaff7629a9262eb5da6df",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC02aOQ24STudgh\nxCWevZGuV2+rU8JxxBN4pMiraS94zXt4cpSFTbJSsAZ5zdhu9hBCvdDN0MDV5dly\nGCCS8PYB9eofNI7+2ENuhMNTWIvT7sb1bEO1aT0cQgNMcMEArg64wjD0RUQqi13U\nJCGJRvAGKH8O0cf+klo37FjpE3IHdY/BoFJGFqhdKWZ/T92yqaam8jJybs2QqjNl\nkSq2AGHn/sqtCh1ghOoLQOPSy6zStId27MMD0DZdgMzXyaxDI8vFHaT99RDAcvLK\n2MYw8g6CoskzkehKactNfwObOZjPOfQpj21+Z2sEBXpIoPSjM7d0f7WMD+SNYMa3\n86cm4iw9AgMBAAECggEAOKqlNMOD1CH8VgA25Xlyx1UAWYeiOrF8hGXltsf7pveD\nw6brYKWKxZwAO3RDZ+lUCQWfAo5xjdQ6gSSMOF6mRtD+Lg7y62lqH5wb8+af0aVU\n1Bu7T4GNM2h/zhjacNMZK801N6ToiggnO0yi8Xe3x8Yyobsb1mmXOUSmS0nbhfhK\nEo8YrhsnsMtN3gpJBG5doInLmCdzOOQGWkZf1BBBYjrz95I7WpkUZdA+K3iUcvY1\nSPkBew42OqiBYeZE0XxDvVtPWm4hZgZYvX4GcLY0ICYMzfEhvjyCrblmf9J9T9De\nMW0iVlQs6d20MJtAY7z1hCxP0af8fYtf88v1wv/UZQKBgQDl74qrb/fUf50o2uNy\nGlbCq06C1qfKv9x3BrBh/ourH1+KflzdThyWviTjI1D7MEUKJKj3m7QZqQUWsr5g\nyAVoB+/6/STeZAQZ/mw6Ofn5I5D3fbCNxmnAkbNWLYlHZ3visP4nlxNQH+umsJzo\n0rxbi9BCPB8xNR0TvrU4MNRZLwKBgQDJWbF68HOm/8GKFSs4PIpdqEuiHs/7cZTP\nhyX40ci+x/g4yHx4P4fqZZK76Ub1dUYJCAkYtfeRt6cuh2Jm5dskc4AoncxSX4ci\nc+b00uubRRZR91SPhMhK7uhJC5b/L0qz9LesQq1DOD4A8XHzd6NQE5jmCsQUwGYj\nTqpi9NZeUwKBgHyTaqr1j+1Gcqx24zGnyYfQ7kl+6Qu1JUoripadJajB566ORdv0\n/RJC1JNnR/G/tjgHoq/8YPhiFYq1ruWamStC2ac/TaFbyMkYiiSF0sRDm8ArDePS\nMuuNRP+UzkKsc3dfc2OZu3H2yWLXXzvZKQnkVyH7lt6/KxDOizp1YicrAoGBAKIH\nHX0y9b5TXWlCs67jeOz5OzPQ28kZk4iU1wetuX9c5/C51P/nD/admkDA7iskHiGy\nZ6+M7xZB1bTpmVP4cCqbD2yf3wYCfXpKDnbBLHucUuPOxitfzNYP/riZLP9ZDSJX\nMV7boRXQsoSLxwkHI1KTEp072KJiWU7cRNyw7bilAoGAW0adp8Z+5KTW3UQyjqhY\noLZJtu7N+guK27lwwENJglThJXa1Y+mJaNuxasaZRa/ScBj+ZsWw8C0O0IHzTJ8a\nURotE/Sn5NV1S5IB1mC02Ma0lGA0vihCXyP/24cjLhL18qyFJ3tPmD0lo1BLqrGt\n4nIWaKQRq9faREivY0EiEqY=\n-----END PRIVATE KEY-----\n",
+  "client_email": "suraj-chavan@karigar-475215.iam.gserviceaccount.com",
+  "client_id": "112160826786090815761",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/suraj-chavan%40karigar-475215.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

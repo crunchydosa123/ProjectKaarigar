@@ -1,0 +1,32 @@
+# Ignore Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+ENV/
+.venv/
+
+# Ignore local configs and credentials
+*.env
+.env.*
+credentials.json
+service-account.json
+*.log
+
+# Ignore VCS and editor files
+.git/
+.gitignore
+.gcloudignore
+.idea/
+.vscode/
+.DS_Store
+
+# Ignore tests and docs if not needed in prod
+tests/
+docs/
+
+# Ignore any large local media folders
+uploads/
+data/

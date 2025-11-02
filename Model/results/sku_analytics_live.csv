@@ -1,0 +1,2 @@
+keyword,region,fc7_median,fc30_median,fc90_median,recent_7_mean,recent_14_mean,seasonality_score,trend_score,trend_explanation
+handmade pottery,US,34.708152877734754,41.92691780348863,63.4518313391891,32.714285714285715,31.928571428571427,0.943877551020408,0.32,"Interest in 'handmade pottery' in the US has a high seasonality score and is relatively stable, with a slight dip over the last 7 days."
