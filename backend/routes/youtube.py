@@ -1,6 +1,7 @@
 """
 YouTube Integration Routes
 Handles video uploads and analytics fetching
+ALL USERS SHARE THE SAME YOUTUBE CHANNEL
 """
 
 import os
@@ -14,6 +15,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import requests
+import sys
+
+# Add parent directory to path for auth_helper
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from auth_helper import get_user_from_session
 
 youtube_bp = Blueprint('youtube', __name__)
 
@@ -34,15 +40,23 @@ CLIENT_SECRETS_FILE = _os.path.join(_backend_dir, "client_secrets.json")
 print(f"📁 Client secrets file path: {CLIENT_SECRETS_FILE}")
 print(f"   File exists: {_os.path.exists(CLIENT_SECRETS_FILE)}")
 
+# Shared YouTube token path - ALL USERS USE user_user1's TOKEN
+SHARED_TOKEN_FILE = _os.path.join(_backend_dir, "youtube_tokens", "user_user1_token.pickle")
+print(f"📺 Shared YouTube token (user_user1): {SHARED_TOKEN_FILE}")
+print(f"   Token exists: {_os.path.exists(SHARED_TOKEN_FILE)}")
+
 def get_user_token_file(user_id):
-    """Get token file path for specific user"""
+    """Get token file path - returns user_user1's token for ALL users"""
+    # Create tokens directory if it doesn't exist
     tokens_dir = _os.path.join(_backend_dir, "youtube_tokens")
     _os.makedirs(tokens_dir, exist_ok=True)
-    return _os.path.join(tokens_dir, f"user_{user_id}_token.pickle")
+    
+    # Return user_user1's token file for all users
+    return SHARED_TOKEN_FILE
 
-def get_youtube_service(user_id):
-    """Get authenticated YouTube service for user"""
-    token_file = get_user_token_file(user_id)
+def get_youtube_service(user_id=None):
+    """Get authenticated YouTube service - uses user_user1's token for ALL users"""
+    token_file = SHARED_TOKEN_FILE
     credentials = None
     
     if os.path.exists(token_file):
@@ -59,9 +73,9 @@ def get_youtube_service(user_id):
     
     return build("youtube", "v3", credentials=credentials)
 
-def get_analytics_service(user_id):
-    """Get authenticated YouTube Analytics service for user"""
-    token_file = get_user_token_file(user_id)
+def get_analytics_service(user_id=None):
+    """Get authenticated YouTube Analytics service - uses user_user1's token for ALL users"""
+    token_file = SHARED_TOKEN_FILE
     credentials = None
     
     if os.path.exists(token_file):
@@ -75,25 +89,36 @@ def get_analytics_service(user_id):
 
 @youtube_bp.route('/auth/start', methods=['GET'])
 def start_auth():
-    """Start OAuth flow for YouTube"""
+    """Start OAuth flow for YouTube - saves to user_user1's token (shared for all users)"""
     print("\n🔵 [YouTube] /auth/start called")
-    user_id = session.get('user_id')
-    print(f"   User ID from session: {user_id}")
     
-    if not user_id:
-        print("   ❌ No user_id in session")
+    try:
+        user_id = get_user_from_session()
+        print(f"   User ID from session: {user_id}")
+    except Exception as e:
+        print(f"   ❌ Authentication error: {e}")
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
         print(f"   📁 Using client secrets: {CLIENT_SECRETS_FILE}")
+        print(f"   📺 Will use user_user1's token: {SHARED_TOKEN_FILE}")
         
         # Disable HTTPS requirement for local development
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
         
+        # Determine redirect URI based on environment
+        is_production = os.environ.get('ENV') == 'production'
+        if is_production:
+            redirect_uri = 'https://backend-557742533869.asia-south1.run.app/api/youtube/auth/callback'
+        else:
+            redirect_uri = 'http://localhost:5000/api/youtube/auth/callback'
+        
+        print(f"   🔗 Redirect URI: {redirect_uri}")
+        
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
-            redirect_uri=request.url_root.rstrip('/') + '/api/youtube/auth/callback'
+            redirect_uri=redirect_uri
         )
         
         authorization_url, state = flow.authorization_url(
@@ -114,10 +139,11 @@ def start_auth():
 
 @youtube_bp.route('/auth/callback', methods=['GET'])
 def auth_callback():
-    """Handle OAuth callback"""
-    user_id = session.get('user_id')
-    if not user_id:
-        return "Error: Not authenticated", 401
+    """Handle OAuth callback - saves to user_user1's token (shared for all users)"""
+    try:
+        user_id = get_user_from_session()
+    except Exception as e:
+        return f"Error: Not authenticated - {str(e)}", 401
     
     try:
         state = session.get('oauth_state')
@@ -125,21 +151,29 @@ def auth_callback():
         # Disable HTTPS requirement for local development
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
         
+        # Determine redirect URI based on environment
+        is_production = _os.environ.get('ENV') == 'production'
+        if is_production:
+            redirect_uri = 'https://backend-557742533869.asia-south1.run.app/api/youtube/auth/callback'
+        else:
+            redirect_uri = 'http://localhost:5000/api/youtube/auth/callback'
+        
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             state=state,
-            redirect_uri=request.url_root.rstrip('/') + '/api/youtube/auth/callback'
+            redirect_uri=redirect_uri
         )
         
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
         
-        # Save credentials
-        token_file = get_user_token_file(user_id)
-        os.makedirs(os.path.dirname(token_file), exist_ok=True)
-        with open(token_file, "wb") as token:
+        # Save credentials to user_user1's token file (all users use same channel)
+        os.makedirs(os.path.dirname(SHARED_TOKEN_FILE), exist_ok=True)
+        with open(SHARED_TOKEN_FILE, "wb") as token:
             pickle.dump(credentials, token)
+        
+        print(f"✅ YouTube token saved to user_user1's token: {SHARED_TOKEN_FILE}")
         
         return """
         <html>
@@ -155,25 +189,26 @@ def auth_callback():
 
 @youtube_bp.route('/auth/status', methods=['GET'])
 def auth_status():
-    """Check if user has connected YouTube"""
+    """Check if YouTube is connected - all users use user_user1's channel"""
     print("\n🔵 [YouTube] /auth/status called")
-    user_id = session.get('user_id')
-    print(f"   User ID from session: {user_id}")
     
-    if not user_id:
-        print("   ❌ No user_id in session")
+    try:
+        user_id = get_user_from_session()
+        print(f"   User ID from session: {user_id}")
+    except Exception as e:
+        print(f"   ❌ Authentication error: {e}")
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
-    token_file = get_user_token_file(user_id)
-    connected = os.path.exists(token_file)
-    print(f"   Token file: {token_file}")
+    # Check if user_user1's token exists
+    connected = os.path.exists(SHARED_TOKEN_FILE)
+    print(f"   Using user_user1's token: {SHARED_TOKEN_FILE}")
     print(f"   Connected: {connected}")
     
     channel_info = None
     if connected:
         try:
-            print("   🔍 Fetching channel info...")
-            youtube = get_youtube_service(user_id)
+            print("   🔍 Fetching channel info (user_user1's channel)...")
+            youtube = get_youtube_service()
             if youtube:
                 response = youtube.channels().list(part="snippet,statistics", mine=True).execute()
                 if response.get("items"):
@@ -184,9 +219,10 @@ def auth_status():
                         'thumbnail': channel['snippet']['thumbnails']['default']['url'],
                         'subscribers': channel['statistics'].get('subscriberCount', 0),
                         'videos': channel['statistics'].get('videoCount', 0),
-                        'views': channel['statistics'].get('viewCount', 0)
+                        'views': channel['statistics'].get('viewCount', 0),
+                        'shared': True  # Indicate this is a shared channel (user_user1's)
                     }
-                    print(f"   ✅ Channel: {channel_info['title']}")
+                    print(f"   ✅ Channel (user_user1): {channel_info['title']}")
         except Exception as e:
             print(f"   ⚠️  Error fetching channel: {str(e)}")
     
@@ -198,13 +234,14 @@ def auth_status():
 
 @youtube_bp.route('/upload', methods=['POST'])
 def upload_video():
-    """Upload video to YouTube"""
+    """Upload video to YouTube - all users upload using user_user1's channel"""
     print("\n🔵 [YouTube] /upload called")
-    user_id = session.get('user_id')
-    print(f"   User ID: {user_id}")
     
-    if not user_id:
-        print("   ❌ No user_id in session")
+    try:
+        user_id = get_user_from_session()
+        print(f"   User ID: {user_id}")
+    except Exception as e:
+        print(f"   ❌ Authentication error: {e}")
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
@@ -309,17 +346,18 @@ def upload_video():
 
 @youtube_bp.route('/videos', methods=['GET'])
 def get_videos():
-    """Get user's uploaded videos"""
+    """Get videos from YouTube - all users see user_user1's channel videos"""
     print("\n🔵 [YouTube] /videos called")
-    user_id = session.get('user_id')
-    print(f"   User ID: {user_id}")
     
-    if not user_id:
-        print("   ❌ No user_id in session")
+    try:
+        user_id = get_user_from_session()
+        print(f"   User ID: {user_id}")
+    except Exception as e:
+        print(f"   ❌ Authentication error: {e}")
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
-        youtube = get_youtube_service(user_id)
+        youtube = get_youtube_service()
         if not youtube:
             print("   ❌ YouTube not connected")
             return jsonify({'success': False, 'error': 'YouTube not connected'}), 401
@@ -380,21 +418,22 @@ def get_videos():
 
 @youtube_bp.route('/analytics/channel', methods=['GET'])
 def get_channel_analytics():
-    """Get channel analytics"""
+    """Get analytics from YouTube - all users see user_user1's channel analytics"""
     print("\n🔵 [YouTube] /analytics/channel called")
-    user_id = session.get('user_id')
-    print(f"   User ID: {user_id}")
     
-    if not user_id:
-        print("   ❌ No user_id in session")
+    try:
+        user_id = get_user_from_session()
+        print(f"   User ID: {user_id}")
+    except Exception as e:
+        print(f"   ❌ Authentication error: {e}")
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
         days = int(request.args.get('days', 30))
         print(f"   📊 Fetching analytics for last {days} days")
         
-        youtube = get_youtube_service(user_id)
-        analytics = get_analytics_service(user_id)
+        youtube = get_youtube_service()
+        analytics = get_analytics_service()
         
         if not youtube or not analytics:
             return jsonify({'success': False, 'error': 'YouTube not connected'}), 401
