@@ -321,7 +321,7 @@ export default function VideoEditorPreview({ selectedVideoUrl = "/sample-video.m
 
       {/* Enhanced AI Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white border-gray-700 max-h-[80vh] !max-w-[20vw] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Edit Video with AI
@@ -330,9 +330,9 @@ export default function VideoEditorPreview({ selectedVideoUrl = "/sample-video.m
           
           {/* Selected Video Info */}
           <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500 rounded-lg">
-            <p className="text-sm text-blue-300 font-medium">Editing Video:</p>
-            <p className="text-sm text-white">{currentVideoUrl.split('/').pop()}</p>
-            <p className="text-xs text-gray-400">Ready to edit with AI prompts</p>
+            <p className="text-sm text--300 font-medium">Editing Video:</p>
+            <p className="text-sm text-">{currentVideoUrl.split('/').pop()}</p>
+            <p className="text-xs text--400">Ready to edit with AI prompts</p>
           </div>
 
           {/* AI Prompt Edit - matches test_req.py */}
@@ -393,7 +393,7 @@ export default function VideoEditorPreview({ selectedVideoUrl = "/sample-video.m
 
       {/* Separate Music/Trending Audio Dialog */}
       <Dialog open={showMusicDialog} onOpenChange={setShowMusicDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="text-black border-gray-700 max-h-[80vh] !max-w-[20vw] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Add Trending Audio to Video
@@ -402,14 +402,14 @@ export default function VideoEditorPreview({ selectedVideoUrl = "/sample-video.m
           
           {/* Selected Video Info */}
           <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500 rounded-lg">
-            <p className="text-sm text-blue-300 font-medium">Adding Audio to:</p>
-            <p className="text-sm text-white">{currentVideoUrl.split('/').pop()}</p>
-            <p className="text-xs text-gray-400">Select a trending song to add to your video</p>
+            <p className="text-sm text-300 font-medium">Adding Audio to:</p>
+            <p className="text-sm text-">{currentVideoUrl.split('/').pop()}</p>
+            <p className="text-xs text--400">Select a trending song to add to your video</p>
           </div>
 
           {/* Trending Songs Selection */}
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2 text-white">Select Trending Song</label>
+            <label className="block text-sm font-medium mb-2 text-black">Select Trending Song</label>
             
             {trendingSongs.length > 0 ? (
               <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto border border-gray-600 rounded-lg p-2">
@@ -417,16 +417,16 @@ export default function VideoEditorPreview({ selectedVideoUrl = "/sample-video.m
                   <div
                     key={index}
                     onClick={() => setSelectedSongId(index)}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors hover:bg-gray-700 ${
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors hover:bg-gray-700 hover:text-white ${
                       selectedSongId === index ? 'border-green-500 bg-green-900/30' : 'border-gray-600'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-white">{song.title}</p>
-                        <p className="text-xs text-gray-400">{song.artist}</p>
+                        <p className="text-sm font-medium text-">{song.title}</p>
+                        <p className="text-xs text--400">{song.artist}</p>
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text--500">
                         ID: {index}
                       </div>
                     </div>

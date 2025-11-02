@@ -567,9 +567,9 @@ const Onboarding = ({}: Props) => {
             onClick={handleMicClick}
             disabled={isLoading || isComplete}
             className={`flex items-center gap-2 p-5 rounded-md transition text-white disabled:opacity-50
-              ${isRecording ? "bg-red-500 hover:bg-red-400 animate-pulse" : "bg-green-500 hover:bg-green-400"}`}
+              ${isRecording ? "bg-green-500 hover:bg-red-400 animate-pulse" : "bg-red-500 hover:bg-green-400"}`}
           >
-            {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isRecording ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
           </button>
 
           <button

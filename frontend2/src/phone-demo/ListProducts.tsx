@@ -108,8 +108,8 @@ const ListContentMain = () => {
           ))}
         </div>
       </div>
-
-      <Button className="mx-4 mt-5" onClick={() => setCurrentPage('list-products/add-listing')}>List a product</Button>
+      
+      {/*<Button className="mx-4 mt-5" onClick={() => setCurrentPage('list-products/add-listing')}>List a product</Button>*/}
 
       {/* Marketing Options */}
       <div className="px-4 mt-8 flex flex-col gap-1">

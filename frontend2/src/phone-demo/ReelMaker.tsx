@@ -453,7 +453,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
           <div className="text-md font-bold ml-3">Create Reel from Images</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
+          {/*<Button
             variant="outline"
             size="sm"
             onClick={loadAllUserVideos}
@@ -471,7 +471,7 @@ const ReelMaker: React.FC<ReelMakerProps> = ({ onBack, onComplete }) => {
           >
             <FileEdit className="w-4 h-4" />
             Edit Video
-          </Button>
+          </Button>*/}
         </div>
       </div>
 
