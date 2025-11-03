@@ -160,7 +160,9 @@ if is_production:
     cors_origins = [
         "https://backend-557742533869.asia-south1.run.app", 
         "https://frontend-557742533869.asia-south1.run.app",
-        "https://router-557742533869.asia-south1.run.app"
+        "https://router-557742533869.asia-south1.run.app", 
+        "https://project-kaarigar-git-cloud-run-auth-prathams-projects-cf4562a7.vercel.app",
+        "https://frontend-new-557742533869.asia-south1.run.app"
     ]
 else:
     # Development: Allow localhost and common dev ports
