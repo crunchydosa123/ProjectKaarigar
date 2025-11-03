@@ -6,7 +6,7 @@ username: surajchavan99886@gmail.com
 pass:123456
 
 Mock account2:
-username: ramu.deo@gmail.com
+username: raju.deo@gmail.com
 pass:123456
 
 
@@ -17,6 +17,23 @@ pass:123456
 ## Our Team:
 
 <img width="1053" height="585" alt="image" src="https://github.com/user-attachments/assets/826062ac-98d7-4efa-9244-a3a16770124e" />
+
+## 🎥 Video Demo
+[Watch the demo](https://www.youtube.com/watch?v=eVoegX7q474)
+
+## Camera Agent Walkthrough
+
+Please take a look at this video in case u missed out to get a detailed overview of how our specialized camera agent helps artisans navigate complex photo and video shoots with ease and get the best possible results.
+
+Video Link - [Watch the demo](https://youtu.be/vf5IxlNhGro)
+
+## Whatsapp Bot Walkthrough
+
+Please take a look at this video to get an overview of the user side for our personalized Whatsapp Bot. 
+
+Video Link - [Watch the demo](youtube.com/watch?v=e7VUdxC5V8A&feature=youtu.be)
+
+---
 
 # Introduction:
 
@@ -62,6 +79,7 @@ Mobile-first, multilingual, and designed for users with minimal technical experi
 
 ---
 
+
 # What does Project Kaarigar do today?
 
 ### Conversational Brand Onboarding
@@ -83,10 +101,7 @@ Provides end-to-end support from **discovery → listing → sale → fulfillmen
 
 ---
 
-## 🎥 Video Demo
-[Watch the demo](https://www.youtube.com/watch?v=eVoegX7q474)
 
----
 
 # How we differ from existing solutions:
 
@@ -319,13 +334,8 @@ Leverages **voice-based Camera Assist** for **natural spoken interactions** and 
 
 ---
 
-# Camera Agent Walkthrough
 
-Please take a look at this video to get a detailed overview of how our specialized camera agent helps artisans navigate complex photo and video shoots with ease and get the best possible results.
 
-Video Link - [Watch the demo](https://youtu.be/vf5IxlNhGro)
-
----
 
 # Implementation and WireFrames
 
