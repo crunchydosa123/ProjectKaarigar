@@ -5,15 +5,14 @@
 - [Mock Accounts](#some-points-to-be-considered)
 - [Problem Statement](#problem-statement)
 - [Team](#our-team)
-- [Media & Walkthroughs](#media--walkthroughs)
-  - [Video Demo](#video-demo)
-  - [Camera Agent Walkthrough](#camera-agent-walkthrough)
-  - [WhatsApp Bot Walkthrough](#whatsapp-bot-walkthrough)
+- [Video Demo](#video-demo)
+- [Camera Agent Walkthrough](#camera-agent-walkthrough)
+- [WhatsApp Bot Walkthrough](#whatsapp-bot-walkthrough)
 - [Introduction](#introduction)
 - [Product Summary](#product-summary)
   - [Who is it for?](#who-is-it-for)
   - [Areas of User Impact](#areas-of-user-impact)
-- [What Project Kaarigar Does Today](#what-project-kaarigar-does-today)
+- [What Project Kaarigar Does Today](#what-does-project-kaarigar-do-today)
   - [Conversational Brand Onboarding](#conversational-brand-onboarding)
   - [AI Content Generation & Natural Language Editing Support](#ai-content-generation--natural-language-editing-support)
   - [AI-based SEO-optimized Listing with Marketplace Integrations](#ai-based-seo-optimized-listing-with-marketplace-integrations)
@@ -28,16 +27,8 @@
 - [Architecture](#architecture)
   - [Use Case Diagram](#use-case-diagram)
 - [Google Cloud & AI Tools Usage](#google-cloud--ai-tools-usage)
-  - [Core Platform Services](#core-platform-services)
-  - [Generative AI Models & Media Tooling](#generative-ai-models--media-tooling)
-  - [Intelligence & Personalization (Vertex AI)](#intelligence--personalization-vertex-ai)
 - [Tech Stack Deep Dive](#tech-stack-deep-dive)
-  - [Frontend](#frontend)
-  - [Backend & Media](#backend--media)
-  - [Database & Storage](#database--storage)
-  - [Deployment & Hosting (Cloud Run, CI/CD)](#deployment--hosting-cloud-run-cicd)
-  - [Google AI Tools (Vertex AI + Models)](#google-ai-tools-vertex-ai--models)
-- [Hosting & Rolling Out Updates (Service Map)](#hosting--rolling-out-updates-service-map)
+- [Hosting & Rolling Out Updates](#hosting-and-rolling-out-updates)
 - [User Experience](#user-experience)
   - [AI-Assisted Seamless Journey](#ai-assisted-seamless-journey)
   - [Conversational Platform](#conversational-platform)
@@ -46,20 +37,8 @@
   - [Guided Workflow & Market Integration](#guided-workflow--market-integration)
   - [Agentic Hands-Free Interaction](#agentic-hands-free-interaction)
 - [Market & Adoption](#market--adoption)
-  - [30–90 Day Playbook (Try / Launch / Measure)](#30–90-day-playbook-try--launch--measure)
-    - [Day 0–30 — Test & measure with select users](#day-0–30--test--measure-with-select-users)
-    - [Day 31–60 — Iterate features & scale cloud deployment](#day-31–60--iterate-features--scale-cloud-deployment)
-    - [Day 61–90 — Launch app on Play Store](#day-61–90--launch-app-on-play-store)
-  - [First Users — Who & How We’ll Approach Them](#first-users--who--how-well-approach-them)
-    - [Artisans Registered with NGOs](#artisans-registered-with-ngos)
-    - [Hobbyists / Homemakers](#hobbyists--homemakers)
-    - [Women’s Savings & Local Community Groups](#womens-savings--local-community-groups)
 - [Implementation and Wireframes](#implementation-and-wireframes)
 - [Conclusion](#conclusion)
-- [Appendix & Resources](#appendix--resources)
-  - [Images & Diagrams](#images--diagrams)
-  - [Video Links](#video-links)
-  - [Mock Credentials (for testing)](#mock-credentials-for-testing)
 
 
 # Some Points to be considered
@@ -80,7 +59,7 @@ pass:123456
 
 <img width="1053" height="585" alt="image" src="https://github.com/user-attachments/assets/826062ac-98d7-4efa-9244-a3a16770124e" />
 
-## 🎥 Video Demo
+## Video Demo
 [Watch the demo](https://www.youtube.com/watch?v=eVoegX7q474)
 
 ## Camera Agent Walkthrough
@@ -142,7 +121,7 @@ Mobile-first, multilingual, and designed for users with minimal technical experi
 ---
 
 
-# What does Project Kaarigar do today?
+# What does Project Kaarigar do today
 
 ### Conversational Brand Onboarding
 Streamlines artisan onboarding via a conversational interview that generates a **personalized brand document and profile**, ensuring consistent branding across the app and listings.
@@ -301,7 +280,7 @@ Our stack is now fully **serverless + container-first** on **Cloud Run**, with *
 
 ---
 
-## 🔄 Hosting & Rolling Out Updates (How Services Map)
+## Hosting and Rolling Out Updates
 Multiple **Cloud Run** services each handle a focused responsibility:
 - **Conversational Agent** — Gemini-powered onboarding.  
 - **Camera Agent** — Voice + camera instructions / capture assist.  
@@ -406,7 +385,7 @@ Leverages **voice-based Camera Assist** for **natural spoken interactions** and 
 ---
 
 
-# ✅ Conclusion
+# Conclusion
 **Project Karigar** is not just a tool it’s an **ecosystem**.  
 We empower artisans by:  
 - Preserving **authenticity**  
