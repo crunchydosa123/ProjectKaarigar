@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
+import { UserCircle2, Users } from 'lucide-react';
 
 const Login = () => {
   const { setCurrentPage, login } = usePage();
@@ -11,9 +12,18 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showGuestAccounts, setShowGuestAccounts] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const guestAccounts = [
+    { email: 'raju.deo@gmail.com', password: '123456', name: 'Guest Account 1' },
+    { email: 'surajchavan99886@gmail.com', password: '123456', name: 'Guest Account 2' }
+  ];
+
+  const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
+    const emailToUse = loginEmail || email;
+    const passwordToUse = loginPassword || password;
+
+    if (!emailToUse || !passwordToUse) {
       setError('Please enter both email and password');
       return;
     }
@@ -22,7 +32,7 @@ const Login = () => {
     setError('');
 
     try {
-      const success = await login(email, password);
+      const success = await login(emailToUse, passwordToUse);
       
       if (!success) {
         setError('Authentication failed. Please check your credentials and try again.');
@@ -33,6 +43,11 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGuestLogin = async (guestEmail: string, guestPassword: string) => {
+    setShowGuestAccounts(false);
+    await handleLogin(guestEmail, guestPassword);
   };
 
   const handleSignupClick = () => {
@@ -92,12 +107,54 @@ const Login = () => {
             )}
 
             <Button 
-              onClick={handleLogin}
+              onClick={() => handleLogin()}
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 mt-6 disabled:opacity-50"
             >
               {loading ? 'Logging in...' : 'Login'}
             </Button>
+
+            {/* Guest Account Section */}
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">or</span>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => setShowGuestAccounts(!showGuestAccounts)}
+                disabled={loading}
+                className="w-full mt-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 flex items-center justify-center gap-2"
+                type="button"
+              >
+                <Users size={20} />
+                Continue as Guest
+              </Button>
+
+              {showGuestAccounts && (
+                <div className="mt-4 space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <p className="text-sm text-gray-600 mb-3">Select a guest account:</p>
+                  
+                  {guestAccounts.map((account, index) => (
+                    <Button
+                      key={index}
+                      onClick={() => handleGuestLogin(account.email, account.password)}
+                      disabled={loading}
+                      className="w-full bg-white hover:bg-blue-50 hover:text-blue-600 text-gray-700 font-medium border border-gray-200 flex items-center justify-center gap-2"
+                      type="button"
+                      variant="outline"
+                    >
+                      <UserCircle2 size={18} />
+                      {account.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="text-center mt-4">
               <span className="text-sm text-gray-600">Don't have an account? </span>
