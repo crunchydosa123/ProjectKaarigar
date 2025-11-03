@@ -42,21 +42,21 @@ const Onboarding = ({}: Props) => {
       setIsLoading(true);
       setError("");
       
-      /*const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/start', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });*/
-
-      const response = await fetch('/api/conversational/start', {
+      const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/start', {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
       });
+
+      /*const response = await fetch('/api/conversational/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });*/
 
       if (!response.ok) {
         console.log(response);
@@ -115,7 +115,7 @@ const Onboarding = ({}: Props) => {
       // Clear the input field immediately
       setCurrentMessage("");
 
-      /*const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/message', {
+      const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/message', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -125,9 +125,9 @@ const Onboarding = ({}: Props) => {
           kaarigar_id: kaarigarId,
           message: message
         }),
-      });*/
+      });
 
-      const response = await fetch('/api/conversational/message', {
+      /*const response = await fetch('/api/conversational/message', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -141,19 +141,19 @@ const Onboarding = ({}: Props) => {
 
       if (!response.ok) {
         throw new Error('Failed to send message');
-      }
+      }*/
 
       const data = await response.json();
       
       // Fetch the updated conversation status to get the full conversation history
       try {
-        /*const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
-          credentials: 'include'
-        });*/
-
-        const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+        const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
           credentials: 'include'
         });
+
+        /*const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+          credentials: 'include'
+        });*/
         
         if (statusResponse.ok) {
           const statusData = await statusResponse.json();
@@ -238,20 +238,7 @@ const Onboarding = ({}: Props) => {
       reader.onload = async () => {
         const base64Audio = (reader.result as string).split(',')[1];
         
-        /*const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/audio-message', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            kaarigar_id: kaarigarId,
-            audio: base64Audio,
-            language_code: 'en'
-          }),
-        });*/
-
-        const response = await fetch('/api/conversational/audio-message', {
+        const response = await fetch('https://backend-557742533869.asia-south1.run.app/api/conversational/audio-message', {
           method: 'POST',
           credentials: 'include',
           headers: {
@@ -264,6 +251,19 @@ const Onboarding = ({}: Props) => {
           }),
         });
 
+        /*const response = await fetch('/api/conversational/audio-message', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            kaarigar_id: kaarigarId,
+            audio: base64Audio,
+            language_code: 'en'
+          }),
+        });*/
+
         if (!response.ok) {
           throw new Error('Failed to send audio message');
         }
@@ -274,13 +274,13 @@ const Onboarding = ({}: Props) => {
         if (data.transcribed_text && data.transcribed_text.trim()) {
           // Fetch the updated conversation status to get the full conversation history
           try {
-            /*const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
-              credentials: 'include'
-            });*/
-
-            const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+            const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
               credentials: 'include'
             });
+
+            /*const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+              credentials: 'include'
+            });*/
             
             if (statusResponse.ok) {
               const statusData = await statusResponse.json();
@@ -506,13 +506,13 @@ const Onboarding = ({}: Props) => {
     if (!kaarigarId) return;
     
     try {
-      /*const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
-        credentials: 'include'
-      });*/
-      
-      const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+      const statusResponse = await fetch(`https://backend-557742533869.asia-south1.run.app/api/conversational/status/${kaarigarId}`, {
         credentials: 'include'
       });
+      
+      /*const statusResponse = await fetch(`/api/conversational/status/${kaarigarId}`, {
+        credentials: 'include'
+      });*/
 
       if (statusResponse.ok) {
         const statusData = await statusResponse.json();

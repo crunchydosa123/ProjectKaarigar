@@ -8,8 +8,8 @@
  * Handles all communication with the backend authentication system
  */
 
-//const API_BASE_URL = 'https://backend-557742533869.asia-south1.run.app/api/auth';
-const API_BASE_URL = '/api/auth';
+const API_BASE_URL = 'https://backend-557742533869.asia-south1.run.app/api/auth';
+//const API_BASE_URL = '/api/auth';
 
 /**
  * Helper function to get common headers with user_id for cross-origin auth
@@ -225,8 +225,8 @@ class LogoAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/logo';
-    this.baseURL = '/api/logo';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/logo';
+    //this.baseURL = '/api/logo';
   }
 
   private async request<T>(
@@ -342,8 +342,8 @@ class MediaAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/media';
-    this.baseURL = '/api/media';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/media';
+    //this.baseURL = '/api/media';
   }
 
   private async request<T>(
@@ -460,8 +460,8 @@ class ProfileAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/profile';
-    this.baseURL = '/api/profile';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/profile';
+    //this.baseURL = '/api/profile';
   }
 
   private async request<T>(
@@ -575,8 +575,8 @@ class ReelAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/reel';
-    this.baseURL = '/api/reel';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/reel';
+    //this.baseURL = '/api/reel';
   }
 
   private async request<T>(
@@ -677,8 +677,8 @@ class ImageGenAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-gen';
-    this.baseURL = '/api/image-gen';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-gen';
+    //this.baseURL = '/api/image-gen';
   }
 
   private async request<T>(
@@ -780,8 +780,8 @@ class ImageEditAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-edit';
-    this.baseURL = '/api/image-edit';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/image-edit';
+    //this.baseURL = '/api/image-edit';
   }
 
   private async request<T>(
@@ -893,8 +893,8 @@ class VideoEditAPI {
   private baseURL: string;
 
   constructor() {
-    //this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/video-edit';
-    this.baseURL = '/api/video-edit';
+    this.baseURL = 'https://backend-557742533869.asia-south1.run.app/api/video-edit';
+    //this.baseURL = '/api/video-edit';
   }
 
   private async request<T>(
@@ -1224,8 +1224,8 @@ class ReelGeneratorAPI {
     console.log(`🔄 Using local backend for delete video...`);
     
     // Use local backend for this endpoint
-    //const localBaseURL = 'https://backend-557742533869.asia-south1.run.app/';
-    const localBaseURL = '';
+    const localBaseURL = 'https://backend-557742533869.asia-south1.run.app/';
+    //const localBaseURL = '';
     const url = `${localBaseURL}/api/reel-generator/delete-video`;
     
     console.log(`🌐 URL: ${url}`);
@@ -1331,8 +1331,8 @@ export interface ProductMediaResponse {
 }
 
 class ProductAPI {
-  //private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/product';
-  private baseURL = '/api/product';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/product';
+  //private baseURL = '/api/product';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
@@ -1404,8 +1404,8 @@ export interface GenerateMessageResponse {
 }
 
 class WhatsAppAPI {
-  //private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/whatsapp';
-  private baseURL = '/api/whatsapp';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/whatsapp';
+  //private baseURL = '/api/whatsapp';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
@@ -1452,8 +1452,8 @@ export interface AIInsightsResponse {
 }
 
 class AIInsightsAPI {
-  //private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/ai-insights';
-  private baseURL = '/api/ai-insights';
+  private baseURL = 'https://backend-557742533869.asia-south1.run.app/api/ai-insights';
+  //private baseURL = '/api/ai-insights';
 
   private async request<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;

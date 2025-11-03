@@ -35,8 +35,8 @@ const FlipkartListing = () => {
     
     try {
       setLoading(true);
-      //const apiUrl = `https://backend-557742533869.asia-south1.run.app/api/marketplace/${selectedProductId}/flipkart-listing`;
-      const apiUrl = `/api/marketplace/${selectedProductId}/flipkart-listing`;
+      const apiUrl = `https://backend-557742533869.asia-south1.run.app/api/marketplace/${selectedProductId}/flipkart-listing`;
+      //const apiUrl = `/api/marketplace/${selectedProductId}/flipkart-listing`;
       
       console.log('🚀 [FlipkartListing] Calling API...');
       console.log('   URL:', apiUrl);
