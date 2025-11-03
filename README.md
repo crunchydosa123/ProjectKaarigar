@@ -72,7 +72,7 @@ Video Link - [Watch the demo](https://youtu.be/vf5IxlNhGro)
 
 Please take a look at this video to get an overview of the user side for our personalized Whatsapp Bot. 
 
-Video Link - [Watch the demo](youtube.com/watch?v=e7VUdxC5V8A&feature=youtu.be)
+Video Link - [Watch the demo](https://youtu.be/e7VUdxC5V8A?si=UxuEQgmkqyO8nQSi)
 
 ---
 
