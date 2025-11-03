@@ -85,6 +85,9 @@ Please take a look at this video to get an overview of the user side for our per
 Video Link - [Watch the demo](https://youtu.be/e7VUdxC5V8A?si=UxuEQgmkqyO8nQSi)
 
 ---
+# ALERT: FALL BACK DEMO WEBSITE LINK(PLEASE USE THIS LINK FOR TESTING FRONTEND INCASE THE ONES IN PPT DONT WORK BECAUSE OF DOMAIN ERROR OF GCP)
+
+https://frontend-new-557742533869.asia-south1.run.app/
 
 # Introduction:
 
@@ -403,4 +406,8 @@ We empower artisans by:
 - Ensuring **scalability** and **ease of adoption**  
 
 > Crafted in India, scaled for the world 🌍
+
+# ALERT: FALL BACK DEMO WEBSITE LINK(PLEASE USE THIS LINK FOR TESTING FRONTEND INCASE THE ONES IN PPT DONT WORK BECAUSE OF DOMAIN ERROR OF GCP)
+
+https://frontend-new-557742533869.asia-south1.run.app/
 
