@@ -110,7 +110,7 @@ Our platform automates:
 
 # Product Summary
 
-<img width="1196" height="674" alt="image" src="https://github.com/user-attachments/assets/1c6153b0-6032-482d-a249-2be4a6cb88ba" />
+<img width="990" height="555" alt="image" src="https://github.com/user-attachments/assets/cc25fe4e-01c3-40fb-af0d-993446dabcda" />
 
 
 ## Who is it for?
@@ -160,7 +160,8 @@ Provides end-to-end support from **discovery → listing → sale → fulfillmen
 
 # How we differ from existing solutions:
 
-<img width="1193" height="671" alt="image" src="https://github.com/user-attachments/assets/12741623-81a7-4273-aa0b-26c2956be643" />
+<img width="988" height="553" alt="image" src="https://github.com/user-attachments/assets/4cc1c4fa-82a3-40a1-b887-d5df5e5c2395" />
+
 
 ---
 
@@ -196,7 +197,8 @@ We turn **sales and trend signals** into actionable, **artisan-specific recommen
 
 
 # Architecture
-![GenAI Exchange-Page-9](https://github.com/user-attachments/assets/6f82dd99-0f92-4b51-bc04-3383dd0dc150)
+<img width="1561" height="623" alt="image" src="https://github.com/user-attachments/assets/3c709ed1-3f27-4714-90b4-b70648b72d69" />
+
 
 # Use Case Diagram:
 <img width="1243" height="752" alt="image" src="https://github.com/user-attachments/assets/c03c45f1-0b45-4679-86c7-94e0bc7f775c" />
