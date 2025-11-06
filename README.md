@@ -52,6 +52,7 @@ https://frontend-new-557742533869.asia-south1.run.app/
 https://frontend-new-557742533869.asia-south1.run.app/
 PLEASE use guest account 1,2
 
+In case guest accounts dont work use these
 Mock accounts :
 username: surajchavan99886@gmail.com
 pass:123456
