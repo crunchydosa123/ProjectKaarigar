@@ -413,4 +413,4 @@ We empower artisans by:
 # ALERT: FALL BACK DEMO WEBSITE LINK(PLEASE USE THIS LINK FOR TESTING FRONTEND INCASE THE ONES IN PPT DONT WORK BECAUSE OF DOMAIN ERROR OF GCP)
 
 https://frontend-new-557742533869.asia-south1.run.app/
-
+# Please use guest account on the website on pc, non incognito mode for this app to work for the time being.
